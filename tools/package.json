@@ -1,0 +1,23 @@
+{
+  "name": "@lifeline-mesh/tools",
+  "version": "0.1.0",
+  "description": "Development and testing tools for Lifeline Mesh",
+  "type": "module",
+  "scripts": {
+    "generate-vectors": "node generate-test-vectors.js > test-vectors.json",
+    "validate-vectors": "node validate-test-vectors.js test-vectors.json",
+    "generate-sri": "node generate-sri.js"
+  },
+  "keywords": [
+    "testing",
+    "vectors",
+    "sri",
+    "security"
+  ],
+  "author": "Lifeline Mesh Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
+  }
+}
