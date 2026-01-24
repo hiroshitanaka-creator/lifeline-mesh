@@ -135,7 +135,7 @@ PRs are welcome, especially:
 ---
 
 ## License
-MIT (or your choice)
+MIT
 
 ---
 
