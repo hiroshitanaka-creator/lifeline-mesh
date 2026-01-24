@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Lifeline Mesh - Emergency Messaging</title>
 
-  <!-- CDN dependencies (TODO: Add SRI for production) -->
-  <script src="https://unpkg.com/tweetnacl@1.0.3/nacl.min.js"></script>
-  <script src="https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
+  <!-- CDN dependencies with Subresource Integrity (SRI) -->
+  <script src="https://unpkg.com/tweetnacl@1.0.3/nacl.min.js"
+          integrity="sha384-LMUiUHpaYNGZFzWFRjsADnCSqae1Mk5llcUOHOLDhCxkyF2cdsWAueTZAzV+swW/"
+          crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js"
+          integrity="sha384-qpU3wxGxaAPcz02pOLeZTv5B0rNzsh3CETsUqdHxRBP70bO0kHoBopr+f9AcGj04"
+          crossorigin="anonymous"></script>
 
   <style>
     body { font-family: system-ui, sans-serif; margin: 16px; max-width: 900px; }
