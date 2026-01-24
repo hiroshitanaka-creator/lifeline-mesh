@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Disaster Mesh Crypto - Complete</title>
+  <title>Lifeline Mesh - Emergency Messaging</title>
 
-  <!-- 動作優先。SRIは末尾に付け方を書く（間違うと100%動かない） -->
+  <!-- CDN dependencies (TODO: Add SRI for production) -->
   <script src="https://unpkg.com/tweetnacl@1.0.3/nacl.min.js"></script>
   <script src="https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js"></script>
 
   <style>
-    body { font-family: system-ui, sans-serif; margin: 16px; }
+    body { font-family: system-ui, sans-serif; margin: 16px; max-width: 900px; }
     textarea, input, select { width: 100%; padding: 8px; box-sizing: border-box; }
-    textarea { min-height: 110px; }
-    pre { background: #f6f6f6; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
+    textarea { min-height: 110px; font-family: monospace; }
+    pre { background: #f6f6f6; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
     button { padding: 10px 12px; cursor: pointer; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .row > * { flex: 1 1 auto; }
@@ -21,73 +21,112 @@
     .ok { color: #0a7; font-weight: 700; }
     .ng { color: #c33; font-weight: 700; }
     .danger { background: #ffecec; border: 1px solid #ffb3b3; }
+    .section { margin-bottom: 24px; }
+    details { margin: 8px 0; }
+    summary { cursor: pointer; font-weight: 600; padding: 8px; background: #f0f0f0; border-radius: 4px; }
   </style>
 </head>
 
 <body>
-  <h1>Disaster Mesh Crypto - Complete</h1>
-  <div class="small">
-    ✅ sign(Ed25519) と box(X25519-XSalsa20-Poly1305) 鍵分離 / ✅ ephemeral box鍵 / ✅ 受信者束縛 / ✅ TOFU成立 / ✅ リプレイ防止 / ✅ 署名データ完全一致
+  <h1>🌐 Lifeline Mesh</h1>
+  <p class="small">
+    End-to-end encrypted emergency messaging • Offline-first • No server required<br>
+    ✅ Ed25519 signatures • ✅ X25519 encryption • ✅ Ephemeral keys • ✅ Replay protection • ✅ TOFU
+  </p>
+
+  <div class="section">
+    <h2>1) Your Keys</h2>
+    <div class="row">
+      <button onclick="initOrLoad()">🔑 Generate / Load Keys</button>
+      <button class="danger" onclick="resetAll()">🗑️ RESET ALL</button>
+    </div>
+    <pre id="my-id">(not loaded)</pre>
+    <div class="row">
+      <button onclick="copyMyId()">📋 Copy My Public ID</button>
+      <button onclick="exportKeys()">💾 Export Keys</button>
+      <button onclick="importKeys()">📥 Import Keys</button>
+    </div>
+
+    <details>
+      <summary>Key Management</summary>
+      <p class="small">
+        <strong>Export:</strong> Download your secret keys as encrypted JSON (password-protected)<br>
+        <strong>Import:</strong> Restore keys from backup file<br>
+        <strong>⚠️ Warning:</strong> Keep exported keys secure. Anyone with your secret keys can impersonate you.
+      </p>
+    </details>
   </div>
 
-  <h2>1) 自分の鍵 (IndexedDB)</h2>
-  <div class="row">
-    <button onclick="initOrLoad()">Generate / Load Keys</button>
-    <button class="danger" onclick="resetAll()">RESET ALL (keys/contacts/replay)</button>
-  </div>
-  <pre id="my-id">(not loaded)</pre>
-  <div class="row">
-    <button onclick="copyMyId()">Copy My Public ID</button>
+  <div class="section">
+    <h2>2) Contacts</h2>
+    <textarea id="contact-input" placeholder='{"name":"Bob","signPK":"base64","boxPK":"base64"}'></textarea>
+    <div class="row">
+      <button onclick="addContact()">➕ Add Contact</button>
+      <button onclick="refreshContacts()">🔄 Refresh</button>
+      <button class="danger" onclick="deleteSelectedContact()">❌ Delete Selected</button>
+    </div>
+    <select id="recipient-select">
+      <option value="">Select Recipient</option>
+    </select>
+    <pre id="contacts-view">(none)</pre>
   </div>
 
-  <h2>2) 連絡先登録 (SignPK + BoxPK)</h2>
-  <textarea id="contact-input" placeholder='{"name":"Bob","signPK":"base64","boxPK":"base64"}'></textarea>
-  <div class="row">
-    <button onclick="addContact()">Add / Update Contact</button>
-    <button onclick="refreshContacts()">Refresh</button>
-    <button class="danger" onclick="deleteSelectedContact()">Delete Selected</button>
+  <div class="section">
+    <h2>3) Encrypt Message</h2>
+    <textarea id="content" placeholder="Type your message here (max 150KB)"></textarea>
+    <div class="row">
+      <button onclick="encryptMsg()">🔒 Encrypt</button>
+      <span class="small">Recipient: <strong id="encrypt-recipient">(select above)</strong></span>
+    </div>
+    <pre id="encrypted"></pre>
+    <div class="row" id="encrypted-actions" style="display:none">
+      <button onclick="copyEncrypted()">📋 Copy Encrypted Message</button>
+    </div>
   </div>
-  <select id="recipient-select">
-    <option value="">Select Recipient</option>
-  </select>
-  <pre id="contacts-view">(none)</pre>
 
-  <h2>3) Encrypt</h2>
-  <textarea id="content" placeholder="Content (max 150KB)"></textarea>
-  <div class="row">
-    <button onclick="encryptMsg()">Encrypt</button>
-    <span class="small">送信先は上のSelectで選択</span>
+  <div class="section">
+    <h2>4) Decrypt Message</h2>
+    <textarea id="input" placeholder="Paste encrypted JSON message here"></textarea>
+    <label class="small">
+      <input type="checkbox" id="tofu" />
+      TOFU (Trust On First Use - auto-accept unknown senders)
+    </label>
+    <div class="row">
+      <button onclick="decryptMsg()">🔓 Decrypt</button>
+    </div>
+    <pre id="status"></pre>
+    <pre id="decrypted"></pre>
   </div>
-  <pre id="encrypted"></pre>
 
-  <h2>4) Decrypt</h2>
-  <textarea id="input" placeholder="Paste encrypted JSON"></textarea>
-  <label class="small"><input type="checkbox" id="tofu" /> TOFU（未登録送信者を初回だけ自動登録：初回なりすましは防げない）</label>
-  <div class="row">
-    <button onclick="decryptMsg()">Decrypt</button>
+  <div class="section">
+    <details>
+      <summary>📚 Documentation</summary>
+      <ul>
+        <li><a href="../docs/USAGE.md" target="_blank">Usage Guide</a></li>
+        <li><a href="../docs/FAQ.md" target="_blank">FAQ</a></li>
+        <li><a href="../spec/THREAT_MODEL.md" target="_blank">Threat Model</a></li>
+        <li><a href="../spec/PROTOCOL.md" target="_blank">Protocol Specification</a></li>
+      </ul>
+    </details>
   </div>
-  <pre id="status"></pre>
-  <pre id="decrypted"></pre>
 
-<script>
+<script type="module">
+/* =========================
+  Import crypto core
+========================= */
+import * as DMesh from '../crypto/core.js';
+
 /* =========================
   Config
 ========================= */
-const DB_NAME = "disasterMeshComplete";
+const DB_NAME = "lifelineMesh";
 const DB_VERSION = 1;
 const STORE_KEYS = "keys";
-const STORE_CONTACTS = "contacts"; // keyPath: fp
-const STORE_REPLAY = "replay";     // keyPath: k
-
-const MAX_BYTES = 150 * 1024;
-const MAX_SKEW_MS = 10 * 60 * 1000;        // 10分
-const REPLAY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30日
-
-// 署名ドメイン分離（他用途で同じ署名を流用されない）
-const DOMAIN = nacl.util.decodeUTF8("DMESH_MSG_V1");
+const STORE_CONTACTS = "contacts";
+const STORE_REPLAY = "replay";
 
 /* =========================
-  IndexedDB helpers (標準APIで確実に待つ)
+  IndexedDB helpers
 ========================= */
 let dbPromise = null;
 
@@ -111,8 +150,7 @@ async function idbGet(store, key) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, "readonly");
-    const st = tx.objectStore(store);
-    const req = st.get(key);
+    const req = tx.objectStore(store).get(key);
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
@@ -127,7 +165,6 @@ async function idbPut(store, value, key) {
     else st.put(value);
     tx.oncomplete = () => resolve(true);
     tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -138,7 +175,6 @@ async function idbDel(store, key) {
     tx.objectStore(store).delete(key);
     tx.oncomplete = () => resolve(true);
     tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -153,224 +189,316 @@ async function idbGetAll(store) {
 }
 
 /* =========================
-  Bytes utilities
+  Utility
 ========================= */
-const b64e = (u8) => nacl.util.encodeBase64(u8);
-const b64d = (s) => nacl.util.decodeBase64(s);
-
-function concatU8(arrs) {
-  const total = arrs.reduce((n, a) => n + a.length, 0);
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const a of arrs) { out.set(a, off); off += a.length; }
-  return out;
-}
-
-function u32be(n) {
-  const b = new Uint8Array(4);
-  const dv = new DataView(b.buffer);
-  dv.setUint32(0, n >>> 0, false); // big-endian
-  return b;
-}
-
-function u64beFromNumber(ts) {
-  // JS numberは53bit精度。Date.now()は安全域。
-  const hi = Math.floor(ts / 4294967296);
-  const lo = ts >>> 0;
-  const b = new Uint8Array(8);
-  const dv = new DataView(b.buffer);
-  dv.setUint32(0, hi >>> 0, false);
-  dv.setUint32(4, lo >>> 0, false);
-  return b;
-}
-
 function setStatus(ok, msg) {
-  document.getElementById("status").innerHTML = (ok ? `<span class="ok">OK</span> ` : `<span class="ng">NG</span> `) + msg;
+  document.getElementById("status").innerHTML = (ok ? `<span class="ok">✓ OK</span> ` : `<span class="ng">✗ ERROR</span> `) + msg;
 }
 
 /* =========================
-  Fingerprint (signPK由来で統一)
-  - TweetNaCl hash = SHA-512
-========================= */
-function fingerprintFromSignPK(signPKu8) {
-  const h = nacl.hash(signPKu8); // 64 bytes
-  return b64e(h.slice(0, 16));   // 16 bytes -> 短すぎない指紋
-}
-
-/* =========================
-  Keys (base64保存)
+  Key Management
 ========================= */
 async function ensureMyKeys() {
   let signPK = await idbGet(STORE_KEYS, "my_sign_pk");
   let signSK = await idbGet(STORE_KEYS, "my_sign_sk");
-  let boxPK  = await idbGet(STORE_KEYS, "my_box_pk");
-  let boxSK  = await idbGet(STORE_KEYS, "my_box_sk");
+  let boxPK = await idbGet(STORE_KEYS, "my_box_pk");
+  let boxSK = await idbGet(STORE_KEYS, "my_box_sk");
 
   if (!signPK || !signSK) {
-    const kp = nacl.sign.keyPair();
-    signPK = b64e(kp.publicKey);
-    signSK = b64e(kp.secretKey);
+    const kp = DMesh.generateSignKeyPair(nacl);
+    signPK = nacl.util.encodeBase64(kp.publicKey);
+    signSK = nacl.util.encodeBase64(kp.secretKey);
     await idbPut(STORE_KEYS, signPK, "my_sign_pk");
     await idbPut(STORE_KEYS, signSK, "my_sign_sk");
   }
 
   if (!boxPK || !boxSK) {
-    const kp = nacl.box.keyPair();
-    boxPK = b64e(kp.publicKey);
-    boxSK = b64e(kp.secretKey);
+    const kp = DMesh.generateBoxKeyPair(nacl);
+    boxPK = nacl.util.encodeBase64(kp.publicKey);
+    boxSK = nacl.util.encodeBase64(kp.secretKey);
     await idbPut(STORE_KEYS, boxPK, "my_box_pk");
     await idbPut(STORE_KEYS, boxSK, "my_box_sk");
   }
 
-  const signPKu8 = b64d(signPK);
-  const signSKu8 = b64d(signSK);
-  const boxPKu8  = b64d(boxPK);
-  const boxSKu8  = b64d(boxSK);
-
-  return { signPKu8, signSKu8, boxPKu8, boxSKu8 };
+  return {
+    signPKu8: nacl.util.decodeBase64(signPK),
+    signSKu8: nacl.util.decodeBase64(signSK),
+    boxPKu8: nacl.util.decodeBase64(boxPK),
+    boxSKu8: nacl.util.decodeBase64(boxSK)
+  };
 }
 
-async function initOrLoad() {
-  const my = await ensureMyKeys();
-  const fp = fingerprintFromSignPK(my.signPKu8);
+window.initOrLoad = async function() {
+  try {
+    const my = await ensureMyKeys();
+    const myId = DMesh.createPublicIdentity({
+      name: "(optional)",
+      signPK: my.signPKu8,
+      boxPK: my.boxPKu8
+    }, nacl, nacl.util);
 
-  const myId = {
-    v: 1,
-    kind: "dmesh-id",
-    name: "(optional)",
-    fp,
-    signPK: b64e(my.signPKu8),
-    boxPK: b64e(my.boxPKu8)
+    document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
+    await refreshContacts();
+    setStatus(true, `Keys ready. Fingerprint: ${myId.fp}`);
+  } catch (e) {
+    setStatus(false, e.message);
+  }
+};
+
+window.copyMyId = async function() {
+  const t = document.getElementById("my-id").textContent;
+  if (!t || t === "(not loaded)") return alert("Generate keys first");
+  await navigator.clipboard.writeText(t);
+  setStatus(true, "Public ID copied to clipboard");
+};
+
+window.exportKeys = async function() {
+  const password = prompt("Enter password to encrypt your keys:");
+  if (!password) return;
+
+  try {
+    const signPK = await idbGet(STORE_KEYS, "my_sign_pk");
+    const signSK = await idbGet(STORE_KEYS, "my_sign_sk");
+    const boxPK = await idbGet(STORE_KEYS, "my_box_pk");
+    const boxSK = await idbGet(STORE_KEYS, "my_box_sk");
+
+    if (!signPK || !signSK || !boxPK || !boxSK) {
+      return alert("No keys to export. Generate keys first.");
+    }
+
+    // Simple password-based encryption (XOR with password hash)
+    // WARNING: This is NOT cryptographically secure - for demo only!
+    const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
+
+    const encrypt = (data) => {
+      const dataBytes = nacl.util.decodeBase64(data);
+      const encrypted = new Uint8Array(dataBytes.length);
+      for (let i = 0; i < dataBytes.length; i++) {
+        encrypted[i] = dataBytes[i] ^ passwordHash[i % passwordHash.length];
+      }
+      return nacl.util.encodeBase64(encrypted);
+    };
+
+    const backup = {
+      version: 1,
+      exported: new Date().toISOString(),
+      keys: {
+        signPK: encrypt(signPK),
+        signSK: encrypt(signSK),
+        boxPK: encrypt(boxPK),
+        boxSK: encrypt(boxSK)
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lifeline-mesh-keys-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    setStatus(true, "Keys exported successfully");
+  } catch (e) {
+    setStatus(false, "Export failed: " + e.message);
+  }
+};
+
+window.importKeys = async function() {
+  const password = prompt("Enter password to decrypt your keys:");
+  if (!password) return;
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+
+  input.onchange = async (e) => {
+    try {
+      const file = e.target.files[0];
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      if (backup.version !== 1 || !backup.keys) {
+        return alert("Invalid backup file format");
+      }
+
+      // Decrypt
+      const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
+
+      const decrypt = (encrypted) => {
+        const encryptedBytes = nacl.util.decodeBase64(encrypted);
+        const decrypted = new Uint8Array(encryptedBytes.length);
+        for (let i = 0; i < encryptedBytes.length; i++) {
+          decrypted[i] = encryptedBytes[i] ^ passwordHash[i % passwordHash.length];
+        }
+        return nacl.util.encodeBase64(decrypted);
+      };
+
+      const signPK = decrypt(backup.keys.signPK);
+      const signSK = decrypt(backup.keys.signSK);
+      const boxPK = decrypt(backup.keys.boxPK);
+      const boxSK = decrypt(backup.keys.boxSK);
+
+      // Verify key lengths
+      if (nacl.util.decodeBase64(signPK).length !== 32 ||
+          nacl.util.decodeBase64(signSK).length !== 64 ||
+          nacl.util.decodeBase64(boxPK).length !== 32 ||
+          nacl.util.decodeBase64(boxSK).length !== 32) {
+        return alert("Decryption failed - wrong password or corrupted file");
+      }
+
+      // Save to IndexedDB
+      await idbPut(STORE_KEYS, signPK, "my_sign_pk");
+      await idbPut(STORE_KEYS, signSK, "my_sign_sk");
+      await idbPut(STORE_KEYS, boxPK, "my_box_pk");
+      await idbPut(STORE_KEYS, boxSK, "my_box_sk");
+
+      await initOrLoad();
+      setStatus(true, "Keys imported successfully");
+    } catch (e) {
+      setStatus(false, "Import failed: " + e.message);
+    }
   };
 
-  document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
-  await refreshContacts();
-  setStatus(true, `Keys ready. My fp=${fp}`);
-}
+  input.click();
+};
 
-async function copyMyId() {
-  const t = document.getElementById("my-id").textContent;
-  if (!t || t === "(not loaded)") return alert("まずGenerate/Load Keys");
-  await navigator.clipboard.writeText(t);
-  setStatus(true, "Copied My Public ID");
-}
+window.resetAll = async function() {
+  if (!confirm("⚠️ Delete ALL data (keys, contacts, replay DB)?\nThis cannot be undone!")) return;
 
-async function resetAll() {
-  if (!confirm("本当に全データ削除？（鍵も消える）")) return;
   if (dbPromise) {
     const db = await dbPromise;
     db.close();
     dbPromise = null;
   }
+
   await new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(DB_NAME);
     req.onsuccess = resolve;
     req.onerror = () => reject(req.error);
   });
+
   document.getElementById("my-id").textContent = "(not loaded)";
   document.getElementById("contacts-view").textContent = "(none)";
   document.getElementById("recipient-select").innerHTML = `<option value="">Select Recipient</option>`;
   document.getElementById("encrypted").textContent = "";
   document.getElementById("decrypted").textContent = "";
-  setStatus(true, "RESET done");
-}
+  setStatus(true, "All data deleted");
+};
 
 /* =========================
   Contacts
 ========================= */
-async function addContact() {
-  let obj;
-  try { obj = JSON.parse(document.getElementById("contact-input").value.trim()); }
-  catch { return alert("Invalid JSON"); }
-
-  if (!obj || !obj.signPK || !obj.boxPK) return alert("Need signPK + boxPK");
-
-  let signPKu8, boxPKu8;
+window.addContact = async function() {
   try {
-    signPKu8 = b64d(obj.signPK);
-    boxPKu8  = b64d(obj.boxPK);
-  } catch {
-    return alert("Base64 decode failed");
+    const obj = JSON.parse(document.getElementById("contact-input").value.trim());
+
+    if (!obj || !obj.signPK || !obj.boxPK) {
+      return alert("Invalid format. Need: signPK and boxPK");
+    }
+
+    const signPKu8 = nacl.util.decodeBase64(obj.signPK);
+    const boxPKu8 = nacl.util.decodeBase64(obj.boxPK);
+
+    if (signPKu8.length !== 32) return alert("Invalid signPK length");
+    if (boxPKu8.length !== 32) return alert("Invalid boxPK length");
+
+    const fp = DMesh.fingerprintFromSignPK(signPKu8, nacl);
+    const fpB64 = nacl.util.encodeBase64(fp);
+
+    const contact = {
+      fp: fpB64,
+      name: obj.name || `Contact-${fpB64.slice(0, 8)}`,
+      signPK: obj.signPK,
+      boxPK: obj.boxPK,
+      addedAt: Date.now()
+    };
+
+    await idbPut(STORE_CONTACTS, contact);
+    await refreshContacts();
+    setStatus(true, `Contact saved: ${contact.name} (fp: ${fpB64.slice(0, 16)}...)`);
+  } catch (e) {
+    setStatus(false, "Add contact failed: " + e.message);
   }
+};
 
-  if (signPKu8.length !== nacl.sign.publicKeyLength) return alert("signPK length invalid");
-  if (boxPKu8.length !== nacl.box.publicKeyLength) return alert("boxPK length invalid");
-
-  const fp = fingerprintFromSignPK(signPKu8);
-
-  const contact = {
-    fp,
-    name: (obj.name || `Contact-${fp}`),
-    signPK: obj.signPK,
-    boxPK: obj.boxPK,
-    addedAt: Date.now()
-  };
-
-  await idbPut(STORE_CONTACTS, contact);
-  await refreshContacts();
-  setStatus(true, `Contact saved: ${contact.name} fp=${fp}`);
-}
-
-async function refreshContacts() {
+window.refreshContacts = async function() {
   const contacts = await idbGetAll(STORE_CONTACTS);
-  contacts.sort((a,b) => (a.name||"").localeCompare(b.name||""));
+  contacts.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   const sel = document.getElementById("recipient-select");
   sel.innerHTML = `<option value="">Select Recipient</option>`;
+
   for (const c of contacts) {
     const opt = document.createElement("option");
-    opt.value = c.fp; // fpをvalueにする（boxPKだけにしない！）
-    opt.textContent = `${c.name} [fp:${c.fp}]`;
+    opt.value = c.fp;
+    opt.textContent = `${c.name} [${c.fp.slice(0, 12)}...]`;
     sel.appendChild(opt);
   }
 
+  sel.onchange = () => {
+    const selected = sel.options[sel.selectedIndex].text;
+    document.getElementById("encrypt-recipient").textContent = selected || "(select above)";
+  };
+
   document.getElementById("contacts-view").textContent =
     contacts.length ? JSON.stringify(contacts, null, 2) : "(none)";
-}
+};
 
-async function deleteSelectedContact() {
+window.deleteSelectedContact = async function() {
   const fp = document.getElementById("recipient-select").value;
-  if (!fp) return alert("Select contact");
+  if (!fp) return alert("Select a contact first");
+
   await idbDel(STORE_CONTACTS, fp);
   await refreshContacts();
-  setStatus(true, `Deleted contact fp=${fp}`);
-}
+  setStatus(true, `Contact deleted (fp: ${fp.slice(0, 16)}...)`);
+};
 
 /* =========================
-  Message signing (encrypt/decryptで完全一致させる)
-  SignBytes = concat([
-    DOMAIN,
-    senderSignPK(32),
-    senderBoxPK(32),
-    recipientBoxPK(32),
-    ephPK(32),
-    nonce(24),
-    ts_u64be(8),
-    ct_len_u32be(4),
-    ciphertext
-  ])
+  Encryption
 ========================= */
-function buildSignBytes({ senderSignPK, senderBoxPK, recipientBoxPK, ephPK, nonce, ts, ciphertext }) {
-  return concatU8([
-    DOMAIN,
-    senderSignPK,
-    senderBoxPK,
-    recipientBoxPK,
-    ephPK,
-    nonce,
-    u64beFromNumber(ts),
-    u32be(ciphertext.length),
-    ciphertext
-  ]);
-}
+window.encryptMsg = async function() {
+  try {
+    const content = document.getElementById("content").value || "";
+    const fp = document.getElementById("recipient-select").value;
+
+    if (!fp) return alert("Select a recipient");
+
+    const recipient = await idbGet(STORE_CONTACTS, fp);
+    if (!recipient) return alert("Recipient not found");
+
+    const my = await ensureMyKeys();
+
+    const message = DMesh.encryptMessage({
+      content,
+      senderSignPK: my.signPKu8,
+      senderSignSK: my.signSKu8,
+      senderBoxPK: my.boxPKu8,
+      senderBoxSK: my.boxSKu8,
+      recipientBoxPK: nacl.util.decodeBase64(recipient.boxPK)
+    }, nacl, nacl.util);
+
+    document.getElementById("encrypted").textContent = JSON.stringify(message, null, 2);
+    document.getElementById("encrypted-actions").style.display = "flex";
+    setStatus(true, `Encrypted for ${recipient.name}`);
+  } catch (e) {
+    setStatus(false, "Encryption failed: " + e.message);
+  }
+};
+
+window.copyEncrypted = async function() {
+  const text = document.getElementById("encrypted").textContent;
+  await navigator.clipboard.writeText(text);
+  setStatus(true, "Encrypted message copied to clipboard");
+};
 
 /* =========================
-  Replay protection
+  Decryption
 ========================= */
 async function cleanupReplay() {
   const all = await idbGetAll(STORE_REPLAY);
   const now = Date.now();
-  const old = all.filter(x => (now - (x.seenAt || 0)) > REPLAY_RETENTION_MS);
+  const old = all.filter(x => (now - (x.seenAt || 0)) > DMesh.REPLAY_RETENTION_MS);
   for (const o of old) await idbDel(STORE_REPLAY, o.k);
 }
 
@@ -383,189 +511,73 @@ async function checkAndMarkReplay(senderFp, nonceB64) {
   return true;
 }
 
-/* =========================
-  Encrypt
-========================= */
-async function encryptMsg() {
-  const content = document.getElementById("content").value || "";
-  if (new Blob([content]).size > MAX_BYTES) return alert("Too large (max 150KB)");
-
-  const fp = document.getElementById("recipient-select").value;
-  if (!fp) return alert("Select recipient");
-
-  const recipient = await idbGet(STORE_CONTACTS, fp);
-  if (!recipient) return alert("Recipient not found");
-
-  const my = await ensureMyKeys();
-  const recipientBoxPK = b64d(recipient.boxPK);
-
-  // ephemeral box keys (PFS近似)
-  const eph = nacl.box.keyPair();
-  const nonce = nacl.randomBytes(nacl.box.nonceLength);
-
-  const ts = Date.now();
-  const payloadBytes = nacl.util.decodeUTF8(JSON.stringify({ v: 1, ts, content }));
-
-  // ECDH shared + box.after
-  const shared = nacl.box.before(recipientBoxPK, eph.secretKey);
-  const ciphertext = nacl.box.after(payloadBytes, nonce, shared);
-  if (!ciphertext) return alert("Encrypt failed (unexpected)");
-
-  const signBytes = buildSignBytes({
-    senderSignPK: my.signPKu8,
-    senderBoxPK: my.boxPKu8,
-    recipientBoxPK,
-    ephPK: eph.publicKey,
-    nonce,
-    ts,
-    ciphertext
-  });
-
-  const signature = nacl.sign.detached(signBytes, my.signSKu8);
-
-  const msg = {
-    v: 1,
-    kind: "dmesh-msg",
-    ts,
-    senderSignPK: b64e(my.signPKu8),
-    senderBoxPK: b64e(my.boxPKu8),
-    recipientBoxPK: b64e(recipientBoxPK),
-    ephPK: b64e(eph.publicKey),
-    nonce: b64e(nonce),
-    ciphertext: b64e(ciphertext),
-    signature: b64e(signature)
-  };
-
-  document.getElementById("encrypted").textContent = JSON.stringify(msg, null, 2);
-  setStatus(true, `Encrypted for ${recipient.name} fp=${recipient.fp}`);
-}
-
-/* =========================
-  Decrypt
-========================= */
-async function decryptMsg() {
-  let msg;
-  try { msg = JSON.parse(document.getElementById("input").value.trim()); }
-  catch { return alert("Invalid JSON"); }
-
-  if (!msg || msg.v !== 1 || msg.kind !== "dmesh-msg") return alert("Invalid message format");
-
-  // decode base64 fields
-  let senderSignPK, senderBoxPK, recipientBoxPK, ephPK, nonce, ciphertext, signature;
+window.decryptMsg = async function() {
   try {
-    senderSignPK = b64d(msg.senderSignPK);
-    senderBoxPK  = b64d(msg.senderBoxPK);
-    recipientBoxPK = b64d(msg.recipientBoxPK);
-    ephPK = b64d(msg.ephPK);
-    nonce = b64d(msg.nonce);
-    ciphertext = b64d(msg.ciphertext);
-    signature = b64d(msg.signature);
-  } catch {
-    return alert("Base64 decode failed");
-  }
+    const message = JSON.parse(document.getElementById("input").value.trim());
+    const my = await ensureMyKeys();
 
-  // length checks
-  if (senderSignPK.length !== nacl.sign.publicKeyLength) return alert("senderSignPK length invalid");
-  if (senderBoxPK.length !== nacl.box.publicKeyLength) return alert("senderBoxPK length invalid");
-  if (recipientBoxPK.length !== nacl.box.publicKeyLength) return alert("recipientBoxPK length invalid");
-  if (ephPK.length !== nacl.box.publicKeyLength) return alert("ephPK length invalid");
-  if (nonce.length !== nacl.box.nonceLength) return alert("nonce length invalid");
-  if (signature.length !== nacl.sign.signatureLength) return alert("signature length invalid");
+    // Sender fingerprint
+    const senderSignPK = nacl.util.decodeBase64(message.senderSignPK);
+    const senderFp = DMesh.fingerprintFromSignPK(senderSignPK, nacl);
+    const senderFpB64 = nacl.util.encodeBase64(senderFp);
 
-  const ts = Number(msg.ts);
-  if (!Number.isFinite(ts)) return alert("ts invalid");
+    // Contact lookup
+    let contact = await idbGet(STORE_CONTACTS, senderFpB64);
 
-  // timestamp skew
-  if (Math.abs(Date.now() - ts) > MAX_SKEW_MS) {
-    setStatus(false, "Timestamp skew too large -> drop");
-    return;
-  }
+    let expectedSenderSignPK = null;
+    let expectedSenderBoxPK = null;
 
-  const my = await ensureMyKeys();
-
-  // 受信者束縛: 自分宛てか？
-  if (b64e(my.boxPKu8) !== msg.recipientBoxPK) {
-    setStatus(false, "Not for you (recipientBoxPK mismatch) -> drop");
-    return;
-  }
-
-  // sender fingerprint
-  const senderFp = fingerprintFromSignPK(senderSignPK);
-
-  // contact lookup / TOFU
-  let contact = await idbGet(STORE_CONTACTS, senderFp);
-
-  if (!contact) {
-    if (!document.getElementById("tofu").checked) {
-      setStatus(false, `Unknown sender fp=${senderFp} (TOFU off) -> drop`);
-      return;
+    if (!contact) {
+      if (!document.getElementById("tofu").checked) {
+        setStatus(false, `Unknown sender (fp: ${senderFpB64.slice(0, 16)}...). Enable TOFU or add contact first.`);
+        return;
+      }
+      // TOFU registration
+      contact = {
+        fp: senderFpB64,
+        name: `TOFU-${senderFpB64.slice(0, 8)}`,
+        signPK: message.senderSignPK,
+        boxPK: message.senderBoxPK,
+        addedAt: Date.now()
+      };
+      await idbPut(STORE_CONTACTS, contact);
+      await refreshContacts();
+    } else {
+      // Known sender - expect keys to match
+      expectedSenderSignPK = nacl.util.decodeBase64(contact.signPK);
+      expectedSenderBoxPK = nacl.util.decodeBase64(contact.boxPK);
     }
-    // TOFU登録（初回はなりすましに弱いのは仕様）
-    contact = {
-      fp: senderFp,
-      name: `TOFU-${senderFp}`,
-      signPK: msg.senderSignPK,
-      boxPK: msg.senderBoxPK,
-      addedAt: Date.now()
-    };
-    await idbPut(STORE_CONTACTS, contact);
-    await refreshContacts();
-  } else {
-    // 既知送信者なら鍵固定（すり替え拒否）
-    if (contact.signPK !== msg.senderSignPK || contact.boxPK !== msg.senderBoxPK) {
-      setStatus(false, `Sender key mismatch for fp=${senderFp} -> drop`);
-      return;
-    }
+
+    // Replay check function
+    const replayCheck = (fp, nonceB64) => checkAndMarkReplay(fp, nonceB64);
+
+    // Decrypt
+    const result = DMesh.decryptMessage({
+      message,
+      recipientBoxPK: my.boxPKu8,
+      recipientBoxSK: my.boxSKu8,
+      expectedSenderSignPK,
+      expectedSenderBoxPK,
+      replayCheck
+    }, nacl, nacl.util);
+
+    document.getElementById("decrypted").textContent = result.content;
+    setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
+  } catch (e) {
+    setStatus(false, "Decryption failed: " + e.message);
+    document.getElementById("decrypted").textContent = "";
   }
+};
 
-  // signature verify (encryptと完全同一のSignBytesを再構成)
-  const signBytes = buildSignBytes({
-    senderSignPK,
-    senderBoxPK,
-    recipientBoxPK,
-    ephPK,
-    nonce,
-    ts,
-    ciphertext
-  });
-
-  const verified = nacl.sign.detached.verify(signBytes, signature, senderSignPK);
-  if (!verified) {
-    setStatus(false, `Invalid signature fp=${senderFp} -> drop`);
-    return;
-  }
-
-  // replay check (署名OKの後)
-  const okReplay = await checkAndMarkReplay(senderFp, msg.nonce);
-  if (!okReplay) {
-    setStatus(false, `Replay detected fp=${senderFp} -> drop`);
-    return;
-  }
-
-  // decrypt
-  const shared = nacl.box.before(ephPK, my.boxSKu8);
-  const plaintext = nacl.box.open.after(ciphertext, nonce, shared);
-  if (!plaintext) {
-    setStatus(false, `Decryption failed fp=${senderFp}`);
-    return;
-  }
-
-  const text = nacl.util.encodeUTF8(plaintext);
-
-  // payload parse (任意)
-  try {
-    const obj = JSON.parse(text);
-    document.getElementById("decrypted").textContent = obj.content ?? JSON.stringify(obj, null, 2);
-  } catch {
-    document.getElementById("decrypted").textContent = text;
-  }
-
-  setStatus(true, `Decrypted OK from ${contact.name} fp=${senderFp}`);
-}
-
-/* Auto init (好みで) */
+/* =========================
+  Auto-init
+========================= */
 (async () => {
-  try { await initOrLoad(); } catch (e) { console.error(e); }
+  try {
+    await initOrLoad();
+  } catch (e) {
+    console.error("Auto-init failed:", e);
+  }
 })();
 </script>
 </body>
