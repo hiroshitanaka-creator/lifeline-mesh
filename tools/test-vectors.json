@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "description": "Lifeline Mesh Protocol Test Vectors",
+  "generated": "2026-01-24T02:07:09.309Z",
+  "vectors": [
+    {
+      "name": "basic_message",
+      "description": "Basic message from Alice to Bob",
+      "alice": {
+        "signPK": "ZUCWU+W5qA1sQTBoweX8/IGWBW7/Y9TCC7Oecg3A1Y8=",
+        "signSK": "4hu+7AXJdpqWYoI34aYstYEBmi7ABOTbgJ6rbY8jKORlQJZT5bmoDWxBMGjB5fz8gZYFbv9j1MILs55yDcDVjw==",
+        "boxPK": "bYc2Om3aKadEbhdBrRwHXn0duiKtuJNh9TQ1F3cpJXg=",
+        "boxSK": "1ALFC3HfdPVvU9a6teVJix79KWh0daRfwmOGMmJxBqU="
+      },
+      "bob": {
+        "boxPK": "XIGFuoT9Ih6JwkU9WokpHhahcvI4fCqtioRVWujwzkY=",
+        "boxSK": "vOLXxlU0bT31s3zz3va10Og7e8LBz8L9NYPEdrgQYl4="
+      },
+      "plaintext": {
+        "content": "Hello, Bob!",
+        "timestamp": 1706012345678
+      },
+      "message": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345678,
+        "senderSignPK": "ZUCWU+W5qA1sQTBoweX8/IGWBW7/Y9TCC7Oecg3A1Y8=",
+        "senderBoxPK": "bYc2Om3aKadEbhdBrRwHXn0duiKtuJNh9TQ1F3cpJXg=",
+        "recipientBoxPK": "XIGFuoT9Ih6JwkU9WokpHhahcvI4fCqtioRVWujwzkY=",
+        "ephPK": "Nu/4KaUyuUA3Wdh4awKMfUZF/HBkYBcQhL+ulfhk0EQ=",
+        "nonce": "T7I5KBvoNlnaGVSa8N6txy6rL+qYLcRw",
+        "ciphertext": "FPZDSy/idzJLUDhvPj7P322VCds+RVEIQ7oUrxrvSrw/IxPBBrnPvs1DvCEFvTKCP+VcTspS0Fast2P206wmy3JL",
+        "signature": "LLt/uBCKNHDP/+l0pOnKRSuZEZbaukOgj9oKHa35pWS31a8dHq7dit+RuqHpreMkzUJ8GKfXUQeOFsTSQNW0CQ=="
+      }
+    },
+    {
+      "name": "empty_message",
+      "description": "Empty message content",
+      "alice": {
+        "signPK": "Qh4egwPTQulxWBL5GsLTtp25ss85ZB0oxPdPraivfE0=",
+        "signSK": "0a8+ls3K1wcNuvz/tj1m2UKxVMaqI/aSHyV8VBd+8KFCHh6DA9NC6XFYEvkawtO2nbmyzzlkHSjE90+tqK98TQ==",
+        "boxPK": "u5oq5yJhSIqTje/aG2eSlinDRe0cda0ioEyOaGkXqGw=",
+        "boxSK": "MMGTsC6fo3JP7AI0RENoNwN17krKXrOswROfB0MiUH4="
+      },
+      "bob": {
+        "boxPK": "xXrEbNXAwCXFU3Qlf2YDvxrjSKLHQtP7n/E2cxsRkis=",
+        "boxSK": "82AjKOmKXSlfhHaaglrQZWekT2DBD9mIorVrsnv38sE="
+      },
+      "plaintext": {
+        "content": "",
+        "timestamp": 1706012345679
+      },
+      "message": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345679,
+        "senderSignPK": "Qh4egwPTQulxWBL5GsLTtp25ss85ZB0oxPdPraivfE0=",
+        "senderBoxPK": "u5oq5yJhSIqTje/aG2eSlinDRe0cda0ioEyOaGkXqGw=",
+        "recipientBoxPK": "xXrEbNXAwCXFU3Qlf2YDvxrjSKLHQtP7n/E2cxsRkis=",
+        "ephPK": "UTKR5C2ZPopBIaPzCdOn5fkbYrNIVPrGHDh4TPXgDUA=",
+        "nonce": "T7I5KBvoNlnaGVSa8N6txy6rL+qYLcRw",
+        "ciphertext": "gzgEtbtjFn3MyTxGprSYh/pfHYZ4P5mRebzk7NDgQNPq9FAyvlJVRzJnkZRFkw3/aZJhRSKl3g==",
+        "signature": "4ZibEFNOd5AXwpMTstzAL5P7Aiw3ahcy9MzAWXYr/BU4zKjGovKEMo2FwbzZJDrN3PkxQCRKL6ltTWFOYsFDBw=="
+      }
+    },
+    {
+      "name": "unicode_message",
+      "description": "Message with Unicode and emoji",
+      "alice": {
+        "signPK": "LNZTxU+fMqaycVAvc/PePE9eqYBjSVAvWxKM80f0PGs=",
+        "signSK": "L1O5RrLxegdlR9IdhPZDDh+01vdX02w4qhmf4TomNm0s1lPFT58yprJxUC9z8948T16pgGNJUC9bEozzR/Q8aw==",
+        "boxPK": "O6KcaxT/GQQDj6M+TrxhJcXltKGOsKISsb7soqXb5D4=",
+        "boxSK": "esAi33/rFlNOkki61skNpnfjiXao3Kwr7SEjS7pICMA="
+      },
+      "bob": {
+        "boxPK": "wpD/nnd3dbfZByINA3f+uK0nxrf3KIQRvNcGsUfdByY=",
+        "boxSK": "lj9dMMwF3aWyfqJ/fNct8RcQFjUqMSzzW4YGhKd/MYE="
+      },
+      "plaintext": {
+        "content": "こんにちは🌍 Hello 世界!",
+        "timestamp": 1706012345680
+      },
+      "message": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345680,
+        "senderSignPK": "LNZTxU+fMqaycVAvc/PePE9eqYBjSVAvWxKM80f0PGs=",
+        "senderBoxPK": "O6KcaxT/GQQDj6M+TrxhJcXltKGOsKISsb7soqXb5D4=",
+        "recipientBoxPK": "wpD/nnd3dbfZByINA3f+uK0nxrf3KIQRvNcGsUfdByY=",
+        "ephPK": "lXbuIEEKWffElg4iIq9ZM4g/GBHZj6PIErJkfN5872A=",
+        "nonce": "T7I5KBvoNlnaGVSa8N6txy6rL+qYLcRw",
+        "ciphertext": "VZ76HPHdPfonBRAqDwh5dprHhMIsFHda3SxTE2P2zgLAYQlRQyhnAkhw7vv6EqPqnRcoDrCCi9MgJvMeIovBqZ2M83K5NGpwg5V8bEO8eUhA+K8l8epL0Q==",
+        "signature": "ppK0wbydt/Cp+jyks1/ztgtwVsVPxqFUiZVO3rI8XngsNxyujK2s8m6XOuPtkyjFctJ77/UWEhhdYzHOXEUKBA=="
+      }
+    },
+    {
+      "name": "large_message",
+      "description": "Large message (1KB content)",
+      "alice": {
+        "signPK": "uJysFbKZTM8a09w8xrBou3jkg0RRYEBfwW5Gy1gbhrk=",
+        "signSK": "ePK/sg24mdXdUxVTCCjTLgpafgQnVJdIaAUflB99RGe4nKwVsplMzxrT3DzGsGi7eOSDRFFgQF/BbkbLWBuGuQ==",
+        "boxPK": "JcF1ENJoOU3Hy34j0zJ9OqZY4ePf39jrYvcu91aPBAk=",
+        "boxSK": "kpp6qXivH4HaXvxdNJiam1XmAG3bz/TSHEG9B74xZcU="
+      },
+      "bob": {
+        "boxPK": "PLo5yntcrGE3YVPNi9FaxXigHqfGE6cvdEN7RURokW0=",
+        "boxSK": "QM2Mgu1qHNfFIm4AOAXA6bT41csjHDoi4zCf7LxonGY="
+      },
+      "plaintext": {
+        "content": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA... (1024 chars)",
+        "contentLength": 1024,
+        "timestamp": 1706012345681
+      },
+      "message": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345681,
+        "senderSignPK": "uJysFbKZTM8a09w8xrBou3jkg0RRYEBfwW5Gy1gbhrk=",
+        "senderBoxPK": "JcF1ENJoOU3Hy34j0zJ9OqZY4ePf39jrYvcu91aPBAk=",
+        "recipientBoxPK": "PLo5yntcrGE3YVPNi9FaxXigHqfGE6cvdEN7RURokW0=",
+        "ephPK": "VqLPl0d4G+I0MQBfZROg7B+JLCpx3t1lSkDSvTxNEiM=",
+        "nonce": "T7I5KBvoNlnaGVSa8N6txy6rL+qYLcRw",
+        "ciphertext": "QaksBNbiICyb0EF6ivI6SNPhQelGDRmiPBt4ZxB2jG5vERkQBMNS2wbTZD70O3tjwy7y87YfV5ms0zYy3SVSE7ecDwf+b3VsiAZEXLAvIDnExvBG1sWEFytSmZ8wSEF2MpmmrvJDcM48AH834sFLU0ZWkVifq+RPbU485n5q32BbciSrNfRSRT8mN+Pqw/AK4sBj2h3pAsRqGLdAqDE2cljp/uCke3LVuvd5LT1mQNIz9J82X8Vic8NumcmbeOP3Y/wd63vVGmbEYXT8DNCS0SeAFftcajbchn0LMbAcJztoZXEtphCycik9xRo1sTlhCSqXinqj4A40PHah2ZiJOSrzsLNsZKR8wUIu52eEMN0t1uGg0liRJ70q9Ntnk+9Bg+W6vA06j1JVHjZJlmWVoJFizYYObcBZK80FaKhkgX4RLeP+ZrQp9j4Xgy4nDlSUbr4FmOM1Zb/FuHcrHoFp0udXByaaZJlD0WqtLBzW/sBT9jK/etLy95XgxTqghSFfjBy4KV5o0bTAskpNBqwT5I7MC7VdN8NVn+emEvuzf8pgWDmlt4EoKSePos5SGM0pxbei5vJltk0N7NJMEUX6NiHjL1YTHClO43lfFTH9iCn2f99CQrXdsN5RZzpfMOn72mkC4Hq8drb4xw1EvY0W9yOrTFTHTnUiu3x78f7P4Y7PgY96Q91CXWLN3uuLiib5x0/xwBZoNouUmRx15MiWpIvmcUy9RrqhXol7/4E9xtSuAQGzESr5CnGVv9dxEGs7Qik8h7MQpuDfMtNAdmcrOdtw6XWN4wjj8uleG92wuHv0wfJOW2tV/jF9BNd6Sw998t4zkGJ8zsoV4k6uqWg7W/XCXwqp/hjEv75B9Q77U3RHiMmJr8JmaS3pzNUa5WZSGGyhnqxW39Qw9RrT7gPhukCCWfwtcZpDM6AUCzgfLMGPRBgXO/X5PPWCs9h+bdA/cPGDeMIs/yP8y381dxJxrym+PX5KSUqDRJJFq+fpcKWct985lxewPJohOj9a3GMAM34iKX7TquCeYWP1OXNn3rb9RZduh8KqMEcpVwpcjfXiFHuAsH4UJ90atMYJUIYKNmTSKtWUIqF+wPgWqs8dbtqbgAYF1VvpwnzfdIHbJ6iy4DUveAgQbBXmYEIc+L+F/9i3qXvMUmqNyGKije4GS2EZ7fEyzFvzQOyOVIfDxfszfaK1wdYzC20FaQWJot8G71tvDVwp2rUoJiTn9dBlTdhygl+I2IxwCmltTWh1Qkl8iISPX9kIV1Vd2n5xmbH5RrV03l8QFVf/GTHrt5etqimop7E9IptbljXNxrkSp7TGDZ1pK2spioIcm2sWQ6mN0O5W+zGcMUNsrpEbYCNJ7EgJO5d6slDCi0xZP+hkOVByAiqLNkBxZW1u3viW0inPXWGilHZeEeOyb8gJU9RmqcP3GpQ4wAw=",
+        "signature": "3HYcQIoihgznoikBZ40xHNttPJBQVZtiSUCL9tFx+FoP9h3lGmUXgV2fIijYWMSrHQxx7l1+ET5eeC62kaXdCQ=="
+      }
+    },
+    {
+      "name": "public_identity",
+      "description": "Alice's public identity",
+      "keys": {
+        "signPK": "6Q4serG1LYndl4FxHD1k274zwSmTMMo2GyGpQg03bZA=",
+        "boxPK": "M0+qeAjQiGnla0c8cEO1oAP34a9EAu2cM49SwGROol8="
+      },
+      "identity": {
+        "v": 1,
+        "kind": "dmesh-id",
+        "name": "Alice",
+        "fp": "iwDJco8AWZHnYM/Au4cBbw==",
+        "signPK": "6Q4serG1LYndl4FxHD1k274zwSmTMMo2GyGpQg03bZA=",
+        "boxPK": "M0+qeAjQiGnla0c8cEO1oAP34a9EAu2cM49SwGROol8="
+      }
+    },
+    {
+      "name": "fingerprint",
+      "description": "Fingerprint derivation from signing public key",
+      "signPK": "j+hBUcPU09Hnqu37Cf1c7V1r72nEoh/qe+KQmhhio0I=",
+      "fingerprint": "+OOm7s3xxaSLWj3lyM2mng=="
+    }
+  ]
+}
