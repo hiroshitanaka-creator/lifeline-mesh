@@ -1,0 +1,24 @@
+{
+  "name": "@lifeline-mesh/crypto",
+  "version": "0.1.0",
+  "description": "Core cryptographic functions for Lifeline Mesh",
+  "type": "module",
+  "main": "core.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "cryptography",
+    "nacl",
+    "ed25519",
+    "x25519",
+    "disaster",
+    "mesh"
+  ],
+  "author": "Lifeline Mesh Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
+  }
+}
