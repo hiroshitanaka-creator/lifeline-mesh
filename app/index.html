@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#4CAF50" />
+  <meta name="description" content="End-to-end encrypted emergency messaging. Offline-first. No server required." />
   <title>Lifeline Mesh - Emergency Messaging</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" />
 
   <!-- CDN dependencies with Subresource Integrity (SRI) -->
   <script src="https://unpkg.com/tweetnacl@1.0.3/nacl.min.js"
@@ -12,6 +18,10 @@
   <script src="https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js"
           integrity="sha384-qpU3wxGxaAPcz02pOLeZTv5B0rNzsh3CETsUqdHxRBP70bO0kHoBopr+f9AcGj04"
           crossorigin="anonymous"></script>
+
+  <!-- QR Code libraries -->
+  <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" crossorigin="anonymous"></script>
 
   <style>
     body { font-family: system-ui, sans-serif; margin: 16px; max-width: 900px; }
@@ -28,10 +38,28 @@
     .section { margin-bottom: 24px; }
     details { margin: 8px 0; }
     summary { cursor: pointer; font-weight: 600; padding: 8px; background: #f0f0f0; border-radius: 4px; }
+
+    /* Modal styles */
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); }
+    .modal-content { background-color: #fff; margin: 10% auto; padding: 20px; border-radius: 8px; max-width: 500px; position: relative; }
+    .modal-close { position: absolute; right: 10px; top: 10px; font-size: 28px; font-weight: bold; cursor: pointer; }
+    #qr-code { text-align: center; margin: 20px 0; }
+    #qr-reader { width: 100%; }
+
+    /* Install prompt */
+    #install-prompt { background: #4CAF50; color: white; padding: 12px; text-align: center; display: none; position: sticky; top: 0; z-index: 100; }
+    #install-prompt button { background: white; color: #4CAF50; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px; }
   </style>
 </head>
 
 <body>
+  <!-- PWA Install Prompt -->
+  <div id="install-prompt">
+    📱 Install Lifeline Mesh as an app for offline access
+    <button onclick="installPWA()">Install</button>
+    <button onclick="dismissInstall()">Later</button>
+  </div>
+
   <h1>🌐 Lifeline Mesh</h1>
   <p class="small">
     End-to-end encrypted emergency messaging • Offline-first • No server required<br>
@@ -47,6 +75,7 @@
     <pre id="my-id">(not loaded)</pre>
     <div class="row">
       <button onclick="copyMyId()">📋 Copy My Public ID</button>
+      <button onclick="showQRCode()">📱 Show QR Code</button>
       <button onclick="exportKeys()">💾 Export Keys</button>
       <button onclick="importKeys()">📥 Import Keys</button>
     </div>
@@ -54,6 +83,7 @@
     <details>
       <summary>Key Management</summary>
       <p class="small">
+        <strong>QR Code:</strong> Display your public ID as QR code for easy scanning<br>
         <strong>Export:</strong> Download your secret keys as encrypted JSON (password-protected)<br>
         <strong>Import:</strong> Restore keys from backup file<br>
         <strong>⚠️ Warning:</strong> Keep exported keys secure. Anyone with your secret keys can impersonate you.
@@ -66,6 +96,7 @@
     <textarea id="contact-input" placeholder='{"name":"Bob","signPK":"base64","boxPK":"base64"}'></textarea>
     <div class="row">
       <button onclick="addContact()">➕ Add Contact</button>
+      <button onclick="scanQRCode()">📷 Scan QR Code</button>
       <button onclick="refreshContacts()">🔄 Refresh</button>
       <button class="danger" onclick="deleteSelectedContact()">❌ Delete Selected</button>
     </div>
@@ -112,6 +143,26 @@
         <li><a href="../spec/PROTOCOL.md" target="_blank">Protocol Specification</a></li>
       </ul>
     </details>
+  </div>
+
+  <!-- QR Code Modal -->
+  <div id="qr-modal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close" onclick="closeQRModal()">&times;</span>
+      <h3>Your Public ID QR Code</h3>
+      <div id="qr-code"></div>
+      <p class="small">Scan this with another device to add you as a contact</p>
+    </div>
+  </div>
+
+  <!-- QR Scanner Modal -->
+  <div id="qr-scanner-modal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close" onclick="closeQRScanner()">&times;</span>
+      <h3>Scan Contact QR Code</h3>
+      <div id="qr-reader"></div>
+      <p class="small">Point camera at QR code to add contact</p>
+    </div>
   </div>
 
 <script type="module">
@@ -572,6 +623,131 @@ window.decryptMsg = async function() {
     document.getElementById("decrypted").textContent = "";
   }
 };
+
+/* =========================
+  QR Code Functions
+========================= */
+window.showQRCode = function() {
+  const idText = document.getElementById("my-id").textContent;
+  if (!idText || idText === "(not loaded)") {
+    return alert("Generate keys first");
+  }
+
+  // Clear previous QR code
+  const qrContainer = document.getElementById("qr-code");
+  qrContainer.innerHTML = "";
+
+  // Generate QR code
+  new QRCode(qrContainer, {
+    text: idText,
+    width: 256,
+    height: 256,
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  // Show modal
+  document.getElementById("qr-modal").style.display = "block";
+};
+
+window.closeQRModal = function() {
+  document.getElementById("qr-modal").style.display = "none";
+};
+
+let html5QrCode = null;
+
+window.scanQRCode = async function() {
+  const modal = document.getElementById("qr-scanner-modal");
+  modal.style.display = "block";
+
+  try {
+    if (!html5QrCode) {
+      html5QrCode = new Html5Qrcode("qr-reader");
+    }
+
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      (decodedText) => {
+        // Successfully scanned
+        document.getElementById("contact-input").value = decodedText;
+        closeQRScanner();
+        addContact();
+      },
+      (errorMessage) => {
+        // Scanning error (ignore, happens frequently)
+      }
+    );
+  } catch (err) {
+    alert("Camera access error: " + err);
+    closeQRScanner();
+  }
+};
+
+window.closeQRScanner = async function() {
+  if (html5QrCode && html5QrCode.isScanning) {
+    try {
+      await html5QrCode.stop();
+    } catch (e) {
+      console.error("QR scanner stop error:", e);
+    }
+  }
+  document.getElementById("qr-scanner-modal").style.display = "none";
+};
+
+// Close modals when clicking outside
+window.onclick = function(event) {
+  const qrModal = document.getElementById("qr-modal");
+  const scannerModal = document.getElementById("qr-scanner-modal");
+
+  if (event.target === qrModal) {
+    closeQRModal();
+  }
+  if (event.target === scannerModal) {
+    closeQRScanner();
+  }
+};
+
+/* =========================
+  PWA Support
+========================= */
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-prompt').style.display = 'block';
+});
+
+window.installPWA = async function() {
+  if (!deferredPrompt) return;
+
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+
+  if (outcome === 'accepted') {
+    setStatus(true, 'PWA installed successfully');
+  }
+
+  deferredPrompt = null;
+  document.getElementById('install-prompt').style.display = 'none';
+};
+
+window.dismissInstall = function() {
+  document.getElementById('install-prompt').style.display = 'none';
+};
+
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(registration => {
+        console.log('SW registered:', registration);
+      })
+      .catch(err => {
+        console.log('SW registration failed:', err);
+      });
+  });
+}
 
 /* =========================
   Auto-init
