@@ -11,22 +11,6 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" />
 
-  <!-- CDN dependencies with Subresource Integrity (SRI) -->
-  <script src="https://unpkg.com/tweetnacl@1.0.3/nacl.min.js"
-          integrity="sha384-LMUiUHpaYNGZFzWFRjsADnCSqae1Mk5llcUOHOLDhCxkyF2cdsWAueTZAzV+swW/"
-          crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js"
-          integrity="sha384-qpU3wxGxaAPcz02pOLeZTv5B0rNzsh3CETsUqdHxRBP70bO0kHoBopr+f9AcGj04"
-          crossorigin="anonymous"></script>
-
-  <!-- QR Code libraries with SRI -->
-  <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"
-          integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"
-          crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"
-          integrity="sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+"
-          crossorigin="anonymous"></script>
-
   <style>
     body { font-family: system-ui, sans-serif; margin: 16px; max-width: 900px; }
     textarea, input, select { width: 100%; padding: 8px; box-sizing: border-box; }
@@ -216,10 +200,15 @@
 
 <script type="module">
 /* =========================
-  Import crypto core
+  Imports
 ========================= */
 import * as DMesh from '../crypto/core.js';
 import { BLEManager } from '../bluetooth/ble-manager.js';
+import nacl from 'tweetnacl';
+import * as naclUtil from 'tweetnacl-util';
+import QRCode from 'qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
+
 
 /* =========================
   BLE Manager
@@ -312,6 +301,9 @@ window.bleSendEncrypted = async function() {
     setStatus(false, 'Bluetooth send failed: ' + e.message);
   }
 };
+
+// Attach util to nacl for compatibility with existing code
+nacl.util = naclUtil;
 
 /* =========================
   Config
@@ -777,7 +769,7 @@ window.decryptMsg = async function() {
 /* =========================
   QR Code Functions
 ========================= */
-window.showQRCode = function() {
+window.showQRCode = async function() {
   const idText = document.getElementById("my-id").textContent;
   if (!idText || idText === "(not loaded)") {
     return alert("Generate keys first");
@@ -787,12 +779,14 @@ window.showQRCode = function() {
   const qrContainer = document.getElementById("qr-code");
   qrContainer.innerHTML = "";
 
+  // Create canvas for QR code
+  const canvas = document.createElement('canvas');
+  qrContainer.appendChild(canvas);
+
   // Generate QR code
-  new QRCode(qrContainer, {
-    text: idText,
+  await QRCode.toCanvas(canvas, idText, {
     width: 256,
-    height: 256,
-    correctLevel: QRCode.CorrectLevel.M
+    errorCorrectionLevel: 'M'
   });
 
   // Show modal
@@ -803,18 +797,18 @@ window.closeQRModal = function() {
   document.getElementById("qr-modal").style.display = "none";
 };
 
-let html5QrCode = null;
+let html5QrCodeScanner = null;
 
 window.scanQRCode = async function() {
   const modal = document.getElementById("qr-scanner-modal");
   modal.style.display = "block";
 
   try {
-    if (!html5QrCode) {
-      html5QrCode = new Html5Qrcode("qr-reader");
+    if (!html5QrCodeScanner) {
+      html5QrCodeScanner = new Html5Qrcode("qr-reader");
     }
 
-    await html5QrCode.start(
+    await html5QrCodeScanner.start(
       { facingMode: "environment" },
       { fps: 10, qrbox: { width: 250, height: 250 } },
       (decodedText) => {
@@ -834,9 +828,9 @@ window.scanQRCode = async function() {
 };
 
 window.closeQRScanner = async function() {
-  if (html5QrCode && html5QrCode.isScanning) {
+  if (html5QrCodeScanner && html5QrCodeScanner.isScanning) {
     try {
-      await html5QrCode.stop();
+      await html5QrCodeScanner.stop();
     } catch (e) {
       console.error("QR scanner stop error:", e);
     }
