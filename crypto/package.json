@@ -4,6 +4,10 @@
   "description": "Core cryptographic functions for Lifeline Mesh",
   "type": "module",
   "main": "core.js",
+  "exports": {
+    ".": "./core.js",
+    "./errors": "./errors.js"
+  },
   "scripts": {
     "test": "node test.js"
   },
