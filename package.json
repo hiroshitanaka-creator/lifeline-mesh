@@ -15,7 +15,9 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "validate": "npm run lint && npm run typecheck && npm run test",
-    "ci": "npm run validate"
+    "ci": "npm run validate",
+    "prepare": "husky || true",
+    "pre-commit": "lint-staged"
   },
   "keywords": [
     "cryptography",
@@ -38,8 +40,22 @@
     "@types/node": "^20.10.0",
     "eslint": "^8.56.0",
     "html5-qrcode": "^2.3.8",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.2.0",
     "qrcodejs": "^1.0.0",
     "typescript": "^5.3.0"
+  },
+  "lint-staged": {
+    "crypto/**/*.js": [
+      "eslint --fix",
+      "npm run test:crypto"
+    ],
+    "tools/**/*.js": [
+      "eslint --fix"
+    ],
+    "*.{js,json}": [
+      "eslint --fix"
+    ]
   },
   "engines": {
     "node": ">=18.0.0"

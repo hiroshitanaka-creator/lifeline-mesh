@@ -1,0 +1,121 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Run weekly security scan
+    - cron: '0 0 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix crypto
+          npm ci --prefix tools
+
+      - name: Run npm audit (root)
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Run npm audit (crypto)
+        run: npm audit --prefix crypto --audit-level=high
+        # Fail on high severity vulnerabilities in crypto module
+
+      - name: Run npm audit (tools)
+        run: npm audit --prefix tools --audit-level=moderate
+        continue-on-error: true
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
+
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect secrets
+        run: |
+          echo "Scanning for potential secrets..."
+          # Check for common secret patterns
+          if grep -rE "(password|secret|api[_-]?key|token|private[_-]?key)\s*[:=]\s*['\"][^'\"]+['\"]" \
+             --include="*.js" --include="*.json" --include="*.ts" \
+             . 2>/dev/null | grep -v node_modules | grep -v ".git"; then
+            echo "::warning::Potential secrets detected in code"
+          fi
+
+          # Check for base64 encoded secrets (long base64 strings)
+          if grep -rE "['\"][A-Za-z0-9+/]{40,}['\"]" \
+             --include="*.js" --include="*.json" \
+             . 2>/dev/null | grep -v node_modules | grep -v ".git" | grep -v "test-vectors"; then
+            echo "::warning::Long base64 strings detected - verify they are not secrets"
+          fi
+
+          echo "Secrets scan completed"
+
+  sri-verification:
+    name: SRI Hash Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify SRI hashes are present
+        run: |
+          echo "Checking SRI hashes in index.html..."
+
+          # Count script tags with integrity attribute
+          SRI_COUNT=$(grep -c 'integrity="sha384-' app/index.html || true)
+          SCRIPT_COUNT=$(grep -c '<script src="https://' app/index.html || true)
+
+          echo "Found $SRI_COUNT SRI hashes for $SCRIPT_COUNT external scripts"
+
+          if [ "$SRI_COUNT" -lt "$SCRIPT_COUNT" ]; then
+            echo "::error::Some external scripts are missing SRI hashes"
+            grep '<script src="https://' app/index.html | grep -v 'integrity='
+            exit 1
+          fi
+
+          echo "All external scripts have SRI hashes"
