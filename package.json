@@ -1,0 +1,63 @@
+{
+  "name": "lifeline-mesh",
+  "version": "0.1.0",
+  "description": "End-to-end encrypted emergency messaging. Offline-first. No server required.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && npm install --prefix crypto && npm install --prefix tools",
+    "test": "npm run test:crypto && npm run test:vectors",
+    "test:crypto": "npm --prefix crypto test",
+    "test:vectors": "npm --prefix tools run validate-vectors",
+    "generate:vectors": "npm --prefix tools run generate-vectors",
+    "generate:sri": "npm --prefix tools run generate-sri",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run lint && npm run typecheck && npm run test",
+    "ci": "npm run validate",
+    "prepare": "husky || true",
+    "pre-commit": "lint-staged"
+  },
+  "keywords": [
+    "cryptography",
+    "nacl",
+    "ed25519",
+    "x25519",
+    "disaster",
+    "mesh",
+    "emergency",
+    "offline",
+    "e2e-encryption"
+  ],
+  "author": "Lifeline Mesh Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hiroshitanaka-creator/lifeline-mesh"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "eslint": "^8.56.0",
+    "html5-qrcode": "^2.3.8",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.2.0",
+    "qrcodejs": "^1.0.0",
+    "typescript": "^5.3.0"
+  },
+  "lint-staged": {
+    "crypto/**/*.js": [
+      "eslint --fix",
+      "npm run test:crypto"
+    ],
+    "tools/**/*.js": [
+      "eslint --fix"
+    ],
+    "*.{js,json}": [
+      "eslint --fix"
+    ]
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,69 @@
+# Dependabot configuration for automated security updates
+# https://docs.github.com/en/code-security/dependabot
+
+version: 2
+updates:
+  # Root package.json
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+      - "security"
+    reviewers:
+      - "hiroshitanaka-creator"
+    groups:
+      dev-dependencies:
+        patterns:
+          - "eslint*"
+          - "typescript*"
+          - "@types/*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Crypto module
+  - package-ecosystem: "npm"
+    directory: "/crypto"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(crypto)"
+    labels:
+      - "dependencies"
+      - "security"
+      - "crypto"
+    reviewers:
+      - "hiroshitanaka-creator"
+    # Critical: crypto dependencies need immediate attention
+    versioning-strategy: "increase-if-necessary"
+
+  # Tools module
+  - package-ecosystem: "npm"
+    directory: "/tools"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(tools)"
+    labels:
+      - "dependencies"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "ci"
+      - "dependencies"

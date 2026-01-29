@@ -3,9 +3,9 @@
  * Run with: node test.js
  */
 
-import nacl from 'tweetnacl';
-import naclUtil from 'tweetnacl-util';
-import * as DMesh from './core.js';
+import nacl from "tweetnacl";
+import naclUtil from "tweetnacl-util";
+import * as DMesh from "./core.js";
 
 let passed = 0;
 let failed = 0;
@@ -26,48 +26,48 @@ function test(name, fn) {
 // Tests
 // ============================================================================
 
-test('generateSignKeyPair produces valid keys', () => {
+test("generateSignKeyPair produces valid keys", () => {
   const kp = DMesh.generateSignKeyPair(nacl);
-  if (kp.publicKey.length !== 32) throw new Error('Invalid public key length');
-  if (kp.secretKey.length !== 64) throw new Error('Invalid secret key length');
+  if (kp.publicKey.length !== 32) throw new Error("Invalid public key length");
+  if (kp.secretKey.length !== 64) throw new Error("Invalid secret key length");
 });
 
-test('generateBoxKeyPair produces valid keys', () => {
+test("generateBoxKeyPair produces valid keys", () => {
   const kp = DMesh.generateBoxKeyPair(nacl);
-  if (kp.publicKey.length !== 32) throw new Error('Invalid public key length');
-  if (kp.secretKey.length !== 32) throw new Error('Invalid secret key length');
+  if (kp.publicKey.length !== 32) throw new Error("Invalid public key length");
+  if (kp.secretKey.length !== 32) throw new Error("Invalid secret key length");
 });
 
-test('fingerprintFromSignPK produces 16-byte fingerprint', () => {
+test("fingerprintFromSignPK produces 16-byte fingerprint", () => {
   const kp = DMesh.generateSignKeyPair(nacl);
   const fp = DMesh.fingerprintFromSignPK(kp.publicKey, nacl);
-  if (fp.length !== 16) throw new Error('Invalid fingerprint length');
+  if (fp.length !== 16) throw new Error("Invalid fingerprint length");
 });
 
-test('createPublicIdentity creates valid identity object', () => {
+test("createPublicIdentity creates valid identity object", () => {
   const signKP = DMesh.generateSignKeyPair(nacl);
   const boxKP = DMesh.generateBoxKeyPair(nacl);
   const id = DMesh.createPublicIdentity({
-    name: 'Alice',
+    name: "Alice",
     signPK: signKP.publicKey,
     boxPK: boxKP.publicKey
   }, nacl, naclUtil);
 
-  if (id.v !== 1) throw new Error('Invalid version');
-  if (id.kind !== 'dmesh-id') throw new Error('Invalid kind');
-  if (id.name !== 'Alice') throw new Error('Invalid name');
-  if (!id.fp) throw new Error('Missing fingerprint');
-  if (!id.signPK) throw new Error('Missing signPK');
-  if (!id.boxPK) throw new Error('Missing boxPK');
+  if (id.v !== 1) throw new Error("Invalid version");
+  if (id.kind !== "dmesh-id") throw new Error("Invalid kind");
+  if (id.name !== "Alice") throw new Error("Invalid name");
+  if (!id.fp) throw new Error("Missing fingerprint");
+  if (!id.signPK) throw new Error("Missing signPK");
+  if (!id.boxPK) throw new Error("Missing boxPK");
 });
 
-test('encryptMessage creates valid encrypted message', () => {
+test("encryptMessage creates valid encrypted message", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
   const bobBox = DMesh.generateBoxKeyPair(nacl);
 
   const msg = DMesh.encryptMessage({
-    content: 'Hello, Bob!',
+    content: "Hello, Bob!",
     senderSignPK: aliceSign.publicKey,
     senderSignSK: aliceSign.secretKey,
     senderBoxPK: aliceBox.publicKey,
@@ -76,25 +76,25 @@ test('encryptMessage creates valid encrypted message', () => {
     ts: Date.now()
   }, nacl, naclUtil);
 
-  if (msg.v !== 1) throw new Error('Invalid version');
-  if (msg.kind !== 'dmesh-msg') throw new Error('Invalid kind');
-  if (!msg.ts) throw new Error('Missing timestamp');
-  if (!msg.senderSignPK) throw new Error('Missing senderSignPK');
-  if (!msg.senderBoxPK) throw new Error('Missing senderBoxPK');
-  if (!msg.recipientBoxPK) throw new Error('Missing recipientBoxPK');
-  if (!msg.ephPK) throw new Error('Missing ephPK');
-  if (!msg.nonce) throw new Error('Missing nonce');
-  if (!msg.ciphertext) throw new Error('Missing ciphertext');
-  if (!msg.signature) throw new Error('Missing signature');
+  if (msg.v !== 1) throw new Error("Invalid version");
+  if (msg.kind !== "dmesh-msg") throw new Error("Invalid kind");
+  if (!msg.ts) throw new Error("Missing timestamp");
+  if (!msg.senderSignPK) throw new Error("Missing senderSignPK");
+  if (!msg.senderBoxPK) throw new Error("Missing senderBoxPK");
+  if (!msg.recipientBoxPK) throw new Error("Missing recipientBoxPK");
+  if (!msg.ephPK) throw new Error("Missing ephPK");
+  if (!msg.nonce) throw new Error("Missing nonce");
+  if (!msg.ciphertext) throw new Error("Missing ciphertext");
+  if (!msg.signature) throw new Error("Missing signature");
 });
 
-test('decryptMessage decrypts valid message', () => {
+test("decryptMessage decrypts valid message", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
   const bobBox = DMesh.generateBoxKeyPair(nacl);
 
   const msg = DMesh.encryptMessage({
-    content: 'Hello, Bob!',
+    content: "Hello, Bob!",
     senderSignPK: aliceSign.publicKey,
     senderSignSK: aliceSign.secretKey,
     senderBoxPK: aliceBox.publicKey,
@@ -110,21 +110,21 @@ test('decryptMessage decrypts valid message', () => {
     expectedSenderBoxPK: null
   }, nacl, naclUtil);
 
-  if (result.content !== 'Hello, Bob!') throw new Error('Decrypted content mismatch');
-  if (!result.senderSignPK) throw new Error('Missing senderSignPK');
-  if (!result.senderBoxPK) throw new Error('Missing senderBoxPK');
-  if (!result.senderFp) throw new Error('Missing senderFp');
-  if (!result.ts) throw new Error('Missing timestamp');
+  if (result.content !== "Hello, Bob!") throw new Error("Decrypted content mismatch");
+  if (!result.senderSignPK) throw new Error("Missing senderSignPK");
+  if (!result.senderBoxPK) throw new Error("Missing senderBoxPK");
+  if (!result.senderFp) throw new Error("Missing senderFp");
+  if (!result.ts) throw new Error("Missing timestamp");
 });
 
-test('decryptMessage rejects message for wrong recipient', () => {
+test("decryptMessage rejects message for wrong recipient", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
   const bobBox = DMesh.generateBoxKeyPair(nacl);
   const eveBox = DMesh.generateBoxKeyPair(nacl);
 
   const msg = DMesh.encryptMessage({
-    content: 'Hello, Bob!',
+    content: "Hello, Bob!",
     senderSignPK: aliceSign.publicKey,
     senderSignSK: aliceSign.secretKey,
     senderBoxPK: aliceBox.publicKey,
@@ -140,21 +140,21 @@ test('decryptMessage rejects message for wrong recipient', () => {
       expectedSenderSignPK: null,
       expectedSenderBoxPK: null
     }, nacl, naclUtil);
-    throw new Error('Should have rejected wrong recipient');
+    throw new Error("Should have rejected wrong recipient");
   } catch (e) {
-    if (!e.message.includes('Not intended for this recipient')) {
-      throw new Error('Wrong error message: ' + e.message);
+    if (!e.message.includes("Not intended for this recipient")) {
+      throw new Error("Wrong error message: " + e.message);
     }
   }
 });
 
-test('decryptMessage rejects tampered signature', () => {
+test("decryptMessage rejects tampered signature", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
   const bobBox = DMesh.generateBoxKeyPair(nacl);
 
   const msg = DMesh.encryptMessage({
-    content: 'Hello, Bob!',
+    content: "Hello, Bob!",
     senderSignPK: aliceSign.publicKey,
     senderSignSK: aliceSign.secretKey,
     senderBoxPK: aliceBox.publicKey,
@@ -173,22 +173,22 @@ test('decryptMessage rejects tampered signature', () => {
       expectedSenderSignPK: null,
       expectedSenderBoxPK: null
     }, nacl, naclUtil);
-    throw new Error('Should have rejected tampered signature');
+    throw new Error("Should have rejected tampered signature");
   } catch (e) {
-    if (!e.message.includes('Invalid signature')) {
-      throw new Error('Wrong error message: ' + e.message);
+    if (!e.message.includes("Invalid signature")) {
+      throw new Error("Wrong error message: " + e.message);
     }
   }
 });
 
-test('decryptMessage rejects sender key mismatch', () => {
+test("decryptMessage rejects sender key mismatch", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
   const bobBox = DMesh.generateBoxKeyPair(nacl);
   const eveSign = DMesh.generateSignKeyPair(nacl);
 
   const msg = DMesh.encryptMessage({
-    content: 'Hello, Bob!',
+    content: "Hello, Bob!",
     senderSignPK: aliceSign.publicKey,
     senderSignSK: aliceSign.secretKey,
     senderBoxPK: aliceBox.publicKey,
@@ -204,22 +204,22 @@ test('decryptMessage rejects sender key mismatch', () => {
       expectedSenderSignPK: eveSign.publicKey, // Expect Eve, but Alice sent
       expectedSenderBoxPK: null
     }, nacl, naclUtil);
-    throw new Error('Should have rejected key mismatch');
+    throw new Error("Should have rejected key mismatch");
   } catch (e) {
-    if (!e.message.includes('Sender signing key mismatch')) {
-      throw new Error('Wrong error message: ' + e.message);
+    if (!e.message.includes("Sender signing key mismatch")) {
+      throw new Error("Wrong error message: " + e.message);
     }
   }
 });
 
-test('decryptMessage rejects timestamp skew', () => {
+test("decryptMessage rejects timestamp skew", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
   const bobBox = DMesh.generateBoxKeyPair(nacl);
 
   // Message from 1 hour ago
   const msg = DMesh.encryptMessage({
-    content: 'Hello, Bob!',
+    content: "Hello, Bob!",
     senderSignPK: aliceSign.publicKey,
     senderSignSK: aliceSign.secretKey,
     senderBoxPK: aliceBox.publicKey,
@@ -236,21 +236,21 @@ test('decryptMessage rejects timestamp skew', () => {
       expectedSenderSignPK: null,
       expectedSenderBoxPK: null
     }, nacl, naclUtil);
-    throw new Error('Should have rejected timestamp skew');
+    throw new Error("Should have rejected timestamp skew");
   } catch (e) {
-    if (!e.message.includes('Timestamp skew too large')) {
-      throw new Error('Wrong error message: ' + e.message);
+    if (!e.message.includes("Timestamp skew too large")) {
+      throw new Error("Wrong error message: " + e.message);
     }
   }
 });
 
-test('decryptMessage calls replay check function', () => {
+test("decryptMessage calls replay check function", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
   const bobBox = DMesh.generateBoxKeyPair(nacl);
 
   const msg = DMesh.encryptMessage({
-    content: 'Hello, Bob!',
+    content: "Hello, Bob!",
     senderSignPK: aliceSign.publicKey,
     senderSignSK: aliceSign.secretKey,
     senderBoxPK: aliceBox.publicKey,
@@ -259,7 +259,7 @@ test('decryptMessage calls replay check function', () => {
   }, nacl, naclUtil);
 
   let replayCheckCalled = false;
-  const replayCheck = (senderFp, nonceB64) => {
+  const replayCheck = (_senderFp, _nonceB64) => {
     replayCheckCalled = true;
     return true; // Allow
   };
@@ -273,22 +273,22 @@ test('decryptMessage calls replay check function', () => {
     replayCheck
   }, nacl, naclUtil);
 
-  if (!replayCheckCalled) throw new Error('Replay check not called');
+  if (!replayCheckCalled) throw new Error("Replay check not called");
 });
 
-test('u32be converts number to big-endian bytes', () => {
+test("u32be converts number to big-endian bytes", () => {
   const bytes = DMesh.u32be(0x12345678);
-  if (bytes.length !== 4) throw new Error('Invalid length');
-  if (bytes[0] !== 0x12) throw new Error('Invalid byte 0');
-  if (bytes[1] !== 0x34) throw new Error('Invalid byte 1');
-  if (bytes[2] !== 0x56) throw new Error('Invalid byte 2');
-  if (bytes[3] !== 0x78) throw new Error('Invalid byte 3');
+  if (bytes.length !== 4) throw new Error("Invalid length");
+  if (bytes[0] !== 0x12) throw new Error("Invalid byte 0");
+  if (bytes[1] !== 0x34) throw new Error("Invalid byte 1");
+  if (bytes[2] !== 0x56) throw new Error("Invalid byte 2");
+  if (bytes[3] !== 0x78) throw new Error("Invalid byte 3");
 });
 
-test('u64beFromNumber converts timestamp to big-endian bytes', () => {
+test("u64beFromNumber converts timestamp to big-endian bytes", () => {
   const ts = 1706012345678;
   const bytes = DMesh.u64beFromNumber(ts);
-  if (bytes.length !== 8) throw new Error('Invalid length');
+  if (bytes.length !== 8) throw new Error("Invalid length");
 
   // Reconstruct number from bytes
   const dv = new DataView(bytes.buffer);
@@ -296,19 +296,19 @@ test('u64beFromNumber converts timestamp to big-endian bytes', () => {
   const lo = dv.getUint32(4, false);
   const reconstructed = hi * 4294967296 + lo;
 
-  if (reconstructed !== ts) throw new Error('Reconstruction mismatch');
+  if (reconstructed !== ts) throw new Error("Reconstruction mismatch");
 });
 
-test('concatU8 concatenates arrays correctly', () => {
+test("concatU8 concatenates arrays correctly", () => {
   const a = new Uint8Array([1, 2]);
   const b = new Uint8Array([3, 4, 5]);
   const c = new Uint8Array([6]);
   const result = DMesh.concatU8([a, b, c]);
 
-  if (result.length !== 6) throw new Error('Invalid length');
+  if (result.length !== 6) throw new Error("Invalid length");
   if (result[0] !== 1 || result[1] !== 2 || result[2] !== 3 ||
       result[3] !== 4 || result[4] !== 5 || result[5] !== 6) {
-    throw new Error('Invalid concatenation');
+    throw new Error("Invalid concatenation");
   }
 });
 
@@ -316,7 +316,7 @@ test('concatU8 concatenates arrays correctly', () => {
 // Summary
 // ============================================================================
 
-console.log('\n' + '='.repeat(50));
+console.log("\n" + "=".repeat(50));
 console.log(`Tests: ${passed + failed}`);
 console.log(`Passed: ${passed}`);
 console.log(`Failed: ${failed}`);

@@ -166,7 +166,7 @@ export function generateBoxKeyPair(nacl) {
  * @param {object} naclUtil - TweetNaCl-util instance
  * @returns {object} - Encrypted message object
  */
-export function encryptMessage({ content, senderSignPK, senderSignSK, senderBoxPK, senderBoxSK, recipientBoxPK, ts }, nacl, naclUtil) {
+export function encryptMessage({ content, senderSignPK, senderSignSK, senderBoxPK, senderBoxSK: _senderBoxSK, recipientBoxPK, ts }, nacl, naclUtil) {
   const timestamp = ts ?? Date.now();
 
   // Check content size
