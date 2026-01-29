@@ -37,7 +37,7 @@
     "url": "https://github.com/hiroshitanaka-creator/lifeline-mesh"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@types/node": "^25.1.0",
     "eslint": "^8.56.0",
     "html5-qrcode": "^2.3.8",
     "husky": "^9.0.0",
