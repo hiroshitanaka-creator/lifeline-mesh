@@ -1,0 +1,24 @@
+# CODEOWNERS - Defines code review requirements
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything
+* @hiroshitanaka-creator
+
+# Critical: Crypto implementation requires review
+/crypto/ @hiroshitanaka-creator
+
+# Critical: Security-related files
+SECURITY.md @hiroshitanaka-creator
+/spec/THREAT_MODEL.md @hiroshitanaka-creator
+
+# CI/CD configuration
+/.github/workflows/ @hiroshitanaka-creator
+/.github/dependabot.yml @hiroshitanaka-creator
+
+# Build and tooling configuration
+package.json @hiroshitanaka-creator
+tsconfig.json @hiroshitanaka-creator
+eslint.config.js @hiroshitanaka-creator
+
+# Protocol specification
+/spec/PROTOCOL.md @hiroshitanaka-creator

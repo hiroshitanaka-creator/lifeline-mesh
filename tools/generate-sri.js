@@ -8,15 +8,15 @@
  * Usage: node generate-sri.js
  */
 
-import https from 'https';
-import crypto from 'crypto';
+import https from "https";
+import crypto from "crypto";
 
 const CDN_URLS = [
-  'https://unpkg.com/tweetnacl@1.0.3/nacl.min.js',
-  'https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js'
+  "https://unpkg.com/tweetnacl@1.0.3/nacl.min.js",
+  "https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js"
 ];
 
-async function fetchUrl(url) {
+function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     https.get(url, (res) => {
       if (res.statusCode !== 200) {
@@ -25,20 +25,20 @@ async function fetchUrl(url) {
       }
 
       const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-      res.on('error', reject);
-    }).on('error', reject);
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    }).on("error", reject);
   });
 }
 
-function generateSRI(buffer, algorithm = 'sha384') {
-  const hash = crypto.createHash(algorithm).update(buffer).digest('base64');
+function generateSRI(buffer, algorithm = "sha384") {
+  const hash = crypto.createHash(algorithm).update(buffer).digest("base64");
   return `${algorithm}-${hash}`;
 }
 
 async function generateAllSRI() {
-  console.log('Generating SRI hashes for CDN dependencies...\n');
+  console.log("Generating SRI hashes for CDN dependencies...\n");
 
   const results = [];
 
@@ -53,7 +53,7 @@ async function generateAllSRI() {
         url,
         sri,
         size: `${size} KB`,
-        algorithm: 'sha384'
+        algorithm: "sha384"
       });
 
       console.log(`  Size: ${size} KB`);
@@ -71,10 +71,10 @@ async function generateAllSRI() {
 }
 
 function generateHTML(results) {
-  console.log('='.repeat(70));
-  console.log('HTML Script Tags with SRI:');
-  console.log('='.repeat(70));
-  console.log('');
+  console.log("=".repeat(70));
+  console.log("HTML Script Tags with SRI:");
+  console.log("=".repeat(70));
+  console.log("");
 
   for (const result of results) {
     if (result.error) {
@@ -85,25 +85,25 @@ function generateHTML(results) {
     }
   }
 
-  console.log('');
+  console.log("");
 }
 
 function generateJSON(results) {
-  console.log('='.repeat(70));
-  console.log('JSON Output:');
-  console.log('='.repeat(70));
-  console.log('');
+  console.log("=".repeat(70));
+  console.log("JSON Output:");
+  console.log("=".repeat(70));
+  console.log("");
   console.log(JSON.stringify(results, null, 2));
-  console.log('');
+  console.log("");
 }
 
 function generateMarkdown(results) {
-  console.log('='.repeat(70));
-  console.log('Markdown Table:');
-  console.log('='.repeat(70));
-  console.log('');
-  console.log('| URL | Size | SRI Hash |');
-  console.log('|-----|------|----------|');
+  console.log("=".repeat(70));
+  console.log("Markdown Table:");
+  console.log("=".repeat(70));
+  console.log("");
+  console.log("| URL | Size | SRI Hash |");
+  console.log("|-----|------|----------|");
 
   for (const result of results) {
     if (result.error) {
@@ -113,7 +113,7 @@ function generateMarkdown(results) {
     }
   }
 
-  console.log('');
+  console.log("");
 }
 
 // Main
@@ -124,17 +124,17 @@ function generateMarkdown(results) {
     generateMarkdown(results);
     generateJSON(results);
 
-    console.log('='.repeat(70));
-    console.log('Security Notes:');
-    console.log('='.repeat(70));
-    console.log('');
+    console.log("=".repeat(70));
+    console.log("Security Notes:");
+    console.log("=".repeat(70));
+    console.log("");
     console.log('1. Always use SRI with crossorigin="anonymous" for CDN scripts');
-    console.log('2. If SRI verification fails, the browser will refuse to execute the script');
-    console.log('3. Update SRI hashes whenever you update CDN versions');
-    console.log('4. Consider self-hosting critical dependencies for production');
-    console.log('');
+    console.log("2. If SRI verification fails, the browser will refuse to execute the script");
+    console.log("3. Update SRI hashes whenever you update CDN versions");
+    console.log("4. Consider self-hosting critical dependencies for production");
+    console.log("");
   } catch (e) {
-    console.error('Fatal error:', e.message);
+    console.error("Fatal error:", e.message);
     process.exit(1);
   }
 })();

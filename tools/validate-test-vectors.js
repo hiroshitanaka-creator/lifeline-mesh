@@ -8,10 +8,10 @@
  * Usage: node validate-test-vectors.js test-vectors.json
  */
 
-import fs from 'fs';
-import nacl from 'tweetnacl';
-import naclUtil from 'tweetnacl-util';
-import * as DMesh from '../crypto/core.js';
+import fs from "fs";
+import nacl from "tweetnacl";
+import naclUtil from "tweetnacl-util";
+import * as DMesh from "../crypto/core.js";
 
 let passed = 0;
 let failed = 0;
@@ -125,7 +125,7 @@ function test(name, fn) {
 }
 
 function validateTestVectors(vectorsPath) {
-  const data = fs.readFileSync(vectorsPath, 'utf8');
+  const data = fs.readFileSync(vectorsPath, "utf8");
   const vectors = JSON.parse(data);
 
   console.log(`Validating test vectors from: ${vectorsPath}`);
@@ -134,12 +134,12 @@ function validateTestVectors(vectorsPath) {
   console.log(`Vectors: ${vectors.vectors.length}\n`);
 
   for (const vector of vectors.vectors) {
-    if (vector.name === 'basic_message' || vector.name === 'empty_message' ||
-        vector.name === 'unicode_message' || vector.name === 'large_message') {
+    if (vector.name === "basic_message" || vector.name === "empty_message" ||
+        vector.name === "unicode_message" || vector.name === "large_message") {
       validateMessageVector(vector);
-    } else if (vector.name === 'public_identity') {
+    } else if (vector.name === "public_identity") {
       validateIdentityVector(vector);
-    } else if (vector.name === 'fingerprint') {
+    } else if (vector.name === "fingerprint") {
       validateFingerprintVector(vector);
     }
   }
@@ -150,7 +150,7 @@ function validateMessageVector(vector) {
 
   // Decode keys
   const aliceSignPK = naclUtil.decodeBase64(vector.alice.signPK);
-  const aliceSignSK = naclUtil.decodeBase64(vector.alice.signSK);
+  const _aliceSignSK = naclUtil.decodeBase64(vector.alice.signSK);
   const aliceBoxPK = naclUtil.decodeBase64(vector.alice.boxPK);
   const aliceBoxSK = naclUtil.decodeBase64(vector.alice.boxSK);
   const bobBoxPK = naclUtil.decodeBase64(vector.bob.boxPK);
@@ -158,16 +158,16 @@ function validateMessageVector(vector) {
 
   // Test 1: Verify message structure
   test(`${name}: message structure`, () => {
-    if (vector.message.v !== 1) throw new Error('Invalid version');
-    if (vector.message.kind !== 'dmesh-msg') throw new Error('Invalid kind');
-    if (!vector.message.ts) throw new Error('Missing timestamp');
-    if (!vector.message.senderSignPK) throw new Error('Missing senderSignPK');
-    if (!vector.message.senderBoxPK) throw new Error('Missing senderBoxPK');
-    if (!vector.message.recipientBoxPK) throw new Error('Missing recipientBoxPK');
-    if (!vector.message.ephPK) throw new Error('Missing ephPK');
-    if (!vector.message.nonce) throw new Error('Missing nonce');
-    if (!vector.message.ciphertext) throw new Error('Missing ciphertext');
-    if (!vector.message.signature) throw new Error('Missing signature');
+    if (vector.message.v !== 1) throw new Error("Invalid version");
+    if (vector.message.kind !== "dmesh-msg") throw new Error("Invalid kind");
+    if (!vector.message.ts) throw new Error("Missing timestamp");
+    if (!vector.message.senderSignPK) throw new Error("Missing senderSignPK");
+    if (!vector.message.senderBoxPK) throw new Error("Missing senderBoxPK");
+    if (!vector.message.recipientBoxPK) throw new Error("Missing recipientBoxPK");
+    if (!vector.message.ephPK) throw new Error("Missing ephPK");
+    if (!vector.message.nonce) throw new Error("Missing nonce");
+    if (!vector.message.ciphertext) throw new Error("Missing ciphertext");
+    if (!vector.message.signature) throw new Error("Missing signature");
   });
 
   // Test 2: Decrypt message as Bob
@@ -182,7 +182,7 @@ function validateMessageVector(vector) {
     });
 
     const expectedContent = vector.plaintext.contentLength !== undefined
-      ? 'A'.repeat(vector.plaintext.contentLength)
+      ? "A".repeat(vector.plaintext.contentLength)
       : vector.plaintext.content;
 
     if (result.content !== expectedContent) {
@@ -215,7 +215,7 @@ function validateMessageVector(vector) {
     }, naclUtil);
 
     const verified = nacl.sign.detached.verify(signBytes, signature, senderSignPK);
-    if (!verified) throw new Error('Signature verification failed');
+    if (!verified) throw new Error("Signature verification failed");
   });
 
   // Test 4: Reject decryption with wrong recipient
@@ -229,10 +229,10 @@ function validateMessageVector(vector) {
         expectedSenderSignPK: null,
         expectedSenderBoxPK: null
       });
-      throw new Error('Should have rejected wrong recipient');
+      throw new Error("Should have rejected wrong recipient");
     } catch (e) {
-      if (!e.message.includes('Not intended for this recipient')) {
-        throw new Error('Wrong error: ' + e.message);
+      if (!e.message.includes("Not intended for this recipient")) {
+        throw new Error("Wrong error: " + e.message);
       }
     }
   });
@@ -252,10 +252,10 @@ function validateMessageVector(vector) {
         expectedSenderSignPK: null,
         expectedSenderBoxPK: null
       });
-      throw new Error('Should have rejected tampered ciphertext');
+      throw new Error("Should have rejected tampered ciphertext");
     } catch (e) {
-      if (!e.message.includes('Invalid signature')) {
-        throw new Error('Wrong error: ' + e.message);
+      if (!e.message.includes("Invalid signature")) {
+        throw new Error("Wrong error: " + e.message);
       }
     }
   });
@@ -264,12 +264,12 @@ function validateMessageVector(vector) {
 function validateIdentityVector(vector) {
   test(`${vector.name}: identity structure`, () => {
     const id = vector.identity;
-    if (id.v !== 1) throw new Error('Invalid version');
-    if (id.kind !== 'dmesh-id') throw new Error('Invalid kind');
-    if (!id.name) throw new Error('Missing name');
-    if (!id.fp) throw new Error('Missing fingerprint');
-    if (!id.signPK) throw new Error('Missing signPK');
-    if (!id.boxPK) throw new Error('Missing boxPK');
+    if (id.v !== 1) throw new Error("Invalid version");
+    if (id.kind !== "dmesh-id") throw new Error("Invalid kind");
+    if (!id.name) throw new Error("Missing name");
+    if (!id.fp) throw new Error("Missing fingerprint");
+    if (!id.signPK) throw new Error("Missing signPK");
+    if (!id.boxPK) throw new Error("Missing boxPK");
   });
 
   test(`${vector.name}: fingerprint matches`, () => {
@@ -299,14 +299,14 @@ function validateFingerprintVector(vector) {
 // Main
 const args = process.argv.slice(2);
 if (args.length === 0) {
-  console.error('Usage: node validate-test-vectors.js <test-vectors.json>');
+  console.error("Usage: node validate-test-vectors.js <test-vectors.json>");
   process.exit(1);
 }
 
 try {
   validateTestVectors(args[0]);
 
-  console.log('\n' + '='.repeat(50));
+  console.log("\n" + "=".repeat(50));
   console.log(`Tests: ${passed + failed}`);
   console.log(`Passed: ${passed}`);
   console.log(`Failed: ${failed}`);
@@ -315,6 +315,6 @@ try {
     process.exit(1);
   }
 } catch (e) {
-  console.error('Error:', e.message);
+  console.error("Error:", e.message);
   process.exit(1);
 }
