@@ -312,7 +312,15 @@ window.copyMyId = async function() {
 };
 
 window.exportKeys = async function() {
-  const password = prompt("Enter password to encrypt your keys:");
+  // SECURITY WARNING: Current encryption is weak (XOR-based)
+  // TODO: Upgrade to Argon2id + NaCl secretbox (see TECHNICAL_ROADMAP.md)
+  const warningMsg = "WARNING: Key backup encryption is currently WEAK (demo-grade).\n\n" +
+    "For critical use, manually store your keys securely.\n" +
+    "Upgrade to Argon2id encryption is planned.\n\n" +
+    "Continue with export?";
+  if (!confirm(warningMsg)) return;
+
+  const password = prompt("Enter password to encrypt your keys:\n(Use a STRONG password - encryption is weak)");
   if (!password) return;
 
   try {
@@ -357,7 +365,7 @@ window.exportKeys = async function() {
     a.click();
     URL.revokeObjectURL(url);
 
-    setStatus(true, "Keys exported successfully");
+    setStatus(true, "Keys exported (weak encryption - store backup securely!)");
   } catch (e) {
     setStatus(false, "Export failed: " + e.message);
   }
