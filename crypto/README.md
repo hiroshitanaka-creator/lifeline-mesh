@@ -18,6 +18,13 @@ Core cryptographic operations:
 - Message verification/decryption
 - Public identity creation
 
+### `key-backup.js`
+Secure key backup with password-based encryption:
+- Argon2id key derivation (with PBKDF2 fallback)
+- NaCl secretbox encryption (XSalsa20-Poly1305)
+- Password strength checking
+- Secure backup/restore workflow
+
 ## Usage
 
 ### Browser (ES Modules)
@@ -63,6 +70,33 @@ const msg = DMesh.encryptMessage({
 }, nacl, naclUtil);
 
 console.log(JSON.stringify(msg, null, 2));
+```
+
+### Key Backup (Browser)
+```javascript
+import {
+  encryptKeys,
+  decryptKeys,
+  checkPasswordStrength
+} from './crypto/key-backup.js';
+
+// Check password strength
+const strength = checkPasswordStrength('myPassword123!');
+console.log(strength); // { score: 5, strength: 'good', ... }
+
+// Encrypt keys for backup
+const backup = await encryptKeys({
+  signPK: signPKBase64,
+  signSK: signSKBase64,
+  boxPK: boxPKBase64,
+  boxSK: boxSKBase64
+}, 'strongPassword', nacl, naclUtil);
+
+// Save backup to file
+const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+
+// Later: restore from backup
+const keys = await decryptKeys(backup, 'strongPassword', nacl, naclUtil);
 ```
 
 ## API Reference
@@ -183,6 +217,48 @@ Build SignBytes for signature generation/verification (internal use).
 - `ciphertext` (Uint8Array)
 
 **Returns**: `Uint8Array` (SignBytes as specified in PROTOCOL.md)
+
+### Key Backup (`key-backup.js`)
+
+#### `encryptKeys(keys, password, nacl, naclUtil)`
+Encrypt keys with password using Argon2id (or PBKDF2 fallback).
+
+**Params**:
+- `keys` (object): `{signPK, signSK, boxPK, boxSK}` all base64
+- `password` (string): User password
+- `nacl`: TweetNaCl instance
+- `naclUtil`: TweetNaCl-util instance
+
+**Returns**: Encrypted backup object
+
+#### `decryptKeys(backup, password, nacl, naclUtil)`
+Decrypt keys from backup.
+
+**Params**:
+- `backup` (object): Encrypted backup from `encryptKeys`
+- `password` (string): User password
+
+**Returns**: `{signPK, signSK, boxPK, boxSK}` all base64
+
+**Throws**: `"Decryption failed - wrong password or corrupted backup"`
+
+#### `checkPasswordStrength(password)`
+Check password strength.
+
+**Returns**:
+```javascript
+{
+  score: 0-7,
+  strength: 'weak' | 'fair' | 'good' | 'strong',
+  message: string,
+  details: { length, hasLower, hasUpper, hasNumber, hasSymbol }
+}
+```
+
+#### `isArgon2Available()`
+Check if Argon2 library is loaded.
+
+**Returns**: `boolean`
 
 ## Constants
 
