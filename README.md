@@ -8,6 +8,30 @@
 
 Lifeline Mesh is a browser-based, cryptographically secure messaging system designed for emergency situations where traditional infrastructure may be degraded or unavailable.
 
+> **Mission**: When disaster strikes and infrastructure fails, people still need to communicate.
+> This project aims to provide that lifeline.
+
+---
+
+## 🆘 We Need Your Help
+
+This project could save lives, but it needs contributors to become real.
+
+**Most Needed Right Now:**
+
+| Priority | Task | Skills | Issue |
+|----------|------|--------|-------|
+| 🔴 Critical | **Bluetooth BLE Relay** | Web Bluetooth API, JavaScript | Help wanted |
+| 🔴 Critical | **Key Backup Security** | Cryptography, Argon2id | Help wanted |
+| 🟡 High | **UI/UX Overhaul** | Design, CSS, Accessibility | Help wanted |
+| 🟡 High | **Group Messaging** | Protocol design, Crypto | Help wanted |
+| 🟢 Good First | **Documentation i18n** | Any language | Good first issue |
+| 🟢 Good First | **Test Coverage** | JavaScript testing | Good first issue |
+
+**Read the full roadmap**: [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
+
+Every contribution matters. Let's build this together.
+
 ---
 
 ## 🚀 Quick Start
@@ -226,40 +250,60 @@ npm run generate-sri
 
 ## 🤝 Contributing
 
-We welcome contributions! Especially:
-- Security reviews and audits
-- Test vector additions
-- UX improvements for emergency scenarios
-- Documentation translations
-- Relay implementations (Bluetooth, LoRa, etc.)
-- Mobile app wrappers
+We welcome all contributors! Here's how to get started:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+### First Time?
+1. Read [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) to understand the vision
+2. Check [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md) for implementation details
+3. Look for issues labeled `good first issue`
+4. Join the discussion in GitHub Discussions
+
+### Ways to Contribute
+- **Code**: Bluetooth relay, group messaging, UI improvements
+- **Security**: Reviews, audits, vulnerability research
+- **Design**: UX for emergency scenarios, accessibility
+- **Docs**: Translations, tutorials, examples
+- **Testing**: Test vectors, edge cases, real-world scenarios
+- **Ideas**: Protocol improvements, use cases, partnerships
+
+### Development Setup
+```bash
+git clone https://github.com/hiroshitanaka-creator/lifeline-mesh.git
+cd lifeline-mesh
+npm install
+npm test  # Run all tests
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ---
 
-## 📊 Status
+## 📊 Status & Roadmap
 
 **Current Version**: 1.0.0 (Production-ready prototype)
 
-✅ **Completed**:
-- Core crypto implementation
+### Completed ✅
+- Core crypto implementation (Ed25519 + X25519)
 - Test suite (37/37 passing)
-- Documentation (usage, FAQ, threat model, protocol)
+- Comprehensive documentation
 - Key management (export/import)
 - SRI security hardening
 - GitHub Pages deployment
 
-🚧 **In Progress**:
-- Relay implementations
-- Mobile optimization
-- QR code integration
+### In Progress 🚧
+- Relay implementations (Bluetooth BLE)
+- Key backup security upgrade (Argon2id)
+- UI/UX improvements
 
-📋 **Planned**:
-- Group messaging
-- Post-quantum crypto (when standardized)
-- Key rotation mechanism
-- PWA (Progressive Web App) features
+### Planned 📋
+- Group messaging (Sender Keys protocol)
+- Mobile apps (React Native / Flutter)
+- LoRa integration
+- Post-quantum crypto
+
+**Full Roadmap**: [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
+
+> 日本語ドキュメント: [docs/DEEP_DIVE_ANALYSIS_JA.md](docs/DEEP_DIVE_ANALYSIS_JA.md)
 
 ---
 
