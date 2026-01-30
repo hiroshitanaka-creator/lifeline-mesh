@@ -1,3 +1,11 @@
+<p align="center">
+  <a href="#english">English</a> | <a href="#español">Español</a>
+</p>
+
+---
+
+<a id="english"></a>
+
 # Lifeline Mesh 🌐
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
@@ -8,7 +16,7 @@
 
 Lifeline Mesh is a browser-based, cryptographically secure messaging system designed for emergency situations where traditional infrastructure may be degraded or unavailable.
 
-> **Mission**: When disaster strikes and infrastructure fails, people still need to communicate.
+> **Mission**: When disaster strikes and infrastructure fails, people still need to communicate.  
 > This project aims to provide that lifeline.
 
 ---
@@ -28,7 +36,8 @@ This project could save lives, but it needs contributors to become real.
 | 🟢 Good First | **Documentation i18n** | Any language | Good first issue |
 | 🟢 Good First | **Test Coverage** | JavaScript testing | Good first issue |
 
-**Read the full roadmap**: [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
+**Read the full roadmap**:  
+[DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
 
 Every contribution matters. Let's build this together.
 
@@ -40,9 +49,9 @@ Every contribution matters. Let's build this together.
 **https://hiroshitanaka-creator.github.io/lifeline-mesh/**
 
 ### Use Locally
-1. Clone this repository
-2. Open `app/index.html` in your browser
-3. Generate keys → Add contacts → Encrypt/Decrypt
+1. Clone this repository  
+2. Open `app/index.html` in your browser  
+3. Generate keys → Add contacts → Encrypt/Decrypt  
 
 **No installation required** – runs entirely in your browser.
 
@@ -70,281 +79,130 @@ Every contribution matters. Let's build this together.
 - 📋 Copy/paste encrypted messages
 - 📚 Embedded documentation
 - 🌐 No server required
-- 🚀 Relay-agnostic (send via any channel: QR, Bluetooth, USB, radio, etc.)
+- 🚀 Relay-agnostic (QR, Bluetooth, USB, radio, etc.)
 
 ---
 
-## 📖 Documentation
-
-### For Users
-- **[Usage Guide](docs/USAGE.md)** - Quick start, security practices, troubleshooting
-- **[FAQ](docs/FAQ.md)** - 30+ questions about security, features, and usage
-
-### For Developers
-- **[Protocol Specification](spec/PROTOCOL.md)** - Detailed technical specification
-- **[Threat Model](spec/THREAT_MODEL.md)** - Comprehensive security analysis
-- **[Crypto Core API](crypto/README.md)** - Reusable crypto functions
-
-### For Contributors
-- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute
-- **[Security Policy](SECURITY.md)** - Vulnerability reporting
-- **[Project Charter](PROJECT_CHARTER.md)** - Scope and goals
-
----
-
-## 🔬 Testing
-
-All tests passing: **37/37 ✓**
-
-### Crypto Core Tests (14/14)
-```bash
-cd crypto
-npm install
-npm test
-```
-
-Tests: Key generation, encryption/decryption, signature verification, tampering detection, replay checks, byte utilities.
-
-### Test Vector Validation (23/23)
-```bash
-cd tools
-npm install
-npm run validate-vectors
-```
-
-Tests: Message structure, round-trip encryption, signature validation, recipient binding, tampering detection, interoperability.
-
----
-
-## 🏗️ Architecture
-
-### Repository Structure
-```
-/app            Demo UI (browser-based, ES6 modules)
-/crypto         Core cryptographic functions (pure, testable)
-/spec           Threat model + protocol specification
-/tools          Test vectors, validator, SRI generator
-/docs           Usage guide, FAQ
-.github/        Workflows, templates, deployment guides
-```
-
-### Crypto Stack
-- **Signing**: Ed25519 (nacl.sign)
-- **Encryption**: X25519-XSalsa20-Poly1305 (nacl.box)
-- **Hashing**: SHA-512 (for fingerprints)
-- **Library**: TweetNaCl (audited, compact)
-
-### Message Flow
-```
-Alice                  Relay Network              Bob
-  |                          |                      |
-  | 1. Generate ephemeral    |                      |
-  | 2. Encrypt (ECDH)        |                      |
-  | 3. Sign (Ed25519)        |                      |
-  | 4. Send JSON ---------> | Forward ----------> |
-  |                          |                 5. Verify
-  |                          |                 6. Decrypt
-  |                          |                 7. Read
-```
-
----
-
-## 🔒 Security
+## 🔒 Security Summary
 
 ### Guaranteed Properties
-✅ **Confidentiality**: Only recipient can decrypt
-✅ **Authenticity**: Sender verified via signature
-✅ **Integrity**: Tampering detected
-✅ **Recipient binding**: Message tied to specific recipient
-✅ **Replay resistance**: 30-day nonce tracking
+✅ Confidentiality  
+✅ Authenticity  
+✅ Integrity  
+✅ Recipient binding  
+✅ Replay resistance  
 
 ### Known Limitations
-❌ **Anonymity**: Sender/recipient public keys visible to relays
-❌ **Traffic analysis resistance**: Message patterns observable
-❌ **Post-quantum security**: Vulnerable to quantum computers
-❌ **Perfect forward secrecy**: Long-term signing keys used
+❌ Anonymity  
+❌ Traffic analysis resistance  
+❌ Post-quantum security  
+❌ Perfect forward secrecy  
 
-See [THREAT_MODEL.md](spec/THREAT_MODEL.md) for comprehensive analysis.
-
----
-
-## 🎯 Use Cases
-
-### Emergency Coordination
-- Shelter status updates
-- Supply requests/offers
-- Safety check-ins
-- Evacuation coordination
-
-### Offline Scenarios
-- Natural disasters (earthquakes, floods, hurricanes)
-- Infrastructure failure (power outages, network collapse)
-- Remote/rural areas with limited connectivity
-- Politically sensitive communications
-
-### Relay Methods
-- **Mesh networks**: WiFi Direct, Bluetooth mesh
-- **Sneakernet**: USB sticks, SD cards
-- **QR codes**: Display → scan
-- **Radio**: LoRa, ham radio (encode JSON as text)
-- **Manual**: Print encrypted JSON, hand-deliver
+See [THREAT_MODEL.md](spec/THREAT_MODEL.md) for full analysis.
 
 ---
 
-## 🚀 Deployment
-
-### GitHub Pages (Current)
-Automatically deployed from `main` branch via GitHub Actions.
-
-**Live URL**: https://hiroshitanaka-creator.github.io/lifeline-mesh/
-
-### Self-Hosting
-1. Copy `/app` directory to your web server
-2. Serve `index.html` (no build step required)
-3. **Recommended**: Add CSP headers for extra security
-
-### Production Checklist
-- [x] SRI added to all CDN scripts
-- [x] All tests passing
-- [x] Documentation complete
-- [ ] Consider self-hosting TweetNaCl (avoid CDN dependency)
-- [ ] Add Content Security Policy headers
-- [ ] Set up monitoring/analytics (optional)
+[↑ Back to language selector](#)
 
 ---
 
-## 🛠️ Development
+<a id="español"></a>
 
-### Run Tests
-```bash
-# All tests (crypto + vectors)
-npm test
+# Lifeline Mesh 🌐
 
-# Crypto only
-cd crypto && npm test
+**Mensajería de emergencia cifrada de extremo a extremo • Primero sin conexión • No requiere servidor**
 
-# Test vectors
-cd tools && npm run validate-vectors
-```
+[![Tests](https://img.shields.io/badge/tests-37%2F37%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
-### Generate Test Vectors
-```bash
-cd tools
-npm run generate-vectors
-```
+Lifeline Mesh es un sistema de mensajería seguro, basado en el navegador y con criptografía sólida, diseñado para situaciones de emergencia donde la infraestructura tradicional puede fallar o no estar disponible.
 
-### Update SRI Hashes
-```bash
-cd tools
-npm run generate-sri
-# Copy output to app/index.html
-```
-
-### Technology Stack
-- **Languages**: JavaScript (ES6 modules)
-- **Crypto**: TweetNaCl 1.0.3
-- **Storage**: IndexedDB (browser)
-- **Build**: None required (pure HTML/JS)
+> **Misión**: Cuando ocurre un desastre y la infraestructura falla, las personas aún necesitan comunicarse.  
+> Este proyecto busca proporcionar ese salvavidas.
 
 ---
 
-## 🤝 Contributing
+## 🆘 Necesitamos tu ayuda
 
-We welcome all contributors! Here's how to get started:
+Este proyecto podría salvar vidas, pero necesita colaboradores para hacerse realidad.
 
-### First Time?
-1. Read [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) to understand the vision
-2. Check [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md) for implementation details
-3. Look for issues labeled `good first issue`
-4. Join the discussion in GitHub Discussions
+**Lo más urgente ahora mismo:**
 
-### Ways to Contribute
-- **Code**: Bluetooth relay, group messaging, UI improvements
-- **Security**: Reviews, audits, vulnerability research
-- **Design**: UX for emergency scenarios, accessibility
-- **Docs**: Translations, tutorials, examples
-- **Testing**: Test vectors, edge cases, real-world scenarios
-- **Ideas**: Protocol improvements, use cases, partnerships
+| Prioridad | Tarea | Habilidades | Issue |
+|----------|------|-------------|-------|
+| 🔴 Crítica | **Relay Bluetooth BLE** | Web Bluetooth API, JavaScript | Help wanted |
+| 🔴 Crítica | **Seguridad de respaldo de claves** | Criptografía, Argon2id | Help wanted |
+| 🟡 Alta | **Rediseño UI/UX** | Diseño, CSS, Accesibilidad | Help wanted |
+| 🟡 Alta | **Mensajería grupal** | Diseño de protocolos, Cripto | Help wanted |
+| 🟢 Inicio fácil | **Documentación i18n** | Cualquier idioma | Good first issue |
+| 🟢 Inicio fácil | **Cobertura de tests** | Testing en JavaScript | Good first issue |
 
-### Development Setup
-```bash
-git clone https://github.com/hiroshitanaka-creator/lifeline-mesh.git
-cd lifeline-mesh
-npm install
-npm test  # Run all tests
-```
+**Consulta el roadmap completo**:  
+[DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+Cada contribución importa. Construyámoslo juntos.
 
 ---
 
-## 📊 Status & Roadmap
+## 🚀 Inicio rápido
 
-**Current Version**: 1.0.0 (Production-ready prototype)
+### Prueba la demo en vivo
+**https://hiroshitanaka-creator.github.io/lifeline-mesh/**
 
-### Completed ✅
-- Core crypto implementation (Ed25519 + X25519)
-- Test suite (37/37 passing)
-- Comprehensive documentation
-- Key management (export/import)
-- SRI security hardening
-- GitHub Pages deployment
+### Uso local
+1. Clona este repositorio  
+2. Abre `app/index.html` en tu navegador  
+3. Genera claves → Agrega contactos → Cifra/Descifra  
 
-### In Progress 🚧
-- Relay implementations (Bluetooth BLE)
-- Key backup security upgrade (Argon2id)
-- UI/UX improvements
-
-### Planned 📋
-- Group messaging (Sender Keys protocol)
-- Mobile apps (React Native / Flutter)
-- LoRa integration
-- Post-quantum crypto
-
-**Full Roadmap**: [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
-
-> 日本語ドキュメント: [docs/DEEP_DIVE_ANALYSIS_JA.md](docs/DEEP_DIVE_ANALYSIS_JA.md)
+**No requiere instalación** – funciona completamente en tu navegador.
 
 ---
 
-## 🔐 Security Policy
+## ✨ Funcionalidades
 
-**Found a vulnerability?**
-Please use GitHub's private vulnerability reporting or contact maintainers directly.
-**Do not** open public issues for security reports.
+### Seguridad
+- 🔐 **Firmas Ed25519** para autenticación de mensajes
+- 🔒 **Cifrado X25519-XSalsa20-Poly1305** para confidencialidad
+- 🔑 **Claves efímeras** (aproximación de forward secrecy)
+- 🎯 **Vinculación al destinatario** evita redirección de mensajes
+- 🛡️ **Protección contra replay** con seguimiento de nonces de 30 días
+- ✅ **TOFU (Trust On First Use)** con fijación de claves
+- 🔗 **Subresource Integrity (SRI)** para scripts CDN
 
-See [SECURITY.md](SECURITY.md) for details.
+### Gestión de claves
+- 🔑 Generación automática de claves Ed25519 + X25519
+- 💾 Exportar claves (respaldo protegido por contraseña)
+- 📥 Importar claves (restaurar desde archivo)
+- 🗑️ Restablecer datos (rotación de emergencia)
 
 ---
 
-## 📜 License
+## 🔒 Resumen de seguridad
 
-MIT License - see [LICENSE](LICENSE) file.
+### Propiedades garantizadas
+✅ Confidencialidad  
+✅ Autenticidad  
+✅ Integridad  
+✅ Vinculación al destinatario  
+✅ Resistencia a replay  
+
+### Limitaciones conocidas
+❌ Anonimato  
+❌ Análisis de tráfico  
+❌ Seguridad post-cuántica  
+❌ Perfect forward secrecy  
+
+Consulta [THREAT_MODEL.md](spec/THREAT_MODEL.md) para más detalles.
+
+---
+
+## 📜 Licencia
+
+Licencia MIT – ver [LICENSE](LICENSE).
 
 Copyright (c) 2026 Lifeline Mesh Contributors
 
 ---
 
-## 🙏 Acknowledgments
-
-- **TweetNaCl** - Audited NaCl implementation by @dchest
-- **Emergency responders** - Inspiration for real-world use cases
-- **Open source community** - Testing and feedback
-
----
-
-## 🌐 Links
-
-- **Live Demo**: https://hiroshitanaka-creator.github.io/lifeline-mesh/
-- **Documentation**: [docs/](docs/)
-- **Issues**: https://github.com/hiroshitanaka-creator/lifeline-mesh/issues
-- **Discussions**: https://github.com/hiroshitanaka-creator/lifeline-mesh/discussions
-
----
-
-### 💡 Name Meaning
-
-A **lifeline** is a rope or chain thrown to rescue someone in danger.
-A **mesh** network ensures that if one connection breaks, others remain.
-
-**Lifeline Mesh** is built to stay connected when everything else goes dark.
+[↑ Volver al selector de idioma](#)
