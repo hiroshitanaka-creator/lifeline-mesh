@@ -333,7 +333,16 @@ Example test vector structure:
 
 ## Version History
 
-### v1 (Current)
+### v1.1 (Current)
+**Backwards-compatible extension of v1**
+
+New optional fields and features:
+- **Message ID**: SHA-256 hash of ciphertext for deduplication and store-carry-forward
+- **TTL/Expiration**: Delay-tolerant networking support (replaces strict timestamp validation)
+- **Chunking**: Split large messages for constrained transports (QR, SMS, LoRa)
+- **Disaster payload types**: Structured emergency message formats
+
+### v1.0 (Base)
 - Initial protocol
 - Ed25519 + X25519-XSalsa20-Poly1305
 - Ephemeral encryption keys
@@ -341,11 +350,236 @@ Example test vector structure:
 - Replay protection (nonce + timestamp)
 - TOFU contact model
 
+---
+
+## Protocol v1.1 Extensions
+
+### Message ID
+
+Every message has a unique identifier derived from its ciphertext:
+
+```javascript
+const messageId = sha256(ciphertext);  // 32 bytes, base64 encoded
+```
+
+**Purpose**:
+- Deduplication across store-and-forward relays
+- Reference for acknowledgments
+- Chunk reassembly identification
+
+**Wire format** (added to dmesh-msg):
+```json
+{
+  "msgId": "<base64-sha256-32-bytes>"
+}
+```
+
+### TTL and Expiration (Delay-Tolerant Networking)
+
+**Rationale**: Disaster networks experience extreme delays (hours to days). The original 10-minute timestamp skew check (`MAX_SKEW_MS`) is too restrictive for store-carry-forward scenarios.
+
+**New approach**:
+- `ts` (timestamp) remains for signature integrity and ordering
+- `exp` (expiration) defines when the message becomes invalid
+- Replay protection uses `msgId + senderFp` instead of strict time bounds
+
+**Wire format** (added to dmesh-msg):
+```json
+{
+  "ts": 1706012345678,
+  "exp": 1706616000000
+}
+```
+
+**Validation change**:
+```javascript
+// OLD (v1.0): Strict timestamp skew
+const MAX_SKEW_MS = 10 * 60 * 1000;
+if (Math.abs(Date.now() - ts) > MAX_SKEW_MS) reject();
+
+// NEW (v1.1): Expiration-based with fallback
+const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days default
+
+function isMessageValid(msg) {
+  const now = Date.now();
+
+  // Use explicit expiration if present
+  if (msg.exp !== undefined) {
+    return now <= msg.exp;
+  }
+
+  // Fallback: ts + DEFAULT_TTL
+  return now <= (msg.ts + DEFAULT_TTL_MS);
+}
+```
+
+**Replay protection** (updated):
+```javascript
+// Key: msgId (ciphertext hash) + senderFp
+const seenKey = `${msgId}:${senderFp}`;
+if (seenDB.has(seenKey)) reject("Already received");
+seenDB.set(seenKey, { receivedAt: Date.now() });
+```
+
+**Constants update**:
+```javascript
+const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
+const SEEN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days (cleanup)
+```
+
+### Chunking (Constrained Transport Support)
+
+For transports with size limits (QR: ~2KB, SMS: 160 bytes, LoRa: ~250 bytes):
+
+**Chunk envelope format**:
+```json
+{
+  "v": 1,
+  "kind": "dmesh-chunk",
+  "msgId": "<base64-sha256-32-bytes>",
+  "seq": 0,
+  "total": 3,
+  "data": "<base64-chunk-data>"
+}
+```
+
+**Fields**:
+- `msgId`: Message ID (hash of complete ciphertext)
+- `seq`: Sequence number (0-indexed)
+- `total`: Total number of chunks
+- `data`: Base64-encoded chunk payload
+
+**Chunking algorithm**:
+```javascript
+const CHUNK_OVERHEAD = 150;  // JSON envelope overhead (bytes)
+
+function chunkMessage(msgJson, maxChunkSize) {
+  const msgBytes = utf8Encode(JSON.stringify(msgJson));
+  const msgId = sha256(msgJson.ciphertext);  // From decrypted ciphertext field
+  const dataSize = maxChunkSize - CHUNK_OVERHEAD;
+
+  const chunks = [];
+  const total = Math.ceil(msgBytes.length / dataSize);
+
+  for (let i = 0; i < total; i++) {
+    const start = i * dataSize;
+    const end = Math.min(start + dataSize, msgBytes.length);
+    chunks.push({
+      v: 1,
+      kind: "dmesh-chunk",
+      msgId: base64(msgId),
+      seq: i,
+      total,
+      data: base64(msgBytes.slice(start, end))
+    });
+  }
+  return chunks;
+}
+
+function reassembleChunks(chunks) {
+  // Sort by sequence
+  chunks.sort((a, b) => a.seq - b.seq);
+
+  // Verify completeness
+  if (chunks.length !== chunks[0].total) {
+    throw new Error("Incomplete chunks");
+  }
+
+  // Verify all msgId match
+  const msgId = chunks[0].msgId;
+  if (!chunks.every(c => c.msgId === msgId)) {
+    throw new Error("Message ID mismatch");
+  }
+
+  // Reassemble
+  const data = chunks.map(c => decodeBase64(c.data));
+  const msgBytes = concat(data);
+  return JSON.parse(utf8Decode(msgBytes));
+}
+```
+
+**Recommended chunk sizes**:
+| Transport | Max Chunk Size | Notes |
+|-----------|---------------|-------|
+| QR Code (M) | 2048 bytes | Medium error correction |
+| SMS (concatenated) | 1200 bytes | 8 SMS segments |
+| LoRa | 200 bytes | Region-dependent |
+| Bluetooth GATT | 512 bytes | MTU negotiated |
+| Clipboard | Unlimited | No chunking needed |
+
+### Disaster Payload Types
+
+Structured payloads for emergency scenarios:
+
+**Payload type field** (inside encrypted content):
+```json
+{
+  "v": 1,
+  "ts": 1706012345678,
+  "type": "im_safe",
+  "content": "..."
+}
+```
+
+**Standard types**:
+
+| Type | Purpose | Additional Fields |
+|------|---------|------------------|
+| `text` | Free-form message | `content` (string) |
+| `im_safe` | Safety confirmation | `location?`, `people?` |
+| `need_help` | Request assistance | `urgency`, `people?`, `needs[]` |
+| `shelter_info` | Shelter information | `location`, `capacity?`, `resources[]` |
+| `medical` | Medical emergency | `urgency`, `conditions[]`, `people` |
+| `supplies` | Resource status | `resources[]`, `location?` |
+| `ack` | Message acknowledgment | `refMsgId` |
+
+**Example payloads**:
+
+```json
+// Safety confirmation
+{
+  "v": 1,
+  "ts": 1706012345678,
+  "type": "im_safe",
+  "content": "Evacuated to community center",
+  "location": {"lat": 35.6812, "lng": 139.7671, "accuracy": 50},
+  "people": 3
+}
+
+// Help request
+{
+  "v": 1,
+  "ts": 1706012345678,
+  "type": "need_help",
+  "urgency": "high",
+  "content": "Trapped on 2nd floor, water rising",
+  "location": {"lat": 35.6812, "lng": 139.7671},
+  "people": 2,
+  "needs": ["rescue", "medical"]
+}
+
+// Acknowledgment
+{
+  "v": 1,
+  "ts": 1706012345678,
+  "type": "ack",
+  "refMsgId": "<base64-original-message-id>",
+  "content": "Help is on the way, ETA 30 min"
+}
+```
+
+**Urgency levels**: `low`, `medium`, `high`, `critical`
+
+**Resource types**: `water`, `food`, `power`, `medical`, `shelter`, `communication`, `transport`
+
+---
+
 ## Future Protocol Changes
 
 Potential v2 considerations:
-- Group messaging
+- Group messaging (Sender Keys or MLS)
 - Key rotation mechanism
-- Post-quantum hybrid signatures
-- Compressed message format
+- Post-quantum hybrid signatures (ML-DSA + Ed25519)
+- Compressed message format (zstd before encryption)
 - Multi-recipient encryption
+- Mesh routing metadata
