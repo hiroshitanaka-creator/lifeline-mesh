@@ -156,6 +156,32 @@
     <pre id="decrypted"></pre>
   </div>
 
+  <div class="section" id="ble-section">
+    <h2>5) Bluetooth Relay</h2>
+    <div id="ble-unsupported" style="display:none;">
+      <p class="small ng">⚠️ Web Bluetooth not supported in this browser. Use Chrome or Edge.</p>
+    </div>
+    <div id="ble-supported">
+      <div class="row">
+        <span class="small">Status: <strong id="ble-status">🔴 Not connected</strong></span>
+      </div>
+      <div class="row">
+        <button onclick="bleScan()">📡 Scan for Devices</button>
+        <button onclick="bleDisconnect()">❌ Disconnect</button>
+      </div>
+      <div class="small" style="margin-top: 8px;">
+        Connected to: <span id="ble-device-name">(none)</span>
+      </div>
+      <details style="margin-top: 12px;">
+        <summary>Received Messages via Bluetooth</summary>
+        <pre id="ble-messages">(none)</pre>
+      </details>
+      <div class="row" style="margin-top: 8px;">
+        <button onclick="bleSendEncrypted()">📤 Send Last Encrypted via Bluetooth</button>
+      </div>
+    </div>
+  </div>
+
   <div class="section">
     <details>
       <summary>📚 Documentation</summary>
@@ -193,6 +219,99 @@
   Import crypto core
 ========================= */
 import * as DMesh from '../crypto/core.js';
+import { BLEManager } from '../bluetooth/ble-manager.js';
+
+/* =========================
+  BLE Manager
+========================= */
+let bleManager = null;
+let lastEncryptedMessage = null;
+
+function initBLE() {
+  if (!BLEManager.isSupported()) {
+    document.getElementById('ble-unsupported').style.display = 'block';
+    document.getElementById('ble-supported').style.display = 'none';
+    return;
+  }
+
+  bleManager = new BLEManager();
+
+  bleManager.onConnectionChange = (connected, device) => {
+    const statusEl = document.getElementById('ble-status');
+    const deviceEl = document.getElementById('ble-device-name');
+
+    if (connected) {
+      statusEl.textContent = '🟢 Connected';
+      statusEl.className = 'ok';
+      deviceEl.textContent = device.name || device.id || 'Unknown device';
+    } else {
+      statusEl.textContent = '🔴 Not connected';
+      statusEl.className = 'ng';
+      deviceEl.textContent = '(none)';
+    }
+  };
+
+  bleManager.onMessageReceived = (message, type) => {
+    const messagesEl = document.getElementById('ble-messages');
+    const timestamp = new Date().toLocaleTimeString();
+    const current = messagesEl.textContent === '(none)' ? '' : messagesEl.textContent + '\n---\n';
+    messagesEl.textContent = current + `[${timestamp}] Received:\n${JSON.stringify(message, null, 2)}`;
+
+    // Auto-fill decrypt input
+    document.getElementById('input').value = JSON.stringify(message, null, 2);
+    setStatus(true, 'Received message via Bluetooth - ready to decrypt');
+  };
+
+  bleManager.onError = (code, error) => {
+    setStatus(false, `Bluetooth error: ${code}`);
+    console.error('BLE Error:', code, error);
+  };
+}
+
+window.bleScan = async function() {
+  if (!bleManager) {
+    setStatus(false, 'Bluetooth not supported');
+    return;
+  }
+
+  try {
+    setStatus(true, 'Scanning for devices...');
+    await bleManager.scan();
+    setStatus(true, 'Connecting...');
+    await bleManager.connect();
+    setStatus(true, 'Connected via Bluetooth!');
+  } catch (e) {
+    setStatus(false, 'Bluetooth: ' + e.message);
+  }
+};
+
+window.bleDisconnect = function() {
+  if (bleManager) {
+    bleManager.disconnect();
+    setStatus(true, 'Disconnected');
+  }
+};
+
+window.bleSendEncrypted = async function() {
+  if (!bleManager || !bleManager.isConnected) {
+    setStatus(false, 'Not connected via Bluetooth');
+    return;
+  }
+
+  const encryptedText = document.getElementById('encrypted').textContent;
+  if (!encryptedText || encryptedText === '') {
+    setStatus(false, 'No encrypted message to send. Encrypt a message first.');
+    return;
+  }
+
+  try {
+    const message = JSON.parse(encryptedText);
+    await bleManager.sendMessage(message);
+    setStatus(true, 'Message sent via Bluetooth!');
+  } catch (e) {
+    setStatus(false, 'Bluetooth send failed: ' + e.message);
+  }
+};
 
 /* =========================
   Config
@@ -785,6 +904,7 @@ if ('serviceWorker' in navigator) {
 ========================= */
 (async () => {
   try {
+    initBLE();  // Initialize Bluetooth
     await initOrLoad();
   } catch (e) {
     console.error("Auto-init failed:", e);
