@@ -53,6 +53,25 @@
     /* Install prompt */
     #install-prompt { background: #4CAF50; color: white; padding: 12px; text-align: center; display: none; position: sticky; top: 0; z-index: 100; }
     #install-prompt button { background: white; color: #4CAF50; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px; }
+
+    /* Dark Mode Support */
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a2e; color: #eee; }
+      textarea, input, select { background: #16213e; color: #eee; border: 1px solid #444; }
+      pre { background: #16213e; color: #ddd; }
+      button { background: #0f3460; color: #eee; border: 1px solid #444; }
+      button:hover { background: #1a4a7a; }
+      .danger { background: #4a1a1a; border-color: #7a3333; }
+      summary { background: #16213e; color: #eee; }
+      .modal-content { background: #1a1a2e; color: #eee; }
+      .ok { color: #4ade80; }
+      .ng { color: #f87171; }
+      a { color: #60a5fa; }
+      a:visited { color: #a78bfa; }
+      #install-prompt { background: #065f46; }
+      #install-prompt button { background: #10b981; color: #fff; }
+      h1, h2, h3 { color: #f0f0f0; }
+    }
   </style>
 </head>
 
