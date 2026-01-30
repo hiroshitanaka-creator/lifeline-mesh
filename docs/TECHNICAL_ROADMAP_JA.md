@@ -1,39 +1,23 @@
 # Technical Roadmap - Implementation Details
-
-> *[日本語版はこちら / Japanese version](docs/TECHNICAL_ROADMAP_JA.md)*
-
-This document provides detailed technical implementation guidance for Lifeline Mesh.
+## 技術的実装ロードマップ詳細
 
 ---
 
-## Table of Contents
+## 1. 即座に対処すべき問題
 
-1. [Immediate Issues to Address](#1-immediate-issues-to-address)
-2. [Bluetooth BLE Mesh Implementation](#2-bluetooth-ble-mesh-implementation)
-3. [Group Messaging Design](#3-group-messaging-design)
-4. [TypeScript Migration Plan](#4-typescript-migration-plan)
-5. [Testing Strategy](#5-testing-strategy)
-6. [Performance Optimization](#6-performance-optimization)
-7. [Security Audit Checklist](#7-security-audit-checklist)
-8. [Continuous Improvement](#8-continuous-improvement)
+### 1.1 鍵エクスポートの脆弱性修正
 
----
-
-## 1. Immediate Issues to Address
-
-### 1.1 Key Export Vulnerability Fix
-
-**Current code (DANGEROUS)**:
+**現在のコード（危険）**:
 ```javascript
-// app/index.html:328-339 - XOR encryption is NOT encryption
+// app/index.html:328-339 - XOR暗号化は暗号化ではない
 const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
 encrypted[i] = dataBytes[i] ^ passwordHash[i % passwordHash.length];
 ```
 
-**Recommended implementation (Argon2id + NaCl secretbox)**:
+**推奨実装（Argon2id + NaCl secretbox）**:
 
 ```javascript
-// New file: crypto/key-backup.js
+// 新しい crypto/key-backup.js
 
 import argon2 from 'argon2-browser';
 
@@ -46,7 +30,7 @@ const ARGON2_CONFIG = {
 };
 
 /**
- * Derive encryption key from password (secure)
+ * パスワードから暗号化鍵を導出（安全）
  */
 export async function deriveKey(password, salt) {
   const result = await argon2.hash({
@@ -61,7 +45,7 @@ export async function deriveKey(password, salt) {
 }
 
 /**
- * Encrypt keys with password (secure)
+ * 鍵をパスワードで暗号化（安全）
  */
 export async function encryptKeys(keys, password) {
   const salt = nacl.randomBytes(16);
@@ -81,7 +65,7 @@ export async function encryptKeys(keys, password) {
 }
 
 /**
- * Decrypt encrypted keys (secure)
+ * 暗号化された鍵を復号（安全）
  */
 export async function decryptKeys(encrypted, password) {
   if (encrypted.version !== 2 || encrypted.kdf !== 'argon2id') {
@@ -105,9 +89,9 @@ export async function decryptKeys(encrypted, password) {
 
 ---
 
-## 2. Bluetooth BLE Mesh Implementation
+## 2. Bluetooth BLE メッシュ実装
 
-### 2.1 Architecture
+### 2.1 アーキテクチャ
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -130,7 +114,7 @@ export async function decryptKeys(encrypted, password) {
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 BLE GATT Service Design
+### 2.2 BLE GATT Service 設計
 
 ```javascript
 // bluetooth/constants.js
@@ -162,7 +146,7 @@ export const BLE_CONFIG = {
 };
 ```
 
-### 2.3 Web Bluetooth Implementation
+### 2.3 Web Bluetooth 実装
 
 ```javascript
 // bluetooth/ble-manager.js
@@ -178,14 +162,7 @@ export class BLEManager {
   }
 
   /**
-   * Check if Web Bluetooth is supported
-   */
-  static isSupported() {
-    return 'bluetooth' in navigator;
-  }
-
-  /**
-   * Scan for devices
+   * デバイス検索とスキャン
    */
   async scan() {
     if (!navigator.bluetooth) {
@@ -212,7 +189,7 @@ export class BLEManager {
   }
 
   /**
-   * Connect to device
+   * デバイスに接続
    */
   async connect(device = this.device) {
     if (!device) {
@@ -233,7 +210,7 @@ export class BLEManager {
   }
 
   /**
-   * Send message (with chunking support)
+   * メッセージ送信（チャンク対応）
    */
   async sendMessage(message, recipientId = null) {
     if (!this.service) {
@@ -265,7 +242,7 @@ export class BLEManager {
   }
 
   /**
-   * Chunk message into smaller pieces
+   * メッセージをチャンクに分割
    */
   chunkMessage(data) {
     const chunks = [];
@@ -276,7 +253,7 @@ export class BLEManager {
   }
 
   /**
-   * Handle incoming message
+   * 受信メッセージの処理
    */
   handleIncomingMessage(dataView) {
     const type = dataView.getUint8(0);
@@ -307,7 +284,7 @@ export class BLEManager {
   }
 
   /**
-   * Handle disconnection
+   * 切断処理
    */
   handleDisconnect() {
     console.log('BLE disconnected');
@@ -316,7 +293,7 @@ export class BLEManager {
   }
 
   /**
-   * Disconnect
+   * 切断
    */
   disconnect() {
     if (this.device && this.device.gatt.connected) {
@@ -326,7 +303,7 @@ export class BLEManager {
 }
 ```
 
-### 2.4 Mesh Routing (Future)
+### 2.4 メッシュルーティング（将来）
 
 ```javascript
 // bluetooth/mesh-router.js
@@ -340,7 +317,7 @@ export class MeshRouter {
   }
 
   /**
-   * Update route
+   * ルート更新
    */
   updateRoute(destination, nextHop, hopCount) {
     const existing = this.routingTable.get(destination);
@@ -351,7 +328,7 @@ export class MeshRouter {
   }
 
   /**
-   * Determine if message should be forwarded
+   * メッセージ転送判定
    */
   shouldForward(messageId, ttl) {
     // Already seen?
@@ -369,7 +346,7 @@ export class MeshRouter {
   }
 
   /**
-   * Get next hop for destination
+   * 次のホップを取得
    */
   getNextHop(destination) {
     const route = this.routingTable.get(destination);
@@ -377,7 +354,7 @@ export class MeshRouter {
   }
 
   /**
-   * Cleanup old cache entries
+   * キャッシュクリーンアップ
    */
   cleanup() {
     const now = Date.now();
@@ -393,39 +370,39 @@ export class MeshRouter {
 
 ---
 
-## 3. Group Messaging Design
+## 3. グループメッセージング設計
 
-### 3.1 Sender Keys Protocol (Signal-style)
+### 3.1 Sender Keys プロトコル（Signal方式）
 
 ```
-Group message encryption flow:
+グループメッセージの暗号化フロー:
 
-1. Group creation:
-   - Generate group ID (random UUID)
-   - Creator generates group key pair
-   - Distribute keys to each member individually (1-to-1 encryption)
+1. グループ作成時:
+   - グループID生成（random UUID）
+   - 作成者がグループ鍵ペア生成
+   - 各メンバーに個別に鍵配布（1対1暗号化）
 
-2. Sending message:
-   - Encrypt with sender's Sender Key (symmetric key)
-   - All members can decrypt with same key
-   - Ratchet: advance key after each message
+2. メッセージ送信時:
+   - 送信者のSender Keyで暗号化（対称鍵）
+   - 全メンバーが同じ鍵で復号可能
+   - ラチェット: メッセージごとに鍵を進める
 
-3. Adding member:
-   - Distribute current Sender Key to new member
-   - Past messages cannot be decrypted (forward secrecy)
+3. メンバー追加時:
+   - 新メンバーに現在のSender Key配布
+   - 過去のメッセージは復号不可（forward secrecy）
 
-4. Removing member:
-   - Generate & distribute new Sender Key
-   - Removed member cannot decrypt future messages
+4. メンバー削除時:
+   - 新しいSender Key生成・配布
+   - 削除されたメンバーは以降のメッセージ復号不可
 ```
 
-### 3.2 Data Structures
+### 3.2 データ構造
 
 ```javascript
 // crypto/group.js
 
 /**
- * Group information
+ * グループ情報
  */
 export const GroupSchema = {
   id: 'string',           // UUID
@@ -447,7 +424,7 @@ export const GroupSchema = {
 };
 
 /**
- * Group message
+ * グループメッセージ
  */
 export const GroupMessageSchema = {
   v: 1,
@@ -462,14 +439,14 @@ export const GroupMessageSchema = {
 };
 ```
 
-### 3.3 Group Encryption Implementation
+### 3.3 グループ暗号化実装
 
 ```javascript
 // crypto/group-crypto.js
 
 export class GroupCrypto {
   /**
-   * Generate new Sender Key
+   * 新しいSender Keyを生成
    */
   generateSenderKey(nacl) {
     return {
@@ -480,14 +457,14 @@ export class GroupCrypto {
   }
 
   /**
-   * Ratchet chain key
+   * チェーンキーをラチェット
    */
   ratchetChainKey(chainKey, nacl) {
     return nacl.hash(chainKey).slice(0, 32);
   }
 
   /**
-   * Derive message key
+   * メッセージキーを導出
    */
   deriveMessageKey(chainKey, nacl) {
     const info = nacl.util.decodeUTF8('DMESH_GROUP_MSG_KEY');
@@ -495,7 +472,7 @@ export class GroupCrypto {
   }
 
   /**
-   * Encrypt group message
+   * グループメッセージを暗号化
    */
   encryptGroupMessage({ content, groupId, senderKey, senderSignSK }, nacl, naclUtil) {
     const messageKey = this.deriveMessageKey(senderKey.chainKey, nacl);
@@ -533,10 +510,10 @@ export class GroupCrypto {
   }
 
   /**
-   * Decrypt group message
+   * グループメッセージを復号
    */
   decryptGroupMessage({ message, senderKey, expectedSenderSignPK }, nacl, naclUtil) {
-    // Verify signature
+    // 署名検証
     const senderSignPK = naclUtil.decodeBase64(message.senderSignPK);
     const signBytes = this.buildGroupSignBytes({
       groupId: message.groupId,
@@ -550,7 +527,7 @@ export class GroupCrypto {
       throw new Error('Invalid group message signature');
     }
 
-    // Decrypt
+    // 復号
     const messageKey = this.deriveMessageKey(senderKey.chainKey, nacl);
     const plaintext = nacl.secretbox.open(
       naclUtil.decodeBase64(message.ciphertext),
@@ -584,9 +561,9 @@ export class GroupCrypto {
 
 ---
 
-## 4. TypeScript Migration Plan
+## 4. TypeScript移行計画
 
-### 4.1 Type Definitions
+### 4.1 型定義
 
 ```typescript
 // types/index.ts
@@ -659,41 +636,41 @@ export type ErrorCode =
   | 'SENDER_KEY_MISMATCH';
 ```
 
-### 4.2 Migration Steps
+### 4.2 移行ステップ
 
 ```
-1. tsconfig.json setup (already done)
-2. Create type definition files
+1. tsconfig.json設定（完了済み）
+2. 型定義ファイル作成
 3. crypto/core.js → crypto/core.ts
 4. crypto/errors.js → crypto/errors.ts
-5. Write new features in TypeScript
-6. Migrate tests to TypeScript
-7. Extract app/index.html scripts
-8. Introduce Vite build system
+5. 新機能はTypeScriptで記述
+6. テストをTypeScriptに移行
+7. app/index.html のスクリプトを分離
+8. Viteビルドシステム導入
 ```
 
 ---
 
-## 5. Testing Strategy
+## 5. テスト戦略
 
-### 5.1 Test Pyramid
+### 5.1 テストピラミッド
 
 ```
            /\
           /  \  E2E Tests (Playwright)
-         /----\  - Real Bluetooth communication
-        /      \ - Encrypt → Decrypt flow
+         /----\  - 実際のBluetooth通信
+        /      \ - 暗号化→復号フロー
        /--------\
       /          \  Integration Tests
      /------------\  - BLE + Crypto
     /              \ - IndexedDB + UI
    /----------------\
-  /                  \  Unit Tests (current)
+  /                  \  Unit Tests (現在)
  /--------------------\  - crypto/core
 /______________________\ - crypto/errors
 ```
 
-### 5.2 Tests to Add
+### 5.2 追加すべきテスト
 
 ```javascript
 // tests/integration/ble.test.js
@@ -725,30 +702,11 @@ describe('BLE Integration', () => {
 });
 ```
 
-### 5.3 Test Commands
-
-```bash
-# All tests
-npm test
-
-# Unit tests only
-npm run test:crypto
-
-# Integration tests
-npm run test:integration
-
-# E2E tests
-npm run test:e2e
-
-# Coverage report
-npm run test:coverage
-```
-
 ---
 
-## 6. Performance Optimization
+## 6. パフォーマンス最適化
 
-### 6.1 Web Worker Usage
+### 6.1 Web Worker活用
 
 ```javascript
 // workers/crypto-worker.js
@@ -783,7 +741,7 @@ self.onmessage = async (event) => {
 };
 ```
 
-### 6.2 IndexedDB Optimization
+### 6.2 IndexedDB最適化
 
 ```javascript
 // storage/optimized-db.js
@@ -852,49 +810,49 @@ export class OptimizedDB {
 
 ---
 
-## 7. Security Audit Checklist
+## 7. セキュリティ監査チェックリスト
 
-### Pre-Audit Checks
+### 実施前チェック
 
-- [ ] Dependency vulnerability scan (npm audit)
-- [ ] Check for secret key memory residue
-- [ ] Timing attack possibility review
-- [ ] XSS/CSRF prevention verification
-- [ ] CSP header configuration check
+- [ ] 依存関係の脆弱性スキャン（npm audit）
+- [ ] 秘密鍵のメモリ残留確認
+- [ ] タイミング攻撃の可能性確認
+- [ ] XSS/CSRF防止確認
+- [ ] CSPヘッダー設定確認
 
-### Audit Items
+### 監査項目
 
-#### 1. Cryptographic Implementation
-- [ ] TweetNaCl version verification (1.0.3)
-- [ ] Nonce generation uniqueness verification
-- [ ] Key derivation function parameter review
-- [ ] Signature scheme correctness
+1. **暗号実装**
+   - [ ] TweetNaClのバージョン確認（1.0.3）
+   - [ ] nonce生成の一意性確認
+   - [ ] 鍵導出関数のパラメータ確認
+   - [ ] 署名スキームの正確性
 
-#### 2. Protocol
-- [ ] Recipient binding effectiveness
-- [ ] Replay protection completeness
-- [ ] Timestamp validation accuracy
+2. **プロトコル**
+   - [ ] 受信者バインディングの有効性
+   - [ ] リプレイ保護の完全性
+   - [ ] タイムスタンプ検証の精度
 
-#### 3. Storage
-- [ ] IndexedDB encryption necessity review
-- [ ] Key erasure on session end
-- [ ] Backup encryption strength
+3. **ストレージ**
+   - [ ] IndexedDB暗号化の必要性検討
+   - [ ] セッション終了時の鍵消去
+   - [ ] バックアップ暗号化の強度
 
-#### 4. Communication
-- [ ] BLE communication authentication
-- [ ] Man-in-the-middle attack resistance
-- [ ] DoS attack countermeasures
+4. **通信**
+   - [ ] BLE通信の認証
+   - [ ] 中間者攻撃への耐性
+   - [ ] DoS攻撃への対策
 
 ---
 
-## 8. Continuous Improvement
+## 8. 継続的改善
 
-### Privacy-Preserving Metrics
+### メトリクス収集（プライバシー保護）
 
 ```javascript
 // analytics/privacy-preserving.js
 
-// Local only, never sent to server
+// ローカルのみ、サーバーには送信しない
 export class LocalMetrics {
   constructor() {
     this.metrics = {
@@ -917,7 +875,7 @@ export class LocalMetrics {
     this.metrics.errors[code] = (this.metrics.errors[code] || 0) + 1;
   }
 
-  // Allow users to see their own metrics
+  // ユーザーが自分のメトリクスを見れるようにする
   getReport() {
     return { ...this.metrics, generatedAt: new Date().toISOString() };
   }
@@ -926,27 +884,14 @@ export class LocalMetrics {
 
 ---
 
-## Next Steps
+## 次のステップ
 
-1. **This week**: PR for key backup security fix
-2. **Next week**: Create Web Bluetooth API PoC
-3. **In 2 weeks**: PR for basic BLE send/receive
-4. **In 1 month**: Group feature design review
-
----
-
-## Contributing
-
-Want to help implement these features? Here's how:
-
-1. **Pick an issue** labeled `good first issue` or `help wanted`
-2. **Comment** that you're working on it
-3. **Fork** and create a feature branch
-4. **Submit PR** with tests and documentation
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+1. **今週**: 鍵バックアップのセキュリティ修正をPR
+2. **来週**: Web Bluetooth APIのPoCを作成
+3. **2週間後**: BLE基本送受信のPR
+4. **1ヶ月後**: グループ機能の設計レビュー
 
 ---
 
-*This document provides technical implementation details.*
-*For strategic analysis, see [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md)*
+*このドキュメントは技術的な実装詳細を提供します。*
+*戦略的な分析は DEEP_DIVE_ANALYSIS.md を参照してください。*

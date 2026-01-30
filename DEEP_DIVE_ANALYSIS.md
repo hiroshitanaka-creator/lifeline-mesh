@@ -1,569 +1,546 @@
 # Lifeline Mesh - Deep Dive Analysis
-## プロジェクトの真価を発揮するための徹底分析
+## A Strategic Roadmap to Realize This Project's True Potential
 
-> このドキュメントは、プロジェクトの現状を正直に評価し、
-> 真に価値あるプロダクトへと進化させるための戦略的ロードマップを提供します。
+> *[日本語版はこちら / Japanese version](docs/DEEP_DIVE_ANALYSIS_JA.md)*
 
----
-
-## 目次
-
-1. [現状評価（本音）](#1-現状評価本音)
-2. [このプロジェクトの本当の価値](#2-このプロジェクトの本当の価値)
-3. [競合分析](#3-競合分析)
-4. [クリティカルな課題](#4-クリティカルな課題)
-5. [技術的改善ロードマップ](#5-技術的改善ロードマップ)
-6. [ビジネス・持続可能性戦略](#6-ビジネス持続可能性戦略)
-7. [実装優先順位](#7-実装優先順位)
-8. [リスクと対策](#8-リスクと対策)
-9. [成功への道筋](#9-成功への道筋)
-10. [最終的な提言](#10-最終的な提言)
+> This document provides an honest assessment of the project's current state
+> and a strategic roadmap to evolve it into a truly valuable product.
 
 ---
 
-## 1. 現状評価（本音）
+## Table of Contents
 
-### 強み（本物の価値）
+1. [Current State Assessment (Honest)](#1-current-state-assessment-honest)
+2. [The Real Value of This Project](#2-the-real-value-of-this-project)
+3. [Competitive Analysis](#3-competitive-analysis)
+4. [Critical Issues](#4-critical-issues)
+5. [Technical Improvement Roadmap](#5-technical-improvement-roadmap)
+6. [Business & Sustainability Strategy](#6-business--sustainability-strategy)
+7. [Implementation Priorities](#7-implementation-priorities)
+8. [Risks and Mitigations](#8-risks-and-mitigations)
+9. [Path to Success](#9-path-to-success)
+10. [Final Recommendations](#10-final-recommendations)
 
-| 項目 | 評価 | 詳細 |
-|------|------|------|
-| **暗号基盤** | ★★★★★ | Ed25519 + X25519-XSalsa20-Poly1305は業界標準。TweetNaClは監査済み。正しい選択。 |
-| **プロトコル設計** | ★★★★☆ | エフェメラル鍵、受信者バインディング、リプレイ保護 - セキュリティの基本を押さえている |
-| **脅威モデル** | ★★★★★ | 何を守り、何を守らないかが明確。これができている個人プロジェクトは稀 |
-| **テストカバレッジ** | ★★★★☆ | 37/37テスト合格。暗号コードのテストは十分 |
-| **ドキュメント** | ★★★★★ | 2,955行以上の包括的ドキュメント。FAQ、使用ガイド、仕様書すべて完備 |
-| **設計思想** | ★★★★★ | 「オフラインファースト」「サーバー不要」「リレー非依存」は正しいアプローチ |
-| **コード品質** | ★★★★☆ | crypto/core.jsは純粋関数、テスト可能、再利用可能 |
+---
 
-### 弱み（正直に）
+## 1. Current State Assessment (Honest)
 
-| 項目 | 評価 | 詳細 |
-|------|------|------|
-| **リレー実装** | ★☆☆☆☆ | **致命的な欠落**。メッセージを送る手段がコピペしかない |
-| **鍵エクスポート** | ★★☆☆☆ | XOR暗号化は**危険**。本番では使えない |
-| **UI/UX** | ★★☆☆☆ | 技術者向け。一般人が緊急時に使えるとは言い難い |
-| **モバイル対応** | ★★☆☆☆ | PWAはあるが、ネイティブアプリなし |
-| **グループ機能** | ☆☆☆☆☆ | 緊急時に最も必要な機能がない |
-| **実運用実績** | ☆☆☆☆☆ | 実際の災害で使われた実績なし |
+### Strengths (Real Value)
 
-### 現実認識
+| Area | Rating | Details |
+|------|--------|---------|
+| **Cryptographic Foundation** | ★★★★★ | Ed25519 + X25519-XSalsa20-Poly1305 is industry standard. TweetNaCl is audited. Correct choice. |
+| **Protocol Design** | ★★★★☆ | Ephemeral keys, recipient binding, replay protection - security fundamentals are solid |
+| **Threat Model** | ★★★★★ | Clear about what is protected and what isn't. Rare for personal projects. |
+| **Test Coverage** | ★★★★☆ | 37/37 tests passing. Crypto code is well-tested |
+| **Documentation** | ★★★★★ | 2,955+ lines of comprehensive docs. FAQ, usage guide, specs all complete |
+| **Design Philosophy** | ★★★★★ | "Offline-first", "No server required", "Relay-agnostic" is the right approach |
+| **Code Quality** | ★★★★☆ | crypto/core.js is pure functions, testable, reusable |
+
+### Weaknesses (Honest)
+
+| Area | Rating | Details |
+|------|--------|---------|
+| **Relay Implementation** | ★☆☆☆☆ | **Critical gap**. No actual way to send messages except copy-paste |
+| **Key Export** | ★★☆☆☆ | XOR encryption is **dangerous**. Not production-ready |
+| **UI/UX** | ★★☆☆☆ | Developer-oriented. Hard for regular people to use in emergencies |
+| **Mobile Support** | ★★☆☆☆ | PWA exists but no native apps |
+| **Group Features** | ☆☆☆☆☆ | The most needed feature for emergencies is missing |
+| **Real-world Usage** | ☆☆☆☆☆ | Never used in an actual disaster |
+
+### Reality Check
 
 ```
-現在地: 「よくできたプロトタイプ」
-目標地: 「人命を救える実用ツール」
-距離:   まだ遠い。しかし、基盤は正しい。
+Current position: "Well-made prototype"
+Target position:  "Life-saving practical tool"
+Distance:         Still far. But the foundation is correct.
 ```
 
 ---
 
-## 2. このプロジェクトの本当の価値
+## 2. The Real Value of This Project
 
-### なぜこのプロジェクトは重要か
+### Why This Project Matters
 
 ```
-2011年 東日本大震災 - 携帯電話網がパンク、安否確認に数日
-2024年 能登半島地震 - 同様の通信障害
-2025年 南海トラフ想定 - より広範囲の被害予測
+2011 - Japan Earthquake/Tsunami: Cell networks collapsed, days to confirm safety
+2023 - Turkey/Syria Earthquake: Similar communication failures
+2024 - Various disasters worldwide: Same pattern repeats
 
-問題: 災害時、既存インフラは機能しない
-解決策: インフラに依存しない通信手段
+Problem:  Existing infrastructure fails during disasters
+Solution: Communication that doesn't depend on infrastructure
 ```
 
-### Lifeline Meshが解決する問題
+### What Lifeline Mesh Solves
 
-1. **インフラ崩壊時の通信**: インターネット、携帯電話網なしで通信可能
-2. **なりすまし防止**: 災害時のデマ・詐欺を暗号学的に防止
-3. **プライバシー**: 検閲・監視なしの安全な通信
-4. **分散性**: 単一障害点なし
+1. **Communication during infrastructure collapse**: Works without internet or cell networks
+2. **Impersonation prevention**: Cryptographically prevents misinformation during disasters
+3. **Privacy**: Secure communication without surveillance
+4. **Decentralization**: No single point of failure
 
-### 競合と比較した独自性
+### Unique Value vs Competitors
 
-| 特徴 | Lifeline Mesh | Signal | Briar | Bridgefy |
-|------|---------------|--------|-------|----------|
-| サーバー不要 | ✅ | ❌ | ✅ | ✅ |
-| ブラウザのみ | ✅ | ❌ | ❌ | ❌ |
-| インストール不要 | ✅ | ❌ | ❌ | ❌ |
-| オープンソース | ✅ | ✅ | ✅ | ❌ |
-| メッシュ対応 | 🚧 | ❌ | ✅ | ✅ |
-| 監査済み暗号 | ✅ | ✅ | ✅ | ❓ |
+| Feature | Lifeline Mesh | Signal | Briar | Bridgefy |
+|---------|---------------|--------|-------|----------|
+| No server required | ✅ | ❌ | ✅ | ✅ |
+| Browser-only | ✅ | ❌ | ❌ | ❌ |
+| No installation | ✅ | ❌ | ❌ | ❌ |
+| Open source | ✅ | ✅ | ✅ | ❌ |
+| Mesh support | 🚧 | ❌ | ✅ | ✅ |
+| Audited crypto | ✅ | ✅ | ✅ | ❓ |
 
-**独自の価値**: ブラウザだけで動く、インストール不要のE2E暗号化メッセージング
+**Unique value**: Browser-only, no-install E2E encrypted messaging
 
 ---
 
-## 3. 競合分析
+## 3. Competitive Analysis
 
-### 直接競合
+### Direct Competitors
 
 #### Briar (https://briarproject.org/)
-- **強み**: Tor統合、完全P2P、Bluetooth/WiFi Direct対応
-- **弱み**: Androidのみ、技術者向けUI
-- **学ぶべき点**: メッシュネットワーク実装、Torによる匿名性
+- **Strengths**: Tor integration, full P2P, Bluetooth/WiFi Direct support
+- **Weaknesses**: Android only, developer-focused UI
+- **Learn from**: Mesh network implementation, Tor anonymity
 
 #### Bridgefy (https://bridgefy.me/)
-- **強み**: ネイティブアプリ、Bluetooth mesh、数百万ダウンロード
-- **弱み**: クローズドソース、過去にセキュリティ問題
-- **学ぶべき点**: ユーザー体験、マーケティング
+- **Strengths**: Native apps, Bluetooth mesh, millions of downloads
+- **Weaknesses**: Closed source, past security issues
+- **Learn from**: User experience, marketing
 
 #### goTenna (https://gotenna.com/)
-- **強み**: 専用ハードウェア、軍事グレード
-- **弱み**: 高価（$179+）、ハード依存
-- **学ぶべき点**: B2B/政府向け販売モデル
+- **Strengths**: Dedicated hardware, military-grade
+- **Weaknesses**: Expensive ($179+), hardware-dependent
+- **Learn from**: B2B/government sales model
 
 #### Meshtastic (https://meshtastic.org/)
-- **強み**: LoRa対応、長距離通信、オープンソース
-- **弱み**: 専用ハードウェア必要
-- **学ぶべき点**: コミュニティ主導開発、ハードウェア統合
+- **Strengths**: LoRa support, long-range, open source
+- **Weaknesses**: Requires dedicated hardware
+- **Learn from**: Community-driven development, hardware integration
 
-### 間接競合
-
-| アプリ | 脅威レベル | 理由 |
-|--------|-----------|------|
-| Signal | 高 | 「セキュアメッセージング」の代名詞 |
-| WhatsApp | 高 | 「災害時連絡」にも使われる |
-| LINE | 高（日本） | 安否確認機能がある |
-| 防災アプリ各種 | 中 | 政府・自治体の公式アプリ |
-
-### 競合に勝つための戦略
+### How to Win
 
 ```
-Lifeline Meshの勝ち筋:
-1. 「インストール不要」→ 災害時にダウンロードできない時に価値
-2. 「ブラウザのみ」→ どんなデバイスでも使える
-3. 「オープンソース」→ 信頼性、監査可能
-4. 「日本発」→ 災害大国のニーズを理解している
+Lifeline Mesh's winning strategy:
+1. "No installation" → Value when you can't download apps during disaster
+2. "Browser only" → Works on any device
+3. "Open source" → Trust, auditability
+4. "From Japan" → Deep understanding of disaster-prone country needs
 ```
 
 ---
 
-## 4. クリティカルな課題
+## 4. Critical Issues
 
-### 優先度: 致命的（今すぐ対処必要）
+### Priority: Critical (Fix Immediately)
 
-#### 4.1 リレー実装の欠如
+#### 4.1 Missing Relay Implementation
 
 ```
-問題: メッセージを送る実際の手段がない
-現状: コピペでJSONを渡すだけ
-影響: 「使えないツール」のまま
+Problem:  No actual way to send messages
+Current:  Copy-paste JSON manually
+Impact:   Remains an "unusable tool"
 ```
 
-**必要な実装**:
-1. **Bluetooth Low Energy (BLE) メッシュ** - 最優先
-2. **WiFi Direct** - 次点
-3. **QRコードリレー** - 部分的に実装済み
-4. **Web Bluetooth API** - ブラウザから直接Bluetooth
+**Required implementations**:
+1. **Bluetooth Low Energy (BLE) mesh** - Highest priority
+2. **WiFi Direct** - Second priority
+3. **QR code relay** - Partially implemented
+4. **Web Bluetooth API** - Bluetooth directly from browser
 
-#### 4.2 鍵バックアップの脆弱性
+#### 4.2 Key Backup Vulnerability
 
 ```javascript
-// 現在のコード (app/index.html:328-339) - 危険
+// Current code (app/index.html:328-339) - DANGEROUS
 // WARNING: This is NOT cryptographically secure - for demo only!
 const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
-const encrypt = (data) => {
-  // XOR暗号化 - これは暗号化ではない
-  encrypted[i] = dataBytes[i] ^ passwordHash[i % passwordHash.length];
-};
+encrypted[i] = dataBytes[i] ^ passwordHash[i % passwordHash.length];
+// XOR "encryption" is NOT encryption
 ```
 
-**必要な修正**:
-```javascript
-// 推奨: Argon2id + XSalsa20-Poly1305
-// 1. Argon2idでパスワードから鍵導出 (KDF)
-// 2. NaCl secretboxで暗号化
-```
+**Required fix**: Argon2id + XSalsa20-Poly1305
 
-#### 4.3 グループメッセージング
+#### 4.3 Group Messaging
 
 ```
-問題: 緊急時は1対1より1対多が重要
-例: 「避難所Aは定員に達しました」→ 全員に伝えたい
-現状: 個別に送信するしかない
+Problem:  1-to-1 is less important than 1-to-many in emergencies
+Example:  "Shelter A is at capacity" → need to tell everyone
+Current:  Must send individually
 ```
 
-### 優先度: 高（短期的に対処）
+### Priority: High (Short-term)
 
-#### 4.4 UI/UXの改善
-
-```
-現状の問題:
-- 技術者向けインターフェース
-- JSONを直接扱う必要がある
-- エラーメッセージが技術的すぎる
-
-目標:
-- 高齢者でも使える
-- パニック状態でも使える
-- 30秒で最初のメッセージを送れる
-```
-
-#### 4.5 オフライン機能の強化
+#### 4.4 UI/UX Improvement
 
 ```
-現状: PWAはあるが不完全
-必要:
-- Service Workerの完全実装
-- オフラインでの全機能動作
-- 接続復帰時の同期
+Current issues:
+- Developer-oriented interface
+- Need to handle JSON directly
+- Error messages too technical
+
+Goals:
+- Usable by elderly
+- Usable in panic situations
+- Send first message in 30 seconds
 ```
 
-### 優先度: 中（中期的に対処）
-
-#### 4.6 ポスト量子暗号
+#### 4.5 Offline Enhancement
 
 ```
-理由: 量子コンピュータの脅威（10-15年後？）
-対策: ハイブリッド暗号の導入検討
-  - 現行: Ed25519 + X25519
-  - 追加: Kyber (NIST PQC標準)
+Current:  PWA exists but incomplete
+Needed:
+- Full Service Worker implementation
+- All features work offline
+- Sync when connection returns
 ```
 
-#### 4.7 匿名性の強化
+### Priority: Medium (Mid-term)
+
+#### 4.6 Post-Quantum Cryptography
 
 ```
-現状: 送信者・受信者の公開鍵が可視
-将来: メタデータ保護（Torライクな機構）
+Reason:   Quantum computer threat (10-15 years?)
+Action:   Consider hybrid cryptography
+  - Current: Ed25519 + X25519
+  - Add: Kyber (NIST PQC standard)
 ```
 
 ---
 
-## 5. 技術的改善ロードマップ
+## 5. Technical Improvement Roadmap
 
-### Phase 1: 実用最小限 (MVP) - 3ヶ月
+### Phase 1: Minimum Viable Product (MVP) - 3 months
 
 ```
-目標: 「実際に使えるツール」にする
+Goal: Make it actually usable
 
 Week 1-4: Bluetooth Mesh
-├─ Web Bluetooth API調査
-├─ BLEメッシュプロトコル設計
-├─ 基本的な送受信実装
-└─ テスト (Android Chrome)
+├─ Web Bluetooth API research
+├─ BLE mesh protocol design
+├─ Basic send/receive implementation
+└─ Testing (Android Chrome)
 
-Week 5-8: 鍵管理の強化
-├─ Argon2id KDF実装
-├─ secretbox暗号化
-├─ 鍵ローテーション機構
-└─ テスト追加
+Week 5-8: Key Management Hardening
+├─ Argon2id KDF implementation
+├─ secretbox encryption
+├─ Key rotation mechanism
+└─ Additional tests
 
-Week 9-12: UI/UX改善
-├─ デザインシステム構築
-├─ レスポンシブ対応
-├─ アクセシビリティ (WCAG 2.1)
-└─ ユーザーテスト
+Week 9-12: UI/UX Improvement
+├─ Design system
+├─ Responsive design
+├─ Accessibility (WCAG 2.1)
+└─ User testing
 ```
 
-### Phase 2: グループ機能 - 3ヶ月
+### Phase 2: Group Features - 3 months
 
 ```
-目標: チーム・コミュニティでの利用
+Goal: Team/community usage
 
-Month 4: グループ暗号設計
-├─ Sender Keys (Signal Protocol)
-├─ グループ鍵管理
-├─ メンバー追加/削除
-└─ プロトコル仕様書更新
+Month 4: Group Crypto Design
+├─ Sender Keys (Signal Protocol style)
+├─ Group key management
+├─ Member add/remove
+└─ Protocol spec update
 
-Month 5: グループUI実装
-├─ グループ作成/参加
-├─ メンバー管理
-├─ グループメッセージ
-└─ 通知システム
+Month 5: Group UI Implementation
+├─ Group creation/joining
+├─ Member management
+├─ Group messaging
+└─ Notification system
 
-Month 6: 統合・テスト
-├─ 結合テスト
-├─ パフォーマンステスト
-├─ セキュリティ監査
-└─ ドキュメント更新
+Month 6: Integration & Testing
+├─ Integration tests
+├─ Performance tests
+├─ Security audit
+└─ Documentation update
 ```
 
-### Phase 3: エコシステム拡張 - 6ヶ月
+### Phase 3: Ecosystem Expansion - 6 months
 
 ```
-目標: プラットフォーム化
+Goal: Platform
 
-Month 7-9: モバイルアプリ
+Month 7-9: Mobile Apps
 ├─ React Native / Flutter
-├─ ネイティブBluetooth
-├─ プッシュ通知
+├─ Native Bluetooth
+├─ Push notifications
 └─ App Store / Play Store
 
-Month 10-12: 高度な機能
-├─ LoRa統合
-├─ ポスト量子暗号
-├─ 匿名化レイヤー
-└─ 相互運用性テスト
+Month 10-12: Advanced Features
+├─ LoRa integration
+├─ Post-quantum crypto
+├─ Anonymization layer
+└─ Interoperability testing
 ```
 
-### 技術スタック推奨
+### Recommended Tech Stack Additions
 
 ```
-現在:
+Current:
 ├─ Pure JavaScript (ES6)
 ├─ TweetNaCl
 ├─ IndexedDB
 └─ PWA
 
-推奨追加:
-├─ TypeScript (型安全性)
-├─ Vite (ビルド・開発体験)
+Recommended additions:
+├─ TypeScript (type safety)
+├─ Vite (build/dev experience)
 ├─ argon2-browser (KDF)
-├─ libsodium.js (より包括的な暗号)
+├─ libsodium.js (comprehensive crypto)
 ├─ Comlink (Web Worker)
 └─ Workbox (Service Worker)
 ```
 
 ---
 
-## 6. ビジネス・持続可能性戦略
+## 6. Business & Sustainability Strategy
 
-### 資金調達オプション
+### Funding Options
 
-#### A. 助成金・グラント
+#### A. Grants
 
-| 機関 | プログラム | 金額 | 適合度 |
-|------|-----------|------|--------|
+| Organization | Program | Amount | Fit |
+|--------------|---------|--------|-----|
 | **Mozilla** | MOSS Awards | $10K-$250K | ★★★★★ |
 | **NLnet** | NGI Zero | €50K | ★★★★★ |
 | **OTF** | Internet Freedom | $50K-$900K | ★★★★☆ |
-| **日本財団** | 災害支援 | 数百万円 | ★★★★☆ |
-| **総務省** | 研究開発 | 数千万円 | ★★★☆☆ |
-| **JICA** | 防災技術 | 要調査 | ★★★☆☆ |
+| **Ford Foundation** | Tech & Society | Varies | ★★★☆☆ |
 
-**推奨**: Mozilla MOSS + NLnet NGI Zeroから開始
+**Recommendation**: Start with Mozilla MOSS + NLnet NGI Zero
 
-#### B. 寄付モデル
+#### B. Donation Model
 
 ```
 Open Collective / GitHub Sponsors
-├─ 個人: $5-$50/月
-├─ 企業: $100-$1000/月
-└─ 目標: $5,000/月で専任開発者1人
+├─ Individual: $5-$50/month
+├─ Corporate: $100-$1000/month
+└─ Target: $5,000/month for 1 full-time developer
 
-メリット: オープンソースの精神を維持
-デメリット: 不安定、規模に限界
+Pros: Maintains open source spirit
+Cons: Unstable, limited scale
 ```
 
-#### C. B2B/政府契約
+#### C. B2B/Government Contracts
 
 ```
-ターゲット:
-├─ 自治体（防災部門）
-├─ NGO/NPO（災害支援）
-├─ 企業（BCP対策）
-└─ 軍/警察（要検討）
+Targets:
+├─ Local governments (emergency management)
+├─ NGOs/NPOs (disaster relief)
+├─ Enterprises (business continuity)
+└─ Military/Police (requires consideration)
 
-提供形態:
-├─ カスタマイズ版
-├─ トレーニング
-├─ サポート契約
-└─ セキュリティ監査
+Offerings:
+├─ Custom versions
+├─ Training
+├─ Support contracts
+└─ Security audits
 ```
 
-#### D. ハイブリッドモデル（推奨）
+#### D. Hybrid Model (Recommended)
 
 ```
-Phase 1 (0-12ヶ月): 助成金 + 寄付
-  - Mozilla MOSS申請
-  - GitHub Sponsors開始
-  - 目標: $50K
+Phase 1 (0-12 months): Grants + Donations
+  - Apply to Mozilla MOSS
+  - Start GitHub Sponsors
+  - Target: $50K
 
-Phase 2 (12-24ヶ月): B2B開始
-  - 自治体向けパイロット
-  - NGO向け無償提供
-  - 目標: $100K
+Phase 2 (12-24 months): Begin B2B
+  - Pilot with local governments
+  - Free provision to NGOs
+  - Target: $100K
 
-Phase 3 (24-36ヶ月): スケール
-  - 政府契約
-  - 国際展開
-  - 目標: $500K
+Phase 3 (24-36 months): Scale
+  - Government contracts
+  - International expansion
+  - Target: $500K
 ```
 
-### コミュニティ構築
+### Community Building
 
 ```
-1. Discord/Slackサーバー開設
-2. 定期的なオンラインミーティング
-3. 貢献者向けドキュメント充実
-4. 「災害訓練」イベント開催
-5. 大学/研究機関との連携
+1. Open Discord/Slack server
+2. Regular online meetings
+3. Comprehensive contributor docs
+4. "Disaster drill" events
+5. University/research partnerships
 ```
 
 ---
 
-## 7. 実装優先順位
+## 7. Implementation Priorities
 
-### 今すぐ（1週間以内）
+### Immediate (Within 1 week)
 
-- [ ] 鍵エクスポートのXOR暗号化を警告付きに変更
-- [ ] READMEに「プロトタイプ」の明記
-- [ ] GitHub Discussionsの有効化
-- [ ] CONTRIBUTINGガイドの拡充
+- [ ] Add warning to key export XOR encryption
+- [ ] Explicitly mark as "prototype" in README
+- [ ] Enable GitHub Discussions
+- [ ] Expand CONTRIBUTING guide
 
-### 短期（1-3ヶ月）
+### Short-term (1-3 months)
 
-- [ ] **Bluetooth BLE リレー実装**（最重要）
-- [ ] Argon2id KDFの導入
-- [ ] TypeScript移行開始
-- [ ] CI/CDの強化（E2Eテスト追加）
+- [ ] **Bluetooth BLE relay implementation** (MOST IMPORTANT)
+- [ ] Introduce Argon2id KDF
+- [ ] Start TypeScript migration
+- [ ] Enhance CI/CD (add E2E tests)
 
-### 中期（3-6ヶ月）
+### Mid-term (3-6 months)
 
-- [ ] グループメッセージング
-- [ ] UI/UXの全面改修
-- [ ] PWA機能完全化
-- [ ] セキュリティ監査（外部）
+- [ ] Group messaging
+- [ ] Complete UI/UX overhaul
+- [ ] Full PWA functionality
+- [ ] External security audit
 
-### 長期（6-12ヶ月）
+### Long-term (6-12 months)
 
-- [ ] モバイルアプリ
-- [ ] LoRa統合
-- [ ] ポスト量子暗号
-- [ ] 国際展開（多言語化）
-
----
-
-## 8. リスクと対策
-
-### 技術リスク
-
-| リスク | 確率 | 影響 | 対策 |
-|--------|------|------|------|
-| Web Bluetooth API制限 | 高 | 高 | ネイティブアプリへのフォールバック |
-| ブラウザ互換性 | 中 | 中 | Polyfill + 検出 + 警告 |
-| 暗号ライブラリの脆弱性 | 低 | 高 | 依存関係監視、迅速なアップデート |
-| 量子コンピュータ | 低（短期） | 高 | ハイブリッド暗号の準備 |
-
-### ビジネスリスク
-
-| リスク | 確率 | 影響 | 対策 |
-|--------|------|------|------|
-| 資金不足 | 高 | 高 | 複数の資金源、最小限のコストで開発 |
-| 競合の台頭 | 中 | 中 | 差別化（ブラウザのみ）、コミュニティ |
-| 採用されない | 中 | 高 | 自治体との連携、災害訓練での実証 |
-| 法規制 | 低 | 高 | 暗号専門家との連携、コンプライアンス |
-
-### 運用リスク
-
-| リスク | 確率 | 影響 | 対策 |
-|--------|------|------|------|
-| 開発者バーンアウト | 中 | 高 | コミュニティ構築、分散開発 |
-| フォーク・分裂 | 低 | 中 | オープンなガバナンス |
-| セキュリティインシデント | 低 | 最高 | 監査、バグバウンティ、迅速な対応 |
+- [ ] Mobile apps
+- [ ] LoRa integration
+- [ ] Post-quantum crypto
+- [ ] International expansion (i18n)
 
 ---
 
-## 9. 成功への道筋
+## 8. Risks and Mitigations
 
-### マイルストーン
+### Technical Risks
+
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| Web Bluetooth API limitations | High | High | Fallback to native apps |
+| Browser compatibility | Medium | Medium | Polyfill + detection + warnings |
+| Crypto library vulnerabilities | Low | High | Dependency monitoring, rapid updates |
+| Quantum computers | Low (short-term) | High | Prepare hybrid crypto |
+
+### Business Risks
+
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| Funding shortage | High | High | Multiple funding sources, minimal costs |
+| Competitor emergence | Medium | Medium | Differentiation (browser-only), community |
+| Lack of adoption | Medium | High | Government partnerships, disaster drill demos |
+| Regulations | Low | High | Crypto expert consultation, compliance |
+
+### Operational Risks
+
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| Developer burnout | Medium | High | Build community, distributed development |
+| Fork/split | Low | Medium | Open governance |
+| Security incident | Low | Critical | Audits, bug bounty, rapid response |
+
+---
+
+## 9. Path to Success
+
+### Milestones
 
 ```
-2026 Q1: MVP完成
-├─ Bluetooth BLE対応
-├─ 鍵管理強化
-└─ 自治体1件とパイロット開始
+2026 Q1: MVP Complete
+├─ Bluetooth BLE support
+├─ Key management hardened
+└─ Pilot with 1 local government
 
-2026 Q2: グループ機能
-├─ グループメッセージング
-├─ Mozilla MOSS獲得
-└─ ユーザー1,000人
+2026 Q2: Group Features
+├─ Group messaging
+├─ Mozilla MOSS award
+└─ 1,000 users
 
-2026 Q3-Q4: 拡張
-├─ モバイルアプリβ
-├─ LoRa実験
-└─ ユーザー10,000人
+2026 Q3-Q4: Expansion
+├─ Mobile app beta
+├─ LoRa experiments
+└─ 10,000 users
 
-2027: スケール
-├─ 政府契約1件
-├─ 国際展開開始
-└─ ユーザー100,000人
+2027: Scale
+├─ 1 government contract
+├─ International expansion begins
+└─ 100,000 users
 ```
 
-### KPI（重要指標）
+### KPIs
 
-| 指標 | 現在 | 6ヶ月 | 12ヶ月 | 24ヶ月 |
-|------|------|-------|--------|--------|
+| Metric | Current | 6 months | 12 months | 24 months |
+|--------|---------|----------|-----------|-----------|
 | GitHub Stars | ? | 500 | 2,000 | 10,000 |
-| 月間ユーザー | 0 | 100 | 1,000 | 50,000 |
-| コントリビューター | 1 | 5 | 20 | 50 |
-| 自治体採用 | 0 | 1 | 5 | 20 |
-| 月間収入 | $0 | $500 | $5,000 | $30,000 |
+| Monthly Users | 0 | 100 | 1,000 | 50,000 |
+| Contributors | 1 | 5 | 20 | 50 |
+| Government Adoptions | 0 | 1 | 5 | 20 |
+| Monthly Revenue | $0 | $500 | $5,000 | $30,000 |
 
-### 成功の定義
-
-```
-最小成功:
-  「災害時に実際に誰かの役に立った」
-
-中成功:
-  「日本の防災インフラの一部になった」
-
-大成功:
-  「世界中の災害現場で使われている」
-```
-
----
-
-## 10. 最終的な提言
-
-### このプロジェクトに人生を賭ける価値はあるか？
-
-**答え: 条件付きでYES**
+### Definition of Success
 
 ```
-賭ける価値がある理由:
-1. 実際に人命を救える可能性がある
-2. 技術的基盤は正しい
-3. 競合が少ない（ブラウザのみ市場）
-4. 社会的意義が高い
-5. 災害大国日本からの発信に意味がある
+Minimum success:
+  "Actually helped someone during a disaster"
 
-賭けるための条件:
-1. リレー実装を完了させる（なければただのデモ）
-2. 最低限の資金を確保する（半年分の生活費）
-3. コミュニティを作る（一人では限界）
-4. 自治体との接点を作る（実運用の機会）
-5. 期限を決める（3年で結果が出なければ見直し）
-```
+Medium success:
+  "Became part of disaster infrastructure in Japan"
 
-### 具体的な次のステップ
-
-```
-明日やること:
-1. GitHub Discussionsを有効化
-2. Discordサーバーを作成
-3. Mozilla MOSSの申請要件を確認
-
-今週やること:
-1. Web Bluetooth APIの調査・プロトタイプ
-2. 鍵エクスポートの警告追加
-3. ロードマップをREADMEに追加
-
-今月やること:
-1. Bluetooth BLE基本実装
-2. Mozilla MOSS申請
-3. 地元自治体の防災担当に連絡
-```
-
-### 心構え
-
-```
-覚悟すべきこと:
-- 短期的な収入はほぼない
-- 99%の人は興味を持たない
-- 災害が起きるまで価値が理解されない
-- 技術だけでは成功しない
-
-それでも続ける理由を持つこと:
-「誰かの命を救えるかもしれない」
-これだけで十分な理由になるか、自問してください。
+Major success:
+  "Used in disaster zones worldwide"
 ```
 
 ---
 
-## 付録
+## 10. Final Recommendations
 
-### A. 参考リソース
+### Is This Project Worth Dedicating Your Life To?
+
+**Answer: Conditional YES**
+
+```
+Reasons it's worth it:
+1. Could actually save lives
+2. Technical foundation is solid
+3. Few competitors (browser-only market)
+4. High social significance
+5. Meaningful to come from disaster-prone Japan
+
+Conditions for commitment:
+1. Complete relay implementation (otherwise it's just a demo)
+2. Secure minimum funding (6 months living expenses)
+3. Build a community (one person has limits)
+4. Create government connections (real-world deployment opportunities)
+5. Set a deadline (reassess if no results in 3 years)
+```
+
+### Concrete Next Steps
+
+```
+Tomorrow:
+1. Enable GitHub Discussions
+2. Create Discord server
+3. Review Mozilla MOSS application requirements
+
+This week:
+1. Research/prototype Web Bluetooth API
+2. Add warning to key export
+3. Add roadmap to README
+
+This month:
+1. Basic Bluetooth BLE implementation
+2. Apply to Mozilla MOSS
+3. Contact local government emergency management
+```
+
+### Mindset
+
+```
+Be prepared for:
+- Almost no short-term income
+- 99% of people won't be interested
+- Value won't be understood until disaster strikes
+- Technology alone won't succeed
+
+Have a reason to continue despite this:
+"I might save someone's life"
+Ask yourself: Is this enough of a reason?
+```
+
+---
+
+## Appendix
+
+### A. Resources
 
 - [Mozilla MOSS](https://www.mozilla.org/en-US/moss/)
 - [NLnet NGI Zero](https://nlnet.nl/NGI0/)
@@ -572,19 +549,31 @@ Phase 3 (24-36ヶ月): スケール
 - [Web Bluetooth API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)
 - [Meshtastic](https://meshtastic.org/)
 
-### B. 連絡先・コミュニティ
+### B. Community
 
-- GitHub Issues: 機能要望・バグ報告
-- GitHub Discussions: 議論・質問
-- Discord: (作成予定)
+- GitHub Issues: Feature requests & bug reports
+- GitHub Discussions: Discussion & questions
+- Discord: (Coming soon)
 
-### C. 更新履歴
+### C. Change Log
 
-| 日付 | 変更 |
-|------|------|
-| 2026-01-30 | 初版作成 |
+| Date | Change |
+|------|--------|
+| 2026-01-30 | Initial version |
 
 ---
 
-*このドキュメントは、プロジェクトの進化とともに更新されます。*
-*最終更新: 2026-01-30*
+## Contributing to This Analysis
+
+This document is a living document. If you have insights, corrections, or suggestions:
+
+1. Open an issue with the `analysis` label
+2. Submit a PR with improvements
+3. Join the discussion in GitHub Discussions
+
+**Every perspective helps make this project better.**
+
+---
+
+*This document will be updated as the project evolves.*
+*Last updated: 2026-01-30*
