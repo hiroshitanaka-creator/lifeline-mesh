@@ -212,7 +212,7 @@ test("decryptMessage rejects sender key mismatch", () => {
   }
 });
 
-test("decryptMessage rejects timestamp skew", () => {
+test("decryptMessage rejects timestamp skew in strict mode (v1.0)", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
   const bobBox = DMesh.generateBoxKeyPair(nacl);
@@ -234,13 +234,140 @@ test("decryptMessage rejects timestamp skew", () => {
       recipientBoxPK: bobBox.publicKey,
       recipientBoxSK: bobBox.secretKey,
       expectedSenderSignPK: null,
-      expectedSenderBoxPK: null
+      expectedSenderBoxPK: null,
+      options: { strictMode: true } // v1.0 strict mode
     }, nacl, naclUtil);
     throw new Error("Should have rejected timestamp skew");
   } catch (e) {
     if (!e.message.includes("Timestamp skew too large")) {
       throw new Error("Wrong error message: " + e.message);
     }
+  }
+});
+
+test("decryptMessage accepts delayed message in DTN mode (v1.1)", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const aliceBox = DMesh.generateBoxKeyPair(nacl);
+  const bobBox = DMesh.generateBoxKeyPair(nacl);
+
+  // Message from 1 hour ago - would fail in strict mode
+  const msg = DMesh.encryptMessage({
+    content: "Hello, Bob!",
+    senderSignPK: aliceSign.publicKey,
+    senderSignSK: aliceSign.secretKey,
+    senderBoxPK: aliceBox.publicKey,
+    senderBoxSK: aliceBox.secretKey,
+    recipientBoxPK: bobBox.publicKey,
+    ts: Date.now() - (60 * 60 * 1000) // 1 hour ago
+  }, nacl, naclUtil);
+
+  // v1.1 DTN mode - should accept (within 7 day default TTL)
+  const result = DMesh.decryptMessage({
+    message: msg,
+    recipientBoxPK: bobBox.publicKey,
+    recipientBoxSK: bobBox.secretKey,
+    expectedSenderSignPK: null,
+    expectedSenderBoxPK: null,
+    options: { strictMode: false }
+  }, nacl, naclUtil);
+
+  if (result.content !== "Hello, Bob!") throw new Error("Decryption failed");
+});
+
+test("decryptMessage rejects expired message (v1.1)", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const aliceBox = DMesh.generateBoxKeyPair(nacl);
+  const bobBox = DMesh.generateBoxKeyPair(nacl);
+
+  // Create message with short TTL that's already expired
+  const msg = DMesh.encryptMessage({
+    content: "Hello, Bob!",
+    senderSignPK: aliceSign.publicKey,
+    senderSignSK: aliceSign.secretKey,
+    senderBoxPK: aliceBox.publicKey,
+    senderBoxSK: aliceBox.secretKey,
+    recipientBoxPK: bobBox.publicKey,
+    ts: Date.now() - (60 * 60 * 1000), // 1 hour ago
+    ttlMs: 30 * 60 * 1000 // 30 minute TTL (already expired)
+  }, nacl, naclUtil);
+
+  try {
+    DMesh.decryptMessage({
+      message: msg,
+      recipientBoxPK: bobBox.publicKey,
+      recipientBoxSK: bobBox.secretKey,
+      expectedSenderSignPK: null,
+      expectedSenderBoxPK: null,
+      options: { strictMode: false }
+    }, nacl, naclUtil);
+    throw new Error("Should have rejected expired message");
+  } catch (e) {
+    if (!e.message.includes("expired")) {
+      throw new Error("Wrong error message: " + e.message);
+    }
+  }
+});
+
+test("encryptMessage includes msgId and exp (v1.1)", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const aliceBox = DMesh.generateBoxKeyPair(nacl);
+  const bobBox = DMesh.generateBoxKeyPair(nacl);
+
+  const msg = DMesh.encryptMessage({
+    content: "Hello, Bob!",
+    senderSignPK: aliceSign.publicKey,
+    senderSignSK: aliceSign.secretKey,
+    senderBoxPK: aliceBox.publicKey,
+    senderBoxSK: aliceBox.secretKey,
+    recipientBoxPK: bobBox.publicKey,
+    type: "im_safe"
+  }, nacl, naclUtil);
+
+  if (!msg.msgId) throw new Error("Missing msgId");
+  if (!msg.exp) throw new Error("Missing exp");
+  if (msg.exp <= msg.ts) throw new Error("exp should be after ts");
+});
+
+test("generateSafetyNumber is symmetric", () => {
+  const aliceFp = DMesh.fingerprintFromSignPK(
+    DMesh.generateSignKeyPair(nacl).publicKey, nacl
+  );
+  const bobFp = DMesh.fingerprintFromSignPK(
+    DMesh.generateSignKeyPair(nacl).publicKey, nacl
+  );
+
+  const sn1 = DMesh.generateSafetyNumber(aliceFp, bobFp);
+  const sn2 = DMesh.generateSafetyNumber(bobFp, aliceFp);
+
+  if (sn1 !== sn2) throw new Error("Safety number should be symmetric");
+  if (!/^\d{4}-\d{4}$/.test(sn1)) throw new Error("Invalid safety number format");
+});
+
+test("messageIdFromCiphertext produces 32-byte ID", () => {
+  const ciphertext = nacl.randomBytes(100);
+  const msgId = DMesh.messageIdFromCiphertext(ciphertext, nacl);
+  if (msgId.length !== 32) throw new Error("Invalid msgId length");
+});
+
+test("isMessageValid validates expiration correctly", () => {
+  const now = Date.now();
+
+  // Valid: no exp, within default TTL
+  const valid1 = { ts: now - 1000, v: 1 };
+  if (!DMesh.isMessageValid(valid1)) throw new Error("Should be valid (within TTL)");
+
+  // Valid: exp in future
+  const valid2 = { ts: now - 1000, exp: now + 60000, v: 1 };
+  if (!DMesh.isMessageValid(valid2)) throw new Error("Should be valid (exp in future)");
+
+  // Invalid: exp in past
+  const invalid1 = { ts: now - 60000, exp: now - 1000, v: 1 };
+  if (DMesh.isMessageValid(invalid1)) throw new Error("Should be invalid (exp in past)");
+
+  // Strict mode: timestamp skew
+  const invalid2 = { ts: now - 15 * 60 * 1000, v: 1 }; // 15 min ago
+  if (DMesh.isMessageValid(invalid2, { strictMode: true })) {
+    throw new Error("Should be invalid in strict mode");
   }
 });
 

@@ -2,11 +2,14 @@
 
 Pure cryptographic functions for Lifeline Mesh, extracted from the UI implementation.
 
+**Protocol Version: 1.1** (backwards-compatible with v1.0)
+
 ## Design Goals
 - **Testable**: Pure functions with no UI dependencies
 - **Portable**: Works in browser and Node.js
 - **Spec-compliant**: Implements PROTOCOL.md exactly
 - **Zero state**: All functions are stateless (except key generation using crypto RNG)
+- **DTN-ready**: Delay-tolerant networking support (v1.1)
 
 ## Files
 
@@ -14,9 +17,26 @@ Pure cryptographic functions for Lifeline Mesh, extracted from the UI implementa
 Core cryptographic operations:
 - Key generation (Ed25519, X25519)
 - Fingerprint derivation
-- Message encryption/signing
-- Message verification/decryption
+- Message encryption/signing with Message ID and expiration (v1.1)
+- Message verification/decryption with delay-tolerant validation (v1.1)
+- Safety number generation for contact verification (v1.1)
+- Message chunking for constrained transports (v1.1)
 - Public identity creation
+
+### `store.js` (v1.1)
+IndexedDB-based message storage for store-and-forward:
+- Outbox: Messages pending delivery
+- Inbox: Received messages
+- Seen: Deduplication cache (msgId + senderFp)
+- Contacts: Extended with verification status
+- Chunks: Partial chunk reassembly
+
+### `transport.js` (v1.1)
+Abstract transport layer for relay-agnostic delivery:
+- QR Code transport (with chunking support)
+- Clipboard transport (copy/paste)
+- File transport (AirDrop, Nearby Share, USB)
+- Transport manager for unified interface
 
 ### `key-backup.js`
 Secure key backup with password-based encryption:
@@ -263,20 +283,156 @@ Check if Argon2 library is loaded.
 ## Constants
 
 ```javascript
+// Protocol domain
 export const DOMAIN = "DMESH_MSG_V1";
 export const MAX_BYTES = 150 * 1024; // 150 KB
+
+// v1.0 (legacy): Strict timestamp skew
 export const MAX_SKEW_MS = 10 * 60 * 1000; // 10 minutes
-export const REPLAY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// v1.1: Delay-tolerant networking
+export const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+export const SEEN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// Chunking constants
+export const CHUNK_OVERHEAD = 150; // JSON envelope overhead
+export const QR_MAX_CHUNK_SIZE = 2048;
+export const SMS_MAX_CHUNK_SIZE = 1200;
+export const LORA_MAX_CHUNK_SIZE = 200;
+export const BLE_MAX_CHUNK_SIZE = 512;
+```
+
+## v1.1 New Features
+
+### Message ID and Expiration
+
+Messages now include `msgId` (SHA-256 hash of ciphertext) and `exp` (expiration timestamp):
+
+```javascript
+const msg = DMesh.encryptMessage({
+  content: "Emergency: Need water",
+  senderSignPK, senderSignSK, senderBoxPK, senderBoxSK,
+  recipientBoxPK,
+  ttlMs: 3 * 24 * 60 * 60 * 1000, // 3 days TTL
+  type: "need_help",
+  payloadExtra: {
+    urgency: "high",
+    location: { lat: 35.6812, lng: 139.7671 }
+  }
+}, nacl, naclUtil);
+
+console.log(msg.msgId); // Base64 message ID
+console.log(msg.exp);   // Expiration timestamp
+```
+
+### Delay-Tolerant Decryption
+
+v1.1 uses expiration-based validation instead of strict timestamp skew:
+
+```javascript
+const result = DMesh.decryptMessage({
+  message: msg,
+  recipientBoxPK, recipientBoxSK,
+  expectedSenderSignPK: null, // TOFU
+  replayCheck: (msgId, senderFp) => store.checkAndMarkSeen(msgId, senderFp),
+  options: { strictMode: false } // Use v1.1 expiration-based validation
+}, nacl, naclUtil);
+
+console.log(result.msgId);  // Message ID
+console.log(result.type);   // "need_help"
+console.log(result.payload); // Full payload with location, urgency
+```
+
+### Safety Numbers
+
+Generate human-readable safety numbers for contact verification:
+
+```javascript
+const myFp = DMesh.fingerprintFromSignPK(mySignPK, nacl);
+const theirFp = DMesh.fingerprintFromSignPK(theirSignPK, nacl);
+
+const safetyNumber = DMesh.generateSafetyNumber(myFp, theirFp);
+console.log(safetyNumber); // "1234-5678" (same for both parties)
+```
+
+### Message Chunking
+
+Split large messages for constrained transports:
+
+```javascript
+const chunks = DMesh.chunkMessage(
+  msg,
+  DMesh.QR_MAX_CHUNK_SIZE,
+  nacl, naclUtil
+);
+
+// Each chunk is a dmesh-chunk object
+chunks.forEach((chunk, i) => {
+  console.log(`Chunk ${i + 1}/${chunk.total}: ${chunk.data.length} bytes`);
+  // Generate QR code for each chunk
+});
+
+// Reassemble on receiver side
+const reassembled = DMesh.reassembleChunks(receivedChunks, naclUtil);
+```
+
+### Message Store (store.js)
+
+Store-and-forward support:
+
+```javascript
+import * as Store from './crypto/store.js';
+
+// Add to outbox
+await Store.addToOutbox(msg, recipientFp);
+
+// Receive and deduplicate
+const allowed = await Store.checkAndMarkSeen(msgId, senderFp);
+if (allowed) {
+  await Store.addToInbox(decryptedResult, originalMsg);
+}
+
+// Contact verification
+await Store.verifyContact(fp);
+const verified = await Store.getVerifiedContacts();
+```
+
+### Transport Layer (transport.js)
+
+Pluggable transport interface:
+
+```javascript
+import { TransportManager } from './crypto/transport.js';
+
+const manager = new TransportManager({ nacl, naclUtil });
+
+// Send via clipboard
+await manager.send("clipboard", msg);
+
+// Or generate QR codes
+const qrDataStrings = await manager.send("qr", msg);
+qrDataStrings.forEach(data => generateQRCode(data));
+
+// Receive from file
+const fileInput = manager.getTransport("file").createFileInput(
+  (messages) => messages.forEach(processMessage)
+);
 ```
 
 ## Testing
 
 See `/tools` for test vector generation and validation utilities.
 
+Run tests:
+```bash
+npm test
+```
+
 ## Security Notes
 
 - All functions are **stateless** except RNG-based key generation
-- Replay protection requires external state (replay database)
+- Replay protection uses `msgId + senderFp` (v1.1) for delay-tolerant deduplication
 - TOFU trust model: set `expectedSenderSignPK` to `null` for first contact
-- Timestamp validation uses local clock (ensure ±10 min accuracy)
+- v1.1 validates against `exp` (expiration) instead of strict timestamp skew
+- Safety numbers enable out-of-band verification for critical contacts
 - No key rotation or revocation mechanisms (future work)
