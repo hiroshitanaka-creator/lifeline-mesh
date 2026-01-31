@@ -1,0 +1,20 @@
+{
+  "name": "lifeline-mesh-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "vite-plugin-singlefile": "^2.0.0"
+  },
+  "dependencies": {
+    "html5-qrcode": "^2.3.8",
+    "qrcode": "^1.5.4",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
+  }
+}
