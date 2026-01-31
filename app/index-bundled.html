@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#4CAF50" />
+  <meta name="description" content="End-to-end encrypted emergency messaging. Offline-first. No server required." />
+  <title>Lifeline Mesh - Emergency Messaging</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" />
+
+  <!-- Bundle all dependencies locally - NO CDN REQUIRED -->
+  <script type="module" src="./main.js"></script>
+
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; max-width: 900px; }
+    textarea, input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+    textarea { min-height: 110px; font-family: monospace; }
+    pre { background: #f6f6f6; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+    button { padding: 10px 12px; cursor: pointer; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .row > * { flex: 1 1 auto; }
+    .small { font-size: 12px; opacity: 0.8; }
+    .ok { color: #0a7; font-weight: 700; }
+    .ng { color: #c33; font-weight: 700; }
+    .danger { background: #ffecec; border: 1px solid #ffb3b3; }
+    .section { margin-bottom: 24px; }
+    details { margin: 8px 0; }
+    summary { cursor: pointer; font-weight: 600; padding: 8px; background: #f0f0f0; border-radius: 4px; }
+
+    /* Modal styles */
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); }
+    .modal-content { background-color: #fff; margin: 10% auto; padding: 20px; border-radius: 8px; max-width: 500px; position: relative; }
+    .modal-close { position: absolute; right: 10px; top: 10px; font-size: 28px; font-weight: bold; cursor: pointer; }
+    #qr-code { text-align: center; margin: 20px 0; }
+    #qr-reader { width: 100%; }
+
+    /* Install prompt */
+    #install-prompt { background: #4CAF50; color: white; padding: 12px; text-align: center; display: none; position: sticky; top: 0; z-index: 100; }
+    #install-prompt button { background: white; color: #4CAF50; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px; }
+
+    /* Offline indicator */
+    .offline-badge { background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px; }
+
+    /* Dark Mode Support */
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a2e; color: #eee; }
+      textarea, input, select { background: #16213e; color: #eee; border: 1px solid #444; }
+      pre { background: #16213e; color: #ddd; }
+      button { background: #0f3460; color: #eee; border: 1px solid #444; }
+      button:hover { background: #1a4a7a; }
+      .danger { background: #4a1a1a; border-color: #7a3333; }
+      summary { background: #16213e; color: #eee; }
+      .modal-content { background: #1a1a2e; color: #eee; }
+      .ok { color: #4ade80; }
+      .ng { color: #f87171; }
+      a { color: #60a5fa; }
+      a:visited { color: #a78bfa; }
+      #install-prompt { background: #065f46; }
+      #install-prompt button { background: #10b981; color: #fff; }
+      h1, h2, h3 { color: #f0f0f0; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- PWA Install Prompt -->
+  <div id="install-prompt">
+    📱 Install Lifeline Mesh as an app for offline access
+    <button onclick="installPWA()">Install</button>
+    <button onclick="dismissInstall()">Later</button>
+  </div>
+
+  <h1>🌐 Lifeline Mesh <span class="offline-badge">OFFLINE</span></h1>
+  <p class="small">
+    End-to-end encrypted emergency messaging • Offline-first • No server required<br>
+    ✅ Ed25519 signatures • ✅ X25519 encryption • ✅ Ephemeral keys • ✅ Replay protection • ✅ TOFU<br>
+    <strong>🔒 Bundled build - zero external dependencies</strong>
+  </p>
+
+  <div class="section">
+    <h2>1) Your Keys</h2>
+    <div class="row">
+      <button onclick="initOrLoad()">🔑 Generate / Load Keys</button>
+      <button class="danger" onclick="resetAll()">🗑️ RESET ALL</button>
+    </div>
+    <pre id="my-id">(not loaded)</pre>
+    <div class="row">
+      <button onclick="copyMyId()">📋 Copy My Public ID</button>
+      <button onclick="showQRCode()">📱 Show QR Code</button>
+      <button onclick="exportKeys()">💾 Export Keys</button>
+      <button onclick="importKeys()">📥 Import Keys</button>
+    </div>
+
+    <details>
+      <summary>Key Management</summary>
+      <p class="small">
+        <strong>QR Code:</strong> Display your public ID as QR code for easy scanning<br>
+        <strong>Export:</strong> Download your secret keys as encrypted JSON (password-protected)<br>
+        <strong>Import:</strong> Restore keys from backup file<br>
+        <strong>⚠️ Warning:</strong> Keep exported keys secure. Anyone with your secret keys can impersonate you.
+      </p>
+    </details>
+  </div>
+
+  <div class="section">
+    <h2>2) Contacts</h2>
+    <textarea id="contact-input" placeholder='{"name":"Bob","signPK":"base64","boxPK":"base64"}'></textarea>
+    <div class="row">
+      <button onclick="addContact()">➕ Add Contact</button>
+      <button onclick="scanQRCode()">📷 Scan QR Code</button>
+      <button onclick="refreshContacts()">🔄 Refresh</button>
+      <button class="danger" onclick="deleteSelectedContact()">❌ Delete Selected</button>
+    </div>
+    <select id="recipient-select">
+      <option value="">Select Recipient</option>
+    </select>
+    <pre id="contacts-view">(none)</pre>
+  </div>
+
+  <div class="section">
+    <h2>3) Encrypt Message</h2>
+    <textarea id="content" placeholder="Type your message here (max 150KB)"></textarea>
+    <div class="row">
+      <button onclick="encryptMsg()">🔒 Encrypt</button>
+      <span class="small">Recipient: <strong id="encrypt-recipient">(select above)</strong></span>
+    </div>
+    <pre id="encrypted"></pre>
+    <div class="row" id="encrypted-actions" style="display:none">
+      <button onclick="copyEncrypted()">📋 Copy Encrypted Message</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>4) Decrypt Message</h2>
+    <textarea id="input" placeholder="Paste encrypted JSON message here"></textarea>
+    <label class="small">
+      <input type="checkbox" id="tofu" />
+      TOFU (Trust On First Use - auto-accept unknown senders)
+    </label>
+    <div class="row">
+      <button onclick="decryptMsg()">🔓 Decrypt</button>
+    </div>
+    <pre id="status"></pre>
+    <pre id="decrypted"></pre>
+  </div>
+
+  <div class="section" id="ble-section">
+    <h2>5) Bluetooth Relay</h2>
+    <div id="ble-unsupported" style="display:none;">
+      <p class="small ng">⚠️ Web Bluetooth not supported in this browser. Use Chrome or Edge.</p>
+    </div>
+    <div id="ble-supported">
+      <div class="row">
+        <span class="small">Status: <strong id="ble-status">🔴 Not connected</strong></span>
+      </div>
+      <div class="row">
+        <button onclick="bleScan()">📡 Scan for Devices</button>
+        <button onclick="bleDisconnect()">❌ Disconnect</button>
+      </div>
+      <div class="small" style="margin-top: 8px;">
+        Connected to: <span id="ble-device-name">(none)</span>
+      </div>
+      <details style="margin-top: 12px;">
+        <summary>Received Messages via Bluetooth</summary>
+        <pre id="ble-messages">(none)</pre>
+      </details>
+      <div class="row" style="margin-top: 8px;">
+        <button onclick="bleSendEncrypted()">📤 Send Last Encrypted via Bluetooth</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <details>
+      <summary>📚 Documentation</summary>
+      <ul>
+        <li><a href="../docs/USAGE.md" target="_blank">Usage Guide</a></li>
+        <li><a href="../docs/FAQ.md" target="_blank">FAQ</a></li>
+        <li><a href="../spec/THREAT_MODEL.md" target="_blank">Threat Model</a></li>
+        <li><a href="../spec/PROTOCOL.md" target="_blank">Protocol Specification</a></li>
+      </ul>
+    </details>
+  </div>
+
+  <!-- QR Code Modal -->
+  <div id="qr-modal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close" onclick="closeQRModal()">&times;</span>
+      <h3>Your Public ID QR Code</h3>
+      <div id="qr-code"></div>
+      <p class="small">Scan this with another device to add you as a contact</p>
+    </div>
+  </div>
+
+  <!-- QR Scanner Modal -->
+  <div id="qr-scanner-modal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close" onclick="closeQRScanner()">&times;</span>
+      <h3>Scan Contact QR Code</h3>
+      <div id="qr-reader"></div>
+      <p class="small">Point camera at QR code to add contact</p>
+    </div>
+  </div>
+
+<script type="module">
+/* =========================
+  Bundled App Logic
+  Uses window globals set by main.js
+========================= */
+
+// Wait for main.js to load globals
+await new Promise(resolve => {
+  if (window.nacl && window.DMesh) {
+    resolve();
+  } else {
+    const check = setInterval(() => {
+      if (window.nacl && window.DMesh) {
+        clearInterval(check);
+        resolve();
+      }
+    }, 10);
+  }
+});
+
+const { nacl, DMesh, BLEManager, Html5Qrcode, QRCode } = window;
+
+/* =========================
+  BLE Manager
+========================= */
+let bleManager = null;
+let lastEncryptedMessage = null;
+
+function initBLE() {
+  if (!BLEManager.isSupported()) {
+    document.getElementById('ble-unsupported').style.display = 'block';
+    document.getElementById('ble-supported').style.display = 'none';
+    return;
+  }
+
+  bleManager = new BLEManager();
+
+  bleManager.onConnectionChange = (connected, device) => {
+    const statusEl = document.getElementById('ble-status');
+    const deviceEl = document.getElementById('ble-device-name');
+
+    if (connected) {
+      statusEl.textContent = '🟢 Connected';
+      statusEl.className = 'ok';
+      deviceEl.textContent = device.name || device.id || 'Unknown device';
+    } else {
+      statusEl.textContent = '🔴 Not connected';
+      statusEl.className = 'ng';
+      deviceEl.textContent = '(none)';
+    }
+  };
+
+  bleManager.onMessageReceived = (message, type) => {
+    const messagesEl = document.getElementById('ble-messages');
+    const timestamp = new Date().toLocaleTimeString();
+    const current = messagesEl.textContent === '(none)' ? '' : messagesEl.textContent + '\n---\n';
+    messagesEl.textContent = current + `[${timestamp}] Received:\n${JSON.stringify(message, null, 2)}`;
+
+    // Auto-fill decrypt input
+    document.getElementById('input').value = JSON.stringify(message, null, 2);
+    setStatus(true, 'Received message via Bluetooth - ready to decrypt');
+  };
+
+  bleManager.onError = (code, error) => {
+    setStatus(false, `Bluetooth error: ${code}`);
+    console.error('BLE Error:', code, error);
+  };
+}
+
+window.bleScan = async function() {
+  if (!bleManager) {
+    setStatus(false, 'Bluetooth not supported');
+    return;
+  }
+
+  try {
+    setStatus(true, 'Scanning for devices...');
+    await bleManager.scan();
+    setStatus(true, 'Connecting...');
+    await bleManager.connect();
+    setStatus(true, 'Connected via Bluetooth!');
+  } catch (e) {
+    setStatus(false, 'Bluetooth: ' + e.message);
+  }
+};
+
+window.bleDisconnect = function() {
+  if (bleManager) {
+    bleManager.disconnect();
+    setStatus(true, 'Disconnected');
+  }
+};
+
+window.bleSendEncrypted = async function() {
+  if (!bleManager || !bleManager.isConnected) {
+    setStatus(false, 'Not connected via Bluetooth');
+    return;
+  }
+
+  const encryptedText = document.getElementById('encrypted').textContent;
+  if (!encryptedText || encryptedText === '') {
+    setStatus(false, 'No encrypted message to send. Encrypt a message first.');
+    return;
+  }
+
+  try {
+    const message = JSON.parse(encryptedText);
+    await bleManager.sendMessage(message);
+    setStatus(true, 'Message sent via Bluetooth!');
+  } catch (e) {
+    setStatus(false, 'Bluetooth send failed: ' + e.message);
+  }
+};
+
+/* =========================
+  Config
+========================= */
+const DB_NAME = "lifelineMesh";
+const DB_VERSION = 1;
+const STORE_KEYS = "keys";
+const STORE_CONTACTS = "contacts";
+const STORE_REPLAY = "replay";
+
+/* =========================
+  IndexedDB helpers
+========================= */
+let dbPromise = null;
+
+function openDB() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_KEYS)) db.createObjectStore(STORE_KEYS);
+      if (!db.objectStoreNames.contains(STORE_CONTACTS)) db.createObjectStore(STORE_CONTACTS, { keyPath: "fp" });
+      if (!db.objectStoreNames.contains(STORE_REPLAY)) db.createObjectStore(STORE_REPLAY, { keyPath: "k" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+
+async function idbGet(store, key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(store, value, key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readwrite");
+    const st = tx.objectStore(store);
+    if (key !== undefined) st.put(value, key);
+    else st.put(value);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbDel(store, key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readwrite");
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGetAll(store) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/* =========================
+  Utility
+========================= */
+function setStatus(ok, msg) {
+  document.getElementById("status").innerHTML = (ok ? `<span class="ok">✓ OK</span> ` : `<span class="ng">✗ ERROR</span> `) + msg;
+}
+
+/* =========================
+  Key Management
+========================= */
+async function ensureMyKeys() {
+  let signPK = await idbGet(STORE_KEYS, "my_sign_pk");
+  let signSK = await idbGet(STORE_KEYS, "my_sign_sk");
+  let boxPK = await idbGet(STORE_KEYS, "my_box_pk");
+  let boxSK = await idbGet(STORE_KEYS, "my_box_sk");
+
+  if (!signPK || !signSK) {
+    const kp = DMesh.generateSignKeyPair(nacl);
+    signPK = nacl.util.encodeBase64(kp.publicKey);
+    signSK = nacl.util.encodeBase64(kp.secretKey);
+    await idbPut(STORE_KEYS, signPK, "my_sign_pk");
+    await idbPut(STORE_KEYS, signSK, "my_sign_sk");
+  }
+
+  if (!boxPK || !boxSK) {
+    const kp = DMesh.generateBoxKeyPair(nacl);
+    boxPK = nacl.util.encodeBase64(kp.publicKey);
+    boxSK = nacl.util.encodeBase64(kp.secretKey);
+    await idbPut(STORE_KEYS, boxPK, "my_box_pk");
+    await idbPut(STORE_KEYS, boxSK, "my_box_sk");
+  }
+
+  return {
+    signPKu8: nacl.util.decodeBase64(signPK),
+    signSKu8: nacl.util.decodeBase64(signSK),
+    boxPKu8: nacl.util.decodeBase64(boxPK),
+    boxSKu8: nacl.util.decodeBase64(boxSK)
+  };
+}
+
+window.initOrLoad = async function() {
+  try {
+    const my = await ensureMyKeys();
+    const myId = DMesh.createPublicIdentity({
+      name: "(optional)",
+      signPK: my.signPKu8,
+      boxPK: my.boxPKu8
+    }, nacl, nacl.util);
+
+    document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
+    await refreshContacts();
+    setStatus(true, `Keys ready. Fingerprint: ${myId.fp}`);
+  } catch (e) {
+    setStatus(false, e.message);
+  }
+};
+
+window.copyMyId = async function() {
+  const t = document.getElementById("my-id").textContent;
+  if (!t || t === "(not loaded)") return alert("Generate keys first");
+  await navigator.clipboard.writeText(t);
+  setStatus(true, "Public ID copied to clipboard");
+};
+
+window.exportKeys = async function() {
+  const warningMsg = "WARNING: Key backup encryption is currently WEAK (demo-grade).\n\n" +
+    "For critical use, manually store your keys securely.\n" +
+    "Upgrade to Argon2id encryption is planned.\n\n" +
+    "Continue with export?";
+  if (!confirm(warningMsg)) return;
+
+  const password = prompt("Enter password to encrypt your keys:\n(Use a STRONG password - encryption is weak)");
+  if (!password) return;
+
+  try {
+    const signPK = await idbGet(STORE_KEYS, "my_sign_pk");
+    const signSK = await idbGet(STORE_KEYS, "my_sign_sk");
+    const boxPK = await idbGet(STORE_KEYS, "my_box_pk");
+    const boxSK = await idbGet(STORE_KEYS, "my_box_sk");
+
+    if (!signPK || !signSK || !boxPK || !boxSK) {
+      return alert("No keys to export. Generate keys first.");
+    }
+
+    const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
+
+    const encrypt = (data) => {
+      const dataBytes = nacl.util.decodeBase64(data);
+      const encrypted = new Uint8Array(dataBytes.length);
+      for (let i = 0; i < dataBytes.length; i++) {
+        encrypted[i] = dataBytes[i] ^ passwordHash[i % passwordHash.length];
+      }
+      return nacl.util.encodeBase64(encrypted);
+    };
+
+    const backup = {
+      version: 1,
+      exported: new Date().toISOString(),
+      keys: {
+        signPK: encrypt(signPK),
+        signSK: encrypt(signSK),
+        boxPK: encrypt(boxPK),
+        boxSK: encrypt(boxSK)
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lifeline-mesh-keys-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    setStatus(true, "Keys exported (weak encryption - store backup securely!)");
+  } catch (e) {
+    setStatus(false, "Export failed: " + e.message);
+  }
+};
+
+window.importKeys = async function() {
+  const password = prompt("Enter password to decrypt your keys:");
+  if (!password) return;
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+
+  input.onchange = async (e) => {
+    try {
+      const file = e.target.files[0];
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      if (backup.version !== 1 || !backup.keys) {
+        return alert("Invalid backup file format");
+      }
+
+      const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
+
+      const decrypt = (encrypted) => {
+        const encryptedBytes = nacl.util.decodeBase64(encrypted);
+        const decrypted = new Uint8Array(encryptedBytes.length);
+        for (let i = 0; i < encryptedBytes.length; i++) {
+          decrypted[i] = encryptedBytes[i] ^ passwordHash[i % passwordHash.length];
+        }
+        return nacl.util.encodeBase64(decrypted);
+      };
+
+      const signPK = decrypt(backup.keys.signPK);
+      const signSK = decrypt(backup.keys.signSK);
+      const boxPK = decrypt(backup.keys.boxPK);
+      const boxSK = decrypt(backup.keys.boxSK);
+
+      if (nacl.util.decodeBase64(signPK).length !== 32 ||
+          nacl.util.decodeBase64(signSK).length !== 64 ||
+          nacl.util.decodeBase64(boxPK).length !== 32 ||
+          nacl.util.decodeBase64(boxSK).length !== 32) {
+        return alert("Decryption failed - wrong password or corrupted file");
+      }
+
+      await idbPut(STORE_KEYS, signPK, "my_sign_pk");
+      await idbPut(STORE_KEYS, signSK, "my_sign_sk");
+      await idbPut(STORE_KEYS, boxPK, "my_box_pk");
+      await idbPut(STORE_KEYS, boxSK, "my_box_sk");
+
+      await initOrLoad();
+      setStatus(true, "Keys imported successfully");
+    } catch (e) {
+      setStatus(false, "Import failed: " + e.message);
+    }
+  };
+
+  input.click();
+};
+
+window.resetAll = async function() {
+  if (!confirm("⚠️ Delete ALL data (keys, contacts, replay DB)?\nThis cannot be undone!")) return;
+
+  if (dbPromise) {
+    const db = await dbPromise;
+    db.close();
+    dbPromise = null;
+  }
+
+  await new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(DB_NAME);
+    req.onsuccess = resolve;
+    req.onerror = () => reject(req.error);
+  });
+
+  document.getElementById("my-id").textContent = "(not loaded)";
+  document.getElementById("contacts-view").textContent = "(none)";
+  document.getElementById("recipient-select").innerHTML = `<option value="">Select Recipient</option>`;
+  document.getElementById("encrypted").textContent = "";
+  document.getElementById("decrypted").textContent = "";
+  setStatus(true, "All data deleted");
+};
+
+/* =========================
+  Contacts
+========================= */
+window.addContact = async function() {
+  try {
+    const obj = JSON.parse(document.getElementById("contact-input").value.trim());
+
+    if (!obj || !obj.signPK || !obj.boxPK) {
+      return alert("Invalid format. Need: signPK and boxPK");
+    }
+
+    const signPKu8 = nacl.util.decodeBase64(obj.signPK);
+    const boxPKu8 = nacl.util.decodeBase64(obj.boxPK);
+
+    if (signPKu8.length !== 32) return alert("Invalid signPK length");
+    if (boxPKu8.length !== 32) return alert("Invalid boxPK length");
+
+    const fp = DMesh.fingerprintFromSignPK(signPKu8, nacl);
+    const fpB64 = nacl.util.encodeBase64(fp);
+
+    const contact = {
+      fp: fpB64,
+      name: obj.name || `Contact-${fpB64.slice(0, 8)}`,
+      signPK: obj.signPK,
+      boxPK: obj.boxPK,
+      addedAt: Date.now()
+    };
+
+    await idbPut(STORE_CONTACTS, contact);
+    await refreshContacts();
+    setStatus(true, `Contact saved: ${contact.name} (fp: ${fpB64.slice(0, 16)}...)`);
+  } catch (e) {
+    setStatus(false, "Add contact failed: " + e.message);
+  }
+};
+
+window.refreshContacts = async function() {
+  const contacts = await idbGetAll(STORE_CONTACTS);
+  contacts.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  const sel = document.getElementById("recipient-select");
+  sel.innerHTML = `<option value="">Select Recipient</option>`;
+
+  for (const c of contacts) {
+    const opt = document.createElement("option");
+    opt.value = c.fp;
+    opt.textContent = `${c.name} [${c.fp.slice(0, 12)}...]`;
+    sel.appendChild(opt);
+  }
+
+  sel.onchange = () => {
+    const selected = sel.options[sel.selectedIndex].text;
+    document.getElementById("encrypt-recipient").textContent = selected || "(select above)";
+  };
+
+  document.getElementById("contacts-view").textContent =
+    contacts.length ? JSON.stringify(contacts, null, 2) : "(none)";
+};
+
+window.deleteSelectedContact = async function() {
+  const fp = document.getElementById("recipient-select").value;
+  if (!fp) return alert("Select a contact first");
+
+  await idbDel(STORE_CONTACTS, fp);
+  await refreshContacts();
+  setStatus(true, `Contact deleted (fp: ${fp.slice(0, 16)}...)`);
+};
+
+/* =========================
+  Encryption
+========================= */
+window.encryptMsg = async function() {
+  try {
+    const content = document.getElementById("content").value || "";
+    const fp = document.getElementById("recipient-select").value;
+
+    if (!fp) return alert("Select a recipient");
+
+    const recipient = await idbGet(STORE_CONTACTS, fp);
+    if (!recipient) return alert("Recipient not found");
+
+    const my = await ensureMyKeys();
+
+    const message = DMesh.encryptMessage({
+      content,
+      senderSignPK: my.signPKu8,
+      senderSignSK: my.signSKu8,
+      senderBoxPK: my.boxPKu8,
+      senderBoxSK: my.boxSKu8,
+      recipientBoxPK: nacl.util.decodeBase64(recipient.boxPK)
+    }, nacl, nacl.util);
+
+    document.getElementById("encrypted").textContent = JSON.stringify(message, null, 2);
+    document.getElementById("encrypted-actions").style.display = "flex";
+    setStatus(true, `Encrypted for ${recipient.name}`);
+  } catch (e) {
+    setStatus(false, "Encryption failed: " + e.message);
+  }
+};
+
+window.copyEncrypted = async function() {
+  const text = document.getElementById("encrypted").textContent;
+  await navigator.clipboard.writeText(text);
+  setStatus(true, "Encrypted message copied to clipboard");
+};
+
+/* =========================
+  Decryption
+========================= */
+async function cleanupReplay() {
+  const all = await idbGetAll(STORE_REPLAY);
+  const now = Date.now();
+  const old = all.filter(x => (now - (x.seenAt || 0)) > DMesh.REPLAY_RETENTION_MS);
+  for (const o of old) await idbDel(STORE_REPLAY, o.k);
+}
+
+async function checkAndMarkReplay(senderFp, nonceB64) {
+  await cleanupReplay();
+  const k = `${senderFp}:${nonceB64}`;
+  const existing = await idbGet(STORE_REPLAY, k);
+  if (existing) return false;
+  await idbPut(STORE_REPLAY, { k, seenAt: Date.now() });
+  return true;
+}
+
+window.decryptMsg = async function() {
+  try {
+    const message = JSON.parse(document.getElementById("input").value.trim());
+    const my = await ensureMyKeys();
+
+    const senderSignPK = nacl.util.decodeBase64(message.senderSignPK);
+    const senderFp = DMesh.fingerprintFromSignPK(senderSignPK, nacl);
+    const senderFpB64 = nacl.util.encodeBase64(senderFp);
+
+    let contact = await idbGet(STORE_CONTACTS, senderFpB64);
+
+    let expectedSenderSignPK = null;
+    let expectedSenderBoxPK = null;
+
+    if (!contact) {
+      if (!document.getElementById("tofu").checked) {
+        setStatus(false, `Unknown sender (fp: ${senderFpB64.slice(0, 16)}...). Enable TOFU or add contact first.`);
+        return;
+      }
+      contact = {
+        fp: senderFpB64,
+        name: `TOFU-${senderFpB64.slice(0, 8)}`,
+        signPK: message.senderSignPK,
+        boxPK: message.senderBoxPK,
+        addedAt: Date.now()
+      };
+      await idbPut(STORE_CONTACTS, contact);
+      await refreshContacts();
+    } else {
+      expectedSenderSignPK = nacl.util.decodeBase64(contact.signPK);
+      expectedSenderBoxPK = nacl.util.decodeBase64(contact.boxPK);
+    }
+
+    const replayCheck = (fp, nonceB64) => checkAndMarkReplay(fp, nonceB64);
+
+    const result = DMesh.decryptMessage({
+      message,
+      recipientBoxPK: my.boxPKu8,
+      recipientBoxSK: my.boxSKu8,
+      expectedSenderSignPK,
+      expectedSenderBoxPK,
+      replayCheck
+    }, nacl, nacl.util);
+
+    document.getElementById("decrypted").textContent = result.content;
+    setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
+  } catch (e) {
+    setStatus(false, "Decryption failed: " + e.message);
+    document.getElementById("decrypted").textContent = "";
+  }
+};
+
+/* =========================
+  QR Code Functions
+========================= */
+window.showQRCode = function() {
+  const idText = document.getElementById("my-id").textContent;
+  if (!idText || idText === "(not loaded)") {
+    return alert("Generate keys first");
+  }
+
+  const qrContainer = document.getElementById("qr-code");
+  qrContainer.innerHTML = "";
+
+  new QRCode(qrContainer, {
+    text: idText,
+    width: 256,
+    height: 256,
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  document.getElementById("qr-modal").style.display = "block";
+};
+
+window.closeQRModal = function() {
+  document.getElementById("qr-modal").style.display = "none";
+};
+
+let html5QrCode = null;
+
+window.scanQRCode = async function() {
+  const modal = document.getElementById("qr-scanner-modal");
+  modal.style.display = "block";
+
+  try {
+    if (!html5QrCode) {
+      html5QrCode = new Html5Qrcode("qr-reader");
+    }
+
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      (decodedText) => {
+        document.getElementById("contact-input").value = decodedText;
+        closeQRScanner();
+        addContact();
+      },
+      (errorMessage) => {
+        // Scanning error (ignore, happens frequently)
+      }
+    );
+  } catch (err) {
+    alert("Camera access error: " + err);
+    closeQRScanner();
+  }
+};
+
+window.closeQRScanner = async function() {
+  if (html5QrCode && html5QrCode.isScanning) {
+    try {
+      await html5QrCode.stop();
+    } catch (e) {
+      console.error("QR scanner stop error:", e);
+    }
+  }
+  document.getElementById("qr-scanner-modal").style.display = "none";
+};
+
+window.onclick = function(event) {
+  const qrModal = document.getElementById("qr-modal");
+  const scannerModal = document.getElementById("qr-scanner-modal");
+
+  if (event.target === qrModal) {
+    closeQRModal();
+  }
+  if (event.target === scannerModal) {
+    closeQRScanner();
+  }
+};
+
+/* =========================
+  PWA Support
+========================= */
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-prompt').style.display = 'block';
+});
+
+window.installPWA = async function() {
+  if (!deferredPrompt) return;
+
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+
+  if (outcome === 'accepted') {
+    setStatus(true, 'PWA installed successfully');
+  }
+
+  deferredPrompt = null;
+  document.getElementById('install-prompt').style.display = 'none';
+};
+
+window.dismissInstall = function() {
+  document.getElementById('install-prompt').style.display = 'none';
+};
+
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(registration => {
+        console.log('SW registered:', registration);
+      })
+      .catch(err => {
+        console.log('SW registration failed:', err);
+      });
+  });
+}
+
+/* =========================
+  Auto-init
+========================= */
+(async () => {
+  try {
+    initBLE();
+    await initOrLoad();
+  } catch (e) {
+    console.error("Auto-init failed:", e);
+  }
+})();
+</script>
+</body>
+</html>
