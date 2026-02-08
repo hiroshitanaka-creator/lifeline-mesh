@@ -37,18 +37,18 @@ const BACKUP_VERSION = 2;
  * @returns {boolean}
  */
 export function isArgon2Available() {
-  return typeof window !== "undefined" && typeof window.argon2 !== "undefined";
+  return typeof window !== "undefined" && typeof /** @type {*} */ (window).argon2 !== "undefined";
 }
 
 /**
  * Derive encryption key from password using Argon2id
  * @param {string} password - User password
  * @param {Uint8Array} salt - Random salt (16 bytes)
- * @param {Object} nacl - TweetNaCl instance
+ * @param {Object} _nacl - TweetNaCl instance (unused, kept for API consistency)
  * @returns {Promise<Uint8Array>} - 32-byte key
  */
 async function deriveKeyArgon2(password, salt, _nacl) {
-  const argon2 = window.argon2;
+  const argon2 = /** @type {*} */ (window).argon2;
 
   const result = await argon2.hash({
     pass: password,
@@ -86,7 +86,7 @@ async function deriveKeyPBKDF2(password, salt) {
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt: salt,
+      salt: /** @type {BufferSource} */ (salt),
       iterations: PBKDF2_CONFIG.iterations,
       hash: PBKDF2_CONFIG.hash
     },
