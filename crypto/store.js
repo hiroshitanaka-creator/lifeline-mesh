@@ -70,7 +70,7 @@ export function openDB() {
     };
 
     request.onupgradeneeded = (event) => {
-      const db = event.target.result;
+      const db = /** @type {IDBOpenDBRequest} */ (event.target).result;
       const oldVersion = event.oldVersion;
 
       // Keys store (user's own keys)

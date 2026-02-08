@@ -15,18 +15,18 @@
 
 // Argon2id parameters (OWASP recommended for password storage)
 const ARGON2_CONFIG = {
-  type: 2,         // Argon2id
-  timeCost: 3,     // iterations
+  type: 2, // Argon2id
+  timeCost: 3, // iterations
   memoryCost: 65536, // 64 MB
   parallelism: 4,
-  hashLength: 32,  // 256 bits for secretbox key
+  hashLength: 32 // 256 bits for secretbox key
 };
 
 // PBKDF2 fallback parameters (when Argon2 unavailable)
 const PBKDF2_CONFIG = {
   iterations: 600000, // OWASP 2023 recommendation
-  hash: 'SHA-256',
-  keyLength: 32,
+  hash: "SHA-256",
+  keyLength: 32
 };
 
 // Backup format version
@@ -37,18 +37,18 @@ const BACKUP_VERSION = 2;
  * @returns {boolean}
  */
 export function isArgon2Available() {
-  return typeof window !== 'undefined' && typeof window.argon2 !== 'undefined';
+  return typeof window !== "undefined" && typeof /** @type {*} */ (window).argon2 !== "undefined";
 }
 
 /**
  * Derive encryption key from password using Argon2id
  * @param {string} password - User password
  * @param {Uint8Array} salt - Random salt (16 bytes)
- * @param {Object} nacl - TweetNaCl instance
+ * @param {Object} _nacl - TweetNaCl instance (unused, kept for API consistency)
  * @returns {Promise<Uint8Array>} - 32-byte key
  */
-async function deriveKeyArgon2(password, salt, nacl) {
-  const argon2 = window.argon2;
+async function deriveKeyArgon2(password, salt, _nacl) {
+  const argon2 = /** @type {*} */ (window).argon2;
 
   const result = await argon2.hash({
     pass: password,
@@ -57,7 +57,7 @@ async function deriveKeyArgon2(password, salt, nacl) {
     time: ARGON2_CONFIG.timeCost,
     mem: ARGON2_CONFIG.memoryCost,
     parallelism: ARGON2_CONFIG.parallelism,
-    hashLen: ARGON2_CONFIG.hashLength,
+    hashLen: ARGON2_CONFIG.hashLength
   });
 
   return new Uint8Array(result.hash);
@@ -75,20 +75,20 @@ async function deriveKeyPBKDF2(password, salt) {
 
   // Import password as key material
   const keyMaterial = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     passwordBytes,
-    'PBKDF2',
+    "PBKDF2",
     false,
-    ['deriveBits']
+    ["deriveBits"]
   );
 
   // Derive key
   const derivedBits = await crypto.subtle.deriveBits(
     {
-      name: 'PBKDF2',
-      salt: salt,
+      name: "PBKDF2",
+      salt: /** @type {BufferSource} */ (salt),
       iterations: PBKDF2_CONFIG.iterations,
-      hash: PBKDF2_CONFIG.hash,
+      hash: PBKDF2_CONFIG.hash
     },
     keyMaterial,
     PBKDF2_CONFIG.keyLength * 8
@@ -109,11 +109,11 @@ async function deriveKeyPBKDF2(password, salt) {
 export async function deriveKey(password, salt, nacl) {
   if (isArgon2Available()) {
     const key = await deriveKeyArgon2(password, salt, nacl);
-    return { key, kdf: 'argon2id' };
-  } else {
-    const key = await deriveKeyPBKDF2(password, salt);
-    return { key, kdf: 'pbkdf2' };
+    return { key, kdf: "argon2id" };
   }
+  const key = await deriveKeyPBKDF2(password, salt);
+  return { key, kdf: "pbkdf2" };
+
 }
 
 /**
@@ -132,11 +132,11 @@ export async function deriveKey(password, salt, nacl) {
 export async function encryptKeys(keys, password, nacl, naclUtil) {
   // Validate input
   if (!keys.signPK || !keys.signSK || !keys.boxPK || !keys.boxSK) {
-    throw new Error('Missing required keys');
+    throw new Error("Missing required keys");
   }
 
   if (!password || password.length < 1) {
-    throw new Error('Password is required');
+    throw new Error("Password is required");
   }
 
   // Generate random salt and nonce
@@ -153,17 +153,17 @@ export async function encryptKeys(keys, password, nacl, naclUtil) {
   const ciphertext = nacl.secretbox(plaintext, nonce, key);
 
   if (!ciphertext) {
-    throw new Error('Encryption failed');
+    throw new Error("Encryption failed");
   }
 
   return {
     version: BACKUP_VERSION,
     kdf: kdf,
-    kdfParams: kdf === 'argon2id' ? ARGON2_CONFIG : PBKDF2_CONFIG,
+    kdfParams: kdf === "argon2id" ? ARGON2_CONFIG : PBKDF2_CONFIG,
     salt: naclUtil.encodeBase64(salt),
     nonce: naclUtil.encodeBase64(nonce),
     ciphertext: naclUtil.encodeBase64(ciphertext),
-    exported: new Date().toISOString(),
+    exported: new Date().toISOString()
   };
 }
 
@@ -179,7 +179,7 @@ export async function encryptKeys(keys, password, nacl, naclUtil) {
 export async function decryptKeys(backup, password, nacl, naclUtil) {
   // Validate backup format
   if (!backup || !backup.version) {
-    throw new Error('Invalid backup format');
+    throw new Error("Invalid backup format");
   }
 
   if (backup.version !== BACKUP_VERSION) {
@@ -193,15 +193,15 @@ export async function decryptKeys(backup, password, nacl, naclUtil) {
 
   // Derive key using same KDF
   let key;
-  if (backup.kdf === 'argon2id') {
+  if (backup.kdf === "argon2id") {
     if (!isArgon2Available()) {
       throw new Error(
-        'This backup was encrypted with Argon2id, which is not available. ' +
-        'Please use a browser with Argon2 support or load the argon2-browser library.'
+        "This backup was encrypted with Argon2id, which is not available. " +
+        "Please use a browser with Argon2 support or load the argon2-browser library."
       );
     }
     key = await deriveKeyArgon2(password, salt, nacl);
-  } else if (backup.kdf === 'pbkdf2') {
+  } else if (backup.kdf === "pbkdf2") {
     key = await deriveKeyPBKDF2(password, salt);
   } else {
     throw new Error(`Unknown KDF: ${backup.kdf}`);
@@ -211,7 +211,7 @@ export async function decryptKeys(backup, password, nacl, naclUtil) {
   const plaintext = nacl.secretbox.open(ciphertext, nonce, key);
 
   if (!plaintext) {
-    throw new Error('Decryption failed - wrong password or corrupted backup');
+    throw new Error("Decryption failed - wrong password or corrupted backup");
   }
 
   // Parse JSON
@@ -219,7 +219,7 @@ export async function decryptKeys(backup, password, nacl, naclUtil) {
 
   // Validate decrypted keys
   if (!keys.signPK || !keys.signSK || !keys.boxPK || !keys.boxSK) {
-    throw new Error('Decrypted data is missing required keys');
+    throw new Error("Decrypted data is missing required keys");
   }
 
   // Validate key lengths
@@ -232,7 +232,7 @@ export async function decryptKeys(backup, password, nacl, naclUtil) {
       signSKBytes.length !== 64 ||
       boxPKBytes.length !== 32 ||
       boxSKBytes.length !== 32) {
-    throw new Error('Invalid key lengths in decrypted data');
+    throw new Error("Invalid key lengths in decrypted data");
   }
 
   return keys;
@@ -247,32 +247,32 @@ export function getBackupSecurityInfo(backup) {
   if (!backup || !backup.version) {
     return {
       secure: false,
-      message: 'Invalid or legacy backup format',
+      message: "Invalid or legacy backup format"
     };
   }
 
   if (backup.version === 1) {
     return {
       secure: false,
-      message: 'Legacy backup (XOR encryption) - NOT SECURE. Re-export recommended.',
+      message: "Legacy backup (XOR encryption) - NOT SECURE. Re-export recommended."
     };
   }
 
   if (backup.version === BACKUP_VERSION) {
-    const kdfInfo = backup.kdf === 'argon2id'
-      ? 'Argon2id (recommended)'
-      : 'PBKDF2 (fallback - Argon2id recommended)';
+    const kdfInfo = backup.kdf === "argon2id"
+      ? "Argon2id (recommended)"
+      : "PBKDF2 (fallback - Argon2id recommended)";
 
     return {
       secure: true,
       kdf: backup.kdf,
-      message: `Secure backup using ${kdfInfo}`,
+      message: `Secure backup using ${kdfInfo}`
     };
   }
 
   return {
     secure: false,
-    message: `Unknown backup version: ${backup.version}`,
+    message: `Unknown backup version: ${backup.version}`
   };
 }
 
@@ -299,17 +299,17 @@ export function checkPasswordStrength(password) {
 
   let strength, message;
   if (score <= 2) {
-    strength = 'weak';
-    message = 'Very weak - add length and variety';
+    strength = "weak";
+    message = "Very weak - add length and variety";
   } else if (score <= 4) {
-    strength = 'fair';
-    message = 'Fair - consider adding more characters';
+    strength = "fair";
+    message = "Fair - consider adding more characters";
   } else if (score <= 5) {
-    strength = 'good';
-    message = 'Good password';
+    strength = "good";
+    message = "Good password";
   } else {
-    strength = 'strong';
-    message = 'Strong password';
+    strength = "strong";
+    message = "Strong password";
   }
 
   return {
@@ -321,7 +321,7 @@ export function checkPasswordStrength(password) {
       hasLower,
       hasUpper,
       hasNumber,
-      hasSymbol,
-    },
+      hasSymbol
+    }
   };
 }

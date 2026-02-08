@@ -17,8 +17,8 @@ import {
   CHARACTERISTICS,
   MSG_TYPE,
   CONFIG,
-  BLE_ERROR,
-} from './constants.js';
+  BLE_ERROR
+} from "./constants.js";
 
 /**
  * BLE Manager for Lifeline Mesh
@@ -49,7 +49,7 @@ export class BLEManager {
    * @returns {boolean}
    */
   static isSupported() {
-    return 'bluetooth' in navigator;
+    return "bluetooth" in navigator;
   }
 
   /**
@@ -64,18 +64,18 @@ export class BLEManager {
         isChrome: /Chrome/.test(ua) && !/Edge/.test(ua),
         isEdge: /Edg/.test(ua),
         isFirefox: /Firefox/.test(ua),
-        isSafari: /Safari/.test(ua) && !/Chrome/.test(ua),
+        isSafari: /Safari/.test(ua) && !/Chrome/.test(ua)
       },
       platform: {
         isAndroid: /Android/.test(ua),
         isIOS: /iPhone|iPad|iPod/.test(ua),
         isWindows: /Windows/.test(ua),
         isMac: /Macintosh/.test(ua),
-        isLinux: /Linux/.test(ua) && !/Android/.test(ua),
+        isLinux: /Linux/.test(ua) && !/Android/.test(ua)
       },
       recommendation: BLEManager.isSupported()
-        ? 'Web Bluetooth is supported!'
-        : 'Please use Chrome or Edge for Bluetooth support.',
+        ? "Web Bluetooth is supported!"
+        : "Please use Chrome or Edge for Bluetooth support."
     };
   }
 
@@ -92,20 +92,20 @@ export class BLEManager {
       // Request device with our service UUID
       this.device = await navigator.bluetooth.requestDevice({
         filters: [{ services: [SERVICE_UUID] }],
-        optionalServices: [SERVICE_UUID],
+        optionalServices: [SERVICE_UUID]
       });
 
       // Listen for disconnection
-      this.device.addEventListener('gattserverdisconnected', () => {
+      this.device.addEventListener("gattserverdisconnected", () => {
         this._handleDisconnect();
       });
 
       return this.device;
     } catch (error) {
-      if (error.name === 'NotFoundError') {
+      if (error.name === "NotFoundError") {
         throw new Error(BLE_ERROR.DEVICE_NOT_FOUND);
       }
-      if (error.name === 'SecurityError') {
+      if (error.name === "SecurityError") {
         throw new Error(BLE_ERROR.PERMISSION_DENIED);
       }
       throw error;
@@ -119,7 +119,7 @@ export class BLEManager {
    */
   async connect(device = this.device) {
     if (!device) {
-      throw new Error('No device to connect to. Call scan() first.');
+      throw new Error("No device to connect to. Call scan() first.");
     }
 
     try {
@@ -141,7 +141,7 @@ export class BLEManager {
       // Subscribe to notifications
       await this.rxCharacteristic.startNotifications();
       this.rxCharacteristic.addEventListener(
-        'characteristicvaluechanged',
+        "characteristicvaluechanged",
         (event) => this._handleIncomingData(event)
       );
 
@@ -152,9 +152,9 @@ export class BLEManager {
         this.onConnectionChange(true, device);
       }
 
-      console.log('[BLE] Connected to', device.name || device.id);
+      console.log("[BLE] Connected to", device.name || device.id);
     } catch (error) {
-      console.error('[BLE] Connection failed:', error);
+      console.error("[BLE] Connection failed:", error);
       throw new Error(BLE_ERROR.CONNECTION_FAILED);
     }
   }
@@ -186,7 +186,7 @@ export class BLEManager {
 
       // Check size
       if (messageBytes.length > 150 * 1024) {
-        throw new Error('Message too large (max 150KB)');
+        throw new Error("Message too large (max 150KB)");
       }
 
       // Chunk the message
@@ -198,9 +198,9 @@ export class BLEManager {
       for (let i = 0; i < chunks.length; i++) {
         const header = new Uint8Array([
           MSG_TYPE.DIRECT,
-          i,              // Chunk index
-          chunks.length,  // Total chunks
-          0,              // Reserved
+          i, // Chunk index
+          chunks.length, // Total chunks
+          0 // Reserved
         ]);
 
         const packet = new Uint8Array(header.length + chunks[i].length);
@@ -215,9 +215,9 @@ export class BLEManager {
         }
       }
 
-      console.log('[BLE] Message sent successfully');
+      console.log("[BLE] Message sent successfully");
     } catch (error) {
-      console.error('[BLE] Send failed:', error);
+      console.error("[BLE] Send failed:", error);
       throw new Error(BLE_ERROR.SEND_FAILED);
     }
   }
@@ -237,9 +237,9 @@ export class BLEManager {
 
     const header = new Uint8Array([
       MSG_TYPE.IDENTITY,
-      0,  // Single chunk
-      1,  // Total: 1
-      0,  // Reserved
+      0, // Single chunk
+      1, // Total: 1
+      0 // Reserved
     ]);
 
     const packet = new Uint8Array(header.length + identityBytes.length);
@@ -247,7 +247,7 @@ export class BLEManager {
     packet.set(identityBytes, header.length);
 
     await this.txCharacteristic.writeValue(packet);
-    console.log('[BLE] Identity sent');
+    console.log("[BLE] Identity sent");
   }
 
   // ============ Private Methods ============
@@ -299,7 +299,7 @@ export class BLEManager {
         const jsonStr = new TextDecoder().decode(completeData);
         const message = JSON.parse(jsonStr);
 
-        console.log('[BLE] Message reassembled, type:', msgType);
+        console.log("[BLE] Message reassembled, type:", msgType);
 
         // Dispatch to callback
         if (this.onMessageReceived) {
@@ -307,7 +307,7 @@ export class BLEManager {
         }
       }
     } catch (error) {
-      console.error('[BLE] Error processing incoming data:', error);
+      console.error("[BLE] Error processing incoming data:", error);
       if (this.onError) {
         this.onError(BLE_ERROR.RECEIVE_FAILED, error);
       }
@@ -319,7 +319,7 @@ export class BLEManager {
    * @private
    */
   _handleDisconnect() {
-    console.log('[BLE] Disconnected');
+    console.log("[BLE] Disconnected");
     this.isConnected = false;
     this.server = null;
     this.service = null;

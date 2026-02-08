@@ -12,7 +12,6 @@
  * Each transport implements the same interface for seamless switching.
  */
 
-/* global setTimeout, FileReader */
 
 import {
   chunkMessage,
@@ -67,9 +66,10 @@ export class BaseTransport {
 
   /**
    * Receive messages (poll or callback-based)
+   * @param {*} [_arg] - Transport-specific argument
    * @returns {Promise<object[]>} - Array of received messages
    */
-  receive() {
+  receive(_arg) {
     return Promise.reject(new Error("receive() must be implemented by transport"));
   }
 
@@ -461,7 +461,7 @@ export class FileTransport extends BaseTransport {
 
       reader.onload = (e) => {
         try {
-          const parsed = JSON.parse(e.target.result);
+          const parsed = JSON.parse(/** @type {string} */ (e.target.result));
           if (parsed.kind === "dmesh-msg" || parsed.kind === "dmesh-id") {
             if (this.onMessage) this.onMessage(parsed);
             resolve([parsed]);
@@ -495,7 +495,7 @@ export class FileTransport extends BaseTransport {
     input.style.display = "none";
 
     input.onchange = async (e) => {
-      const file = e.target.files?.[0];
+      const file = /** @type {HTMLInputElement} */ (e.target).files?.[0];
       if (file) {
         const messages = await this.receive(file);
         if (onFileSelected) onFileSelected(messages);

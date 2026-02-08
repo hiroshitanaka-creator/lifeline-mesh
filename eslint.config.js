@@ -23,6 +23,12 @@ export default [
         alert: "readonly",
         confirm: "readonly",
         prompt: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+        setTimeout: "readonly",
+        crypto: "readonly",
+        FileReader: "readonly",
+        DataView: "readonly",
         // External libraries
         nacl: "readonly",
         QRCode: "readonly",
