@@ -12,7 +12,6 @@
  * Each transport implements the same interface for seamless switching.
  */
 
-/* global setTimeout, FileReader */
 
 import {
   chunkMessage,

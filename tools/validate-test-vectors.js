@@ -33,7 +33,7 @@ function decryptMessageSkipTimestamp({ message, recipientBoxPK, recipientBoxSK, 
     nonce = naclUtil.decodeBase64(message.nonce);
     ciphertext = naclUtil.decodeBase64(message.ciphertext);
     signature = naclUtil.decodeBase64(message.signature);
-  } catch (e) {
+  } catch {
     throw new Error("Base64 decode failed");
   }
 
@@ -99,7 +99,7 @@ function decryptMessageSkipTimestamp({ message, recipientBoxPK, recipientBoxSK, 
   let payload;
   try {
     payload = JSON.parse(text);
-  } catch (e) {
+  } catch {
     throw new Error("Payload JSON parse failed");
   }
 
