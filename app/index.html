@@ -579,6 +579,51 @@ window.resetAll = async function() {
   setStatus(true, "All data deleted");
 };
 
+
+/* =========================
+   Keyboard Shortcuts
+========================= */
+document.addEventListener("keydown", (event) => {
+
+  // Don't trigger shortcuts while typing
+  const tag = event.target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+  // Ctrl + E → Encrypt
+  if (event.ctrlKey && event.key.toLowerCase() === "e") {
+    event.preventDefault();
+    window.encryptMsg();
+  }
+
+  // Ctrl + D → Decrypt
+  if (event.ctrlKey && event.key.toLowerCase() === "d") {
+    event.preventDefault();
+    window.decryptMsg();
+  }
+
+  // Ctrl + K → Generate / Load Keys
+  if (event.ctrlKey && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    window.initOrLoad();
+  }
+
+  // Escape → Close any open modal
+  if (event.key === "Escape") {
+    const qrModal = document.getElementById("qr-modal");
+    const scannerModal = document.getElementById("qr-scanner-modal");
+
+    if (qrModal.style.display === "block") {
+      window.closeQRModal();
+    }
+
+    if (scannerModal.style.display === "block") {
+      window.closeQRScanner();
+    }
+  }
+});
+
+
+
 /* =========================
   Contacts
 ========================= */
