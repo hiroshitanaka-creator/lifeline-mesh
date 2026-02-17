@@ -348,3 +348,19 @@ A **lifeline** is a rope or chain thrown to rescue someone in danger.
 A **mesh** network ensures that if one connection breaks, others remain.
 
 **Lifeline Mesh** is built to stay connected when everything else goes dark.
+
+## Contributing / Contributions
+
+Thanks for your interest in contributing!
+
+### Before submitting a Pull Request
+- Please keep changes **small and focused** (one topic per PR).
+- Please avoid touching **security**, **workflows**, or **CI configuration** unless explicitly discussed first.
+- Please describe:
+  1) **Why** the change is needed  
+  2) **How** you tested it  
+  3) Any **risks / edge cases**
+
+### Maintainer review policy
+For safety and stability, I may ask for changes or close PRs while the repository is being stabilized.
+If you are unsure, please open an **Issue** first to discuss the approach.
