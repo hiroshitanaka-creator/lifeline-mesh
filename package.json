@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "start": "node server.js",
     "install:all": "npm install && npm install --prefix crypto && npm install --prefix tools",
     "test": "npm run test:crypto && npm run test:vectors",
     "test:crypto": "npm --prefix crypto test",
