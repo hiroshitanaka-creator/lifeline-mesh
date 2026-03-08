@@ -34,7 +34,12 @@ import {
  */
 export class BLEManager {
   constructor(options = {}) {
-    const { io = BLEManager.createBrowserIO() } = options;
+    const {
+      io = BLEManager.createBrowserIO(),
+      protocolConfig = {},
+      store = BLEManager.createStoreAdapter(),
+      transportManager = null
+    } = options;
 
     this.device = null;
     this.server = null;
@@ -59,6 +64,19 @@ export class BLEManager {
 
     // I/O boundary (Web Bluetooth adapter)
     this.io = io;
+    this.store = store;
+    this.transportManager = transportManager;
+    this.protocolConfig = this._buildProtocolConfig(protocolConfig);
+  }
+
+  static createStoreAdapter() {
+    return {
+      addToOutbox,
+      addToInbox,
+      getPendingOutbox,
+      removeFromOutbox,
+      updateOutboxStatus
+    };
   }
 
   static createBrowserIO() {
@@ -209,7 +227,7 @@ export class BLEManager {
   async sendMessage(message, options = {}) {
     const recipientFp = options.recipientFp || message.rcpt || "unknown";
 
-    await addToOutbox(message, recipientFp, {
+    await this.store.addToOutbox(message, recipientFp, {
       transport: "ble",
       status: DELIVERY_STATUS.PENDING
     });
@@ -254,12 +272,13 @@ export class BLEManager {
         return;
       }
 
-      const pending = await getPendingOutbox();
+      const pending = await this.store.getPendingOutbox();
       for (const entry of pending) {
-        if (entry.transport && entry.transport !== "ble") {
+        const decision = this._classifyOutboxEntry(entry);
+        if (!decision.shouldSend) {
           continue;
         }
-        await this._sendQueuedEntry(entry);
+        await this._sendQueuedEntry(decision.normalizedEntry);
       }
     })();
 
@@ -276,22 +295,22 @@ export class BLEManager {
     const msgId = entry.msgId;
 
     try {
-      await updateOutboxStatus(msgId, DELIVERY_STATUS.PENDING, {
+      await this.store.updateOutboxStatus(msgId, DELIVERY_STATUS.PENDING, {
         transport: "ble",
         error: null
       });
       await this._sendMessageWithAck(entry.message);
-      await updateOutboxStatus(msgId, DELIVERY_STATUS.DELIVERED, {
+      await this.store.updateOutboxStatus(msgId, DELIVERY_STATUS.DELIVERED, {
         deliveredAt: Date.now()
       });
-      await removeFromOutbox(msgId);
+      await this.store.removeFromOutbox(msgId);
     } catch (error) {
       const attempts = (entry.attempts || 0) + 1;
-      const finalStatus = attempts >= CONFIG.RETRY_COUNT
+      const finalStatus = attempts >= this.protocolConfig.retryCount
         ? DELIVERY_STATUS.FAILED
         : DELIVERY_STATUS.PENDING;
 
-      await updateOutboxStatus(msgId, finalStatus, {
+      await this.store.updateOutboxStatus(msgId, finalStatus, {
         transport: "ble",
         error: error.message
       });
@@ -301,12 +320,13 @@ export class BLEManager {
         return;
       }
 
-      if (attempts >= CONFIG.RETRY_COUNT) {
+      if (attempts >= this.protocolConfig.retryCount) {
+        await this._sendFallback(entry.message, error);
         console.error("[BLE] Message delivery failed after retries", msgId);
         throw new Error(BLE_ERROR.SEND_FAILED);
       }
 
-      await this._delay(CONFIG.RETRY_DELAY_MS);
+      await this._delay(this.protocolConfig.retryDelayMs);
       await this._sendQueuedEntry({ ...entry, attempts });
     }
   }
@@ -331,7 +351,7 @@ export class BLEManager {
       const framedPayload = this._encodeChunkPayload(transferId, chunks[i]);
       await this._writePacket(MSG_TYPE.DIRECT, i, chunks.length, 0, framedPayload);
       if (i < chunks.length - 1) {
-        await this._delay(CONFIG.CHUNK_DELAY_MS);
+        await this._delay(this.protocolConfig.chunkDelayMs);
       }
     }
 
@@ -344,11 +364,11 @@ export class BLEManager {
       const timeout = setTimeout(() => {
         this.pendingAcks.delete(transferId);
         reject(new Error(`ACK timeout for ${transferId}`));
-      }, CONFIG.ACK_TIMEOUT_MS);
+      }, this.protocolConfig.ackTimeoutMs);
 
       this.pendingAcks.set(transferId, {
         resolve: () => {
-          clearTimeout(timeout);
+          globalThis.clearTimeout(timeout);
           resolve();
         }
       });
@@ -409,7 +429,7 @@ export class BLEManager {
       const jsonStr = new TextDecoder().decode(completeData);
       const message = JSON.parse(jsonStr);
 
-      await addToInbox(
+      await this.store.addToInbox(
         {
           msgId: message.msgId || state.transferId,
           senderFp: message.sndr || "unknown",
@@ -486,16 +506,25 @@ export class BLEManager {
     for (let i = 0; i < data.length; i++) {
       binary += String.fromCharCode(data[i]);
     }
-    return btoa(binary);
+
+    if (typeof globalThis.btoa === "function") {
+      return globalThis.btoa(binary);
+    }
+
+    return Buffer.from(data).toString("base64");
   }
 
   _fromBase64(base64) {
-    const binary = atob(base64);
-    const result = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      result[i] = binary.charCodeAt(i);
+    if (typeof globalThis.atob === "function") {
+      const binary = globalThis.atob(base64);
+      const result = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        result[i] = binary.charCodeAt(i);
+      }
+      return result;
     }
-    return result;
+
+    return new Uint8Array(Buffer.from(base64, "base64"));
   }
 
   _getTransferId(message) {
@@ -528,7 +557,7 @@ export class BLEManager {
   _cleanupExpiredReceiveStates() {
     const now = Date.now();
     for (const [transferId, state] of this.receiveStates.entries()) {
-      if (now - state.lastUpdated > CONFIG.REASSEMBLY_TIMEOUT_MS) {
+      if (now - state.lastUpdated > this.protocolConfig.reassemblyTimeoutMs) {
         console.warn("[BLE] Dropping stale receive state", transferId);
         this.receiveStates.delete(transferId);
       }
@@ -563,10 +592,56 @@ export class BLEManager {
    */
   _chunkData(data) {
     const chunks = [];
-    for (let i = 0; i < data.length; i += CONFIG.CHUNK_SIZE) {
-      chunks.push(data.slice(i, i + CONFIG.CHUNK_SIZE));
+    for (let i = 0; i < data.length; i += this.protocolConfig.chunkSize) {
+      chunks.push(data.slice(i, i + this.protocolConfig.chunkSize));
     }
     return chunks;
+  }
+
+  _buildProtocolConfig(overrides) {
+    const mtu = Math.max(23, overrides.mtu || CONFIG.MTU);
+    const packetHeaderSize = Math.max(4, overrides.packetHeaderSize || 4);
+    const chunkSize = Math.max(16, Math.min(overrides.chunkSize || CONFIG.CHUNK_SIZE, mtu - packetHeaderSize));
+
+    return {
+      mtu,
+      packetHeaderSize,
+      chunkSize,
+      ackTimeoutMs: overrides.ackTimeoutMs || CONFIG.ACK_TIMEOUT_MS,
+      retryCount: overrides.retryCount || CONFIG.RETRY_COUNT,
+      retryDelayMs: overrides.retryDelayMs || CONFIG.RETRY_DELAY_MS,
+      chunkDelayMs: overrides.chunkDelayMs || CONFIG.CHUNK_DELAY_MS,
+      reassemblyTimeoutMs: overrides.reassemblyTimeoutMs || CONFIG.REASSEMBLY_TIMEOUT_MS
+    };
+  }
+
+  _classifyOutboxEntry(entry) {
+    if (!entry || !entry.msgId || !entry.message) {
+      return { shouldSend: false, reason: "invalid" };
+    }
+    if (entry.transport && entry.transport !== "ble") {
+      return { shouldSend: false, reason: "transport-mismatch" };
+    }
+    return {
+      shouldSend: true,
+      reason: "ble-pending",
+      normalizedEntry: { ...entry, attempts: entry.attempts || 0 }
+    };
+  }
+
+  async _sendFallback(message, error) {
+    if (!this.transportManager || !message || !this.transportManager.sendWithFallback) {
+      return;
+    }
+
+    try {
+      const result = await this.transportManager.sendWithFallback("ble", message, ["clipboard", "file"]);
+      if (result.transport !== "ble") {
+        console.warn(`[BLE] Fallback sent via ${result.transport} after BLE failure`, error?.message || error);
+      }
+    } catch (fallbackError) {
+      console.warn("[BLE] All fallback transports failed", fallbackError);
+    }
   }
 
   /**
