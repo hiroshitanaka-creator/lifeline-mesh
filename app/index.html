@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#4CAF50" />
   <meta name="description" content="End-to-end encrypted emergency messaging. Offline-first. No server required." />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+  />
   <title>Lifeline Mesh - Emergency Messaging</title>
 
   <!-- PWA Manifest -->
@@ -88,7 +92,7 @@
       <button data-action="initOrLoad">🔑 Generate / Load Keys</button>
       <button class="danger" data-action="resetAll">🗑️ RESET ALL</button>
     </div>
-    <pre id="my-id">(not loaded)</pre>
+    <pre id="my-id" role="status" aria-live="polite">(not loaded)</pre>
     <div class="row">
       <button data-action="copyMyId">📋 Copy My Public ID</button>
       <button data-action="showQRCode">📱 Show QR Code</button>
@@ -109,14 +113,16 @@
 
   <div class="section">
     <h2>2) Contacts</h2>
-    <textarea id="contact-input" placeholder='{"name":"Bob","signPK":"base64","boxPK":"base64"}'></textarea>
+    <label for="contact-input" class="small">Contact JSON</label>
+    <textarea id="contact-input" aria-label="Contact JSON input" placeholder='{"name":"Bob","signPK":"base64","boxPK":"base64"}'></textarea>
     <div class="row">
       <button data-action="addContact">➕ Add Contact</button>
       <button data-action="scanQRCode">📷 Scan QR Code</button>
       <button data-action="refreshContacts">🔄 Refresh</button>
       <button class="danger" data-action="deleteSelectedContact">❌ Delete Selected</button>
     </div>
-    <select id="recipient-select">
+    <label for="recipient-select" class="small">Recipient</label>
+    <select id="recipient-select" aria-label="Recipient selector">
       <option value="">Select Recipient</option>
     </select>
     <pre id="contacts-view">(none)</pre>
@@ -155,11 +161,12 @@
       <pre id="group-view">(no group selected)</pre>
     </div>
 
-    <textarea id="content" placeholder="Type your message here (max 150KB)"></textarea>
+    <label for="content" class="small">Message content</label>
+    <textarea id="content" aria-label="Message content" placeholder="Type your message here (max 150KB)"></textarea>
     <div class="row">
       <button data-action="encryptMsg">🔒 Encrypt</button>
     </div>
-    <pre id="encrypted"></pre>
+    <pre id="encrypted" role="status" aria-live="polite"></pre>
     <div class="row" id="encrypted-actions" style="display:none">
       <button data-action="copyEncrypted">📋 Copy Encrypted Message</button>
     </div>
@@ -167,7 +174,8 @@
 
   <div class="section">
     <h2>4) Decrypt Message</h2>
-    <textarea id="input" placeholder="Paste encrypted JSON message here"></textarea>
+    <label for="input" class="small">Encrypted message JSON</label>
+    <textarea id="input" aria-label="Encrypted message JSON" placeholder="Paste encrypted JSON message here"></textarea>
     <label class="small">
       <input type="checkbox" id="tofu" />
       TOFU (Trust On First Use - auto-accept unknown senders)
@@ -175,8 +183,8 @@
     <div class="row">
       <button data-action="decryptMsg">🔓 Decrypt</button>
     </div>
-    <pre id="status"></pre>
-    <pre id="decrypted"></pre>
+    <pre id="status" role="status" aria-live="polite"></pre>
+    <pre id="decrypted" role="status" aria-live="polite"></pre>
   </div>
 
   <div class="section" id="ble-section">
@@ -234,20 +242,20 @@
   </div>
 
   <!-- QR Code Modal -->
-  <div id="qr-modal" class="modal">
+  <div id="qr-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="qr-modal-title">
     <div class="modal-content">
       <span class="modal-close" data-action="closeQRModal">&times;</span>
-      <h3>Your Public ID QR Code</h3>
+      <h3 id="qr-modal-title">Your Public ID QR Code</h3>
       <div id="qr-code"></div>
       <p class="small">Scan this with another device to add you as a contact</p>
     </div>
   </div>
 
   <!-- QR Scanner Modal -->
-  <div id="qr-scanner-modal" class="modal">
+  <div id="qr-scanner-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="qr-scanner-title">
     <div class="modal-content">
       <span class="modal-close" data-action="closeQRScanner">&times;</span>
-      <h3>Scan Contact QR Code</h3>
+      <h3 id="qr-scanner-title">Scan Contact QR Code</h3>
       <div id="qr-reader"></div>
       <p class="small">Point camera at QR code to add contact</p>
     </div>
