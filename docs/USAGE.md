@@ -238,6 +238,31 @@ Alice                          Relay Network                    Bob
 
 Lifeline Mesh works completely offline:
 
+## Storage Migration (lifelineMesh → lifelineMeshV2)
+
+Recent versions migrate browser data from the legacy IndexedDB (`lifelineMesh`) to the new database (`lifelineMeshV2`) on startup.
+
+### What gets migrated
+
+- Your key entries (`my_sign_pk`, `my_sign_sk`, `my_box_pk`, `my_box_sk`)
+- Contacts from the legacy `contacts` store
+- Replay-protection entries from `replay` into the new `seen` store
+
+### Safety characteristics
+
+- Migration is **non-destructive** and only fills missing data in `lifelineMeshV2`
+- A migration marker is stored to avoid repeated writes
+- Legacy DB is left intact so rollback/recovery remains possible
+
+### Recommended upgrade procedure
+
+1. Open the updated app once while online or offline (migration runs locally in browser).
+2. Confirm your public ID and contacts are visible.
+3. Send and decrypt one test message.
+4. Export keys as backup after confirming successful migration.
+
+If something looks wrong, do **not** reset data immediately. First export what is visible and compare against your previous backup.
+
 1. **Open `/app/index.html` locally** (save HTML file to device)
 2. **Generate keys offline** (uses browser's crypto API)
 3. **Encrypt messages offline**
