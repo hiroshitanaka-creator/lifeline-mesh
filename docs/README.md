@@ -34,6 +34,14 @@ Post-merge execution roadmap (Japanese) covering:
 - Exit criteria per phase
 - Go/No-Go release gates
 
+
+### [PHASE_A_TO_E_EXECUTION_JA.md](./PHASE_A_TO_E_EXECUTION_JA.md)
+Execution checklist for Phase A-E (Japanese) covering:
+- Definition of Done per phase
+- Required verification commands
+- Phase gate execution rules
+- Completion log template
+
 ## Quick Links
 
 **For Users**:
