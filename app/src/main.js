@@ -30,6 +30,7 @@ import {
   getSenderKeyState
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
+import { appendBleMessage, formatErrorMessage, setStatus } from './ui-utils.js';
 
 
 /* =========================
@@ -38,6 +39,44 @@ import { encryptInWorker, decryptInWorker } from './worker-client.js';
 let bleManager = null;
 let lastEncryptedMessage = null;
 let bleManagerFactory = () => new BLEManager();
+
+function renderBleTransportState(state, details = {}) {
+  const statusEl = document.getElementById('ble-status');
+  if (!statusEl) {
+    return;
+  }
+
+  const labels = {
+    connected: '🟢 Connected',
+    disconnecting: '🟠 Disconnecting',
+    disconnected: '🔴 Not connected',
+    queued: '🟡 Queued for retry',
+    sending: '📤 Sending',
+    retrying: '🔄 Retrying',
+    fallback: '🧭 Falling back transport',
+    failed: '❌ Send failed',
+    delivered: '✅ Delivered'
+  };
+
+  const classMap = {
+    connected: 'ok',
+    delivered: 'ok',
+    sending: 'small',
+    retrying: 'small',
+    queued: 'small',
+    fallback: 'small',
+    disconnecting: 'small',
+    disconnected: 'ng',
+    failed: 'ng'
+  };
+
+  statusEl.textContent = labels[state] || `ℹ️ ${state}`;
+  statusEl.className = classMap[state] || '';
+
+  if (state === 'failed' && details.error) {
+    setStatus(false, `BLE send failed: ${details.error}`);
+  }
+}
 
 function initBLE() {
   if (!BLEManager.isSupported()) {
@@ -53,29 +92,29 @@ function initBLE() {
     const deviceEl = document.getElementById('ble-device-name');
 
     if (connected) {
-      statusEl.textContent = '🟢 Connected';
-      statusEl.className = 'ok';
+      renderBleTransportState('connected');
       deviceEl.textContent = device.name || device.id || 'Unknown device';
     } else {
-      statusEl.textContent = '🔴 Not connected';
-      statusEl.className = 'ng';
+      renderBleTransportState('disconnected');
       deviceEl.textContent = '(none)';
     }
   };
 
-  bleManager.onMessageReceived = (message, type) => {
+  bleManager.onMessageReceived = (message) => {
     const messagesEl = document.getElementById('ble-messages');
-    const timestamp = new Date().toLocaleTimeString();
-    const current = messagesEl.textContent === '(none)' ? '' : messagesEl.textContent + '\n---\n';
-    messagesEl.textContent = current + `[${timestamp}] Received:\n${JSON.stringify(message, null, 2)}`;
+    appendBleMessage(messagesEl, message);
 
     // Auto-fill decrypt input
     document.getElementById('input').value = JSON.stringify(message, null, 2);
     setStatus(true, 'Received message via Bluetooth - ready to decrypt');
   };
 
+  bleManager.onTransferState = ({ state, ...details }) => {
+    renderBleTransportState(state, details);
+  };
+
   bleManager.onError = (code, error) => {
-    setStatus(false, `Bluetooth error: ${code}`);
+    setStatus(false, formatErrorMessage(`Bluetooth error (${code})`, error));
     console.error('BLE Error:', code, error);
   };
 }
@@ -87,13 +126,15 @@ window.bleScan = async function() {
   }
 
   try {
+    renderBleTransportState('queued');
     setStatus(true, 'Scanning for devices...');
     await bleManager.scan();
+    renderBleTransportState('sending');
     setStatus(true, 'Connecting...');
     await bleManager.connect();
     setStatus(true, 'Connected via Bluetooth!');
   } catch (e) {
-    setStatus(false, 'Bluetooth: ' + e.message);
+    setStatus(false, formatErrorMessage('Bluetooth', e));
   }
 };
 
@@ -121,7 +162,7 @@ window.bleSendEncrypted = async function() {
     await bleManager.sendMessage(message);
     setStatus(true, 'Message sent via Bluetooth!');
   } catch (e) {
-    setStatus(false, 'Bluetooth send failed: ' + e.message);
+    setStatus(false, formatErrorMessage('Bluetooth send failed', e));
   }
 };
 
@@ -131,8 +172,52 @@ nacl.util = naclUtil;
 /* =========================
   Utility
 ========================= */
-function setStatus(ok, msg) {
-  document.getElementById("status").innerHTML = (ok ? `<span class="ok">✓ OK</span> ` : `<span class="ng">✗ ERROR</span> `) + msg;
+
+function bindUIActions() {
+  const actionMap = {
+    initOrLoad: () => window.initOrLoad(),
+    resetAll: () => window.resetAll(),
+    copyMyId: () => window.copyMyId(),
+    showQRCode: () => window.showQRCode(),
+    exportKeys: () => window.exportKeys(),
+    importKeys: () => window.importKeys(),
+    addContact: () => window.addContact(),
+    scanQRCode: () => window.scanQRCode(),
+    refreshContacts: () => window.refreshContacts(),
+    deleteSelectedContact: () => window.deleteSelectedContact(),
+    createGroup: () => window.createGroup(),
+    joinGroup: () => window.joinGroup(),
+    addSelectedMemberToGroup: () => window.addSelectedMemberToGroup(),
+    removeSelectedMemberFromGroup: () => window.removeSelectedMemberFromGroup(),
+    encryptMsg: () => window.encryptMsg(),
+    copyEncrypted: () => window.copyEncrypted(),
+    decryptMsg: () => window.decryptMsg(),
+    bleScan: () => window.bleScan(),
+    bleDisconnect: () => window.bleDisconnect(),
+    bleSendEncrypted: () => window.bleSendEncrypted(),
+    closeQRModal: () => window.closeQRModal(),
+    closeQRScanner: () => window.closeQRScanner(),
+    installPWA: () => window.installPWA(),
+    dismissInstall: () => window.dismissInstall()
+  };
+
+  document.querySelectorAll('[data-action]').forEach((element) => {
+    element.addEventListener('click', (event) => {
+      const action = event.currentTarget.dataset.action;
+      const handler = actionMap[action];
+      if (!handler) {
+        console.warn('No handler for action:', action);
+        return;
+      }
+      handler();
+    });
+  });
+
+  document.querySelectorAll('input[name="message-mode"]').forEach((element) => {
+    element.addEventListener('change', () => {
+      window.setMessageMode(element.value);
+    });
+  });
 }
 
 
@@ -676,7 +761,7 @@ window.encryptMsg = async function() {
     document.getElementById("encrypted-actions").style.display = "flex";
     setStatus(true, `Encrypted for ${recipient.name}`);
   } catch (e) {
-    setStatus(false, "Encryption failed: " + e.message);
+    setStatus(false, formatErrorMessage('Encryption failed', e));
   }
 };
 
@@ -767,7 +852,7 @@ window.decryptMsg = async function() {
     document.getElementById("decrypted").textContent = result.content;
     setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
   } catch (e) {
-    setStatus(false, "Decryption failed: " + e.message);
+    setStatus(false, formatErrorMessage('Decryption failed', e));
     document.getElementById("decrypted").textContent = "";
   }
 };
@@ -925,6 +1010,7 @@ window.__lifelineTest = {
 ========================= */
 (async () => {
   try {
+    bindUIActions();
     initBLE();  // Initialize Bluetooth
     await initOrLoad();
     await refreshGroups();

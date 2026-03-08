@@ -355,6 +355,53 @@ test("integration: BLE failure auto-fallbacks to clipboard/file via TransportMan
   }
 });
 
+
+test("integration: BLE manager emits transport states for retry/failure", async () => {
+  const store = {
+    entries: new Map([["s1", { msgId: "s1", message: { msgId: "s1" }, transport: "ble", attempts: 0 }]]),
+    async getPendingOutbox() { return [...this.entries.values()]; },
+    async addToOutbox() {},
+    async addToInbox() {},
+    async removeFromOutbox(msgId) { this.entries.delete(msgId); },
+    async updateOutboxStatus(msgId, status, fields = {}) {
+      const current = this.entries.get(msgId);
+      if (!current) return;
+      this.entries.set(msgId, { ...current, status, ...fields });
+    }
+  };
+
+  const manager = new BLEManager({ store, protocolConfig: { retryCount: 2, retryDelayMs: 1 } });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  const states = [];
+  manager.onTransferState = ({ state }) => {
+    states.push(state);
+  };
+
+  manager._sendMessageWithAck = async () => {
+    throw new Error("forced-send-failure");
+  };
+
+  let threw = false;
+  try {
+    await manager.flushOutbox();
+  } catch {
+    threw = true;
+  }
+
+  if (!threw) {
+    throw new Error("Expected send failure after retries");
+  }
+
+  const required = ["sending", "retrying", "fallback", "failed"];
+  for (const state of required) {
+    if (!states.includes(state)) {
+      throw new Error(`Expected transport state: ${state}`);
+    }
+  }
+});
+
 for (const { name, fn } of tests) {
   try {
     await fn();

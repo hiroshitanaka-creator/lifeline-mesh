@@ -63,8 +63,8 @@
   <!-- PWA Install Prompt -->
   <div id="install-prompt">
     📱 Install Lifeline Mesh as an app for offline access
-    <button onclick="installPWA()">Install</button>
-    <button onclick="dismissInstall()">Later</button>
+    <button data-action="installPWA">Install</button>
+    <button data-action="dismissInstall">Later</button>
   </div>
 
   <h1>🌐 Lifeline Mesh</h1>
@@ -76,15 +76,15 @@
   <div class="section">
     <h2>1) Your Keys</h2>
     <div class="row">
-      <button onclick="initOrLoad()">🔑 Generate / Load Keys</button>
-      <button class="danger" onclick="resetAll()">🗑️ RESET ALL</button>
+      <button data-action="initOrLoad">🔑 Generate / Load Keys</button>
+      <button class="danger" data-action="resetAll">🗑️ RESET ALL</button>
     </div>
     <pre id="my-id">(not loaded)</pre>
     <div class="row">
-      <button onclick="copyMyId()">📋 Copy My Public ID</button>
-      <button onclick="showQRCode()">📱 Show QR Code</button>
-      <button onclick="exportKeys()">💾 Export Keys</button>
-      <button onclick="importKeys()">📥 Import Keys</button>
+      <button data-action="copyMyId">📋 Copy My Public ID</button>
+      <button data-action="showQRCode">📱 Show QR Code</button>
+      <button data-action="exportKeys">💾 Export Keys</button>
+      <button data-action="importKeys">📥 Import Keys</button>
     </div>
 
     <details>
@@ -102,10 +102,10 @@
     <h2>2) Contacts</h2>
     <textarea id="contact-input" placeholder='{"name":"Bob","signPK":"base64","boxPK":"base64"}'></textarea>
     <div class="row">
-      <button onclick="addContact()">➕ Add Contact</button>
-      <button onclick="scanQRCode()">📷 Scan QR Code</button>
-      <button onclick="refreshContacts()">🔄 Refresh</button>
-      <button class="danger" onclick="deleteSelectedContact()">❌ Delete Selected</button>
+      <button data-action="addContact">➕ Add Contact</button>
+      <button data-action="scanQRCode">📷 Scan QR Code</button>
+      <button data-action="refreshContacts">🔄 Refresh</button>
+      <button class="danger" data-action="deleteSelectedContact">❌ Delete Selected</button>
     </div>
     <select id="recipient-select">
       <option value="">Select Recipient</option>
@@ -116,8 +116,8 @@
   <div class="section">
     <h2>3) Encrypt Message</h2>
     <div class="row">
-      <label><input type="radio" name="message-mode" value="direct" checked onchange="setMessageMode('direct')" /> Direct</label>
-      <label><input type="radio" name="message-mode" value="group" onchange="setMessageMode('group')" /> Group</label>
+      <label><input type="radio" name="message-mode" value="direct" checked /> Direct</label>
+      <label><input type="radio" name="message-mode" value="group" /> Group</label>
     </div>
 
     <div id="direct-controls">
@@ -127,11 +127,11 @@
     <div id="group-controls" style="display:none">
       <div class="row">
         <input id="group-name" placeholder="New group name" />
-        <button onclick="createGroup()">👥 Create Group</button>
+        <button data-action="createGroup">👥 Create Group</button>
       </div>
       <textarea id="group-json" placeholder='Paste group JSON to join (id/name/members/senderKey)'></textarea>
       <div class="row">
-        <button onclick="joinGroup()">📥 Join Group</button>
+        <button data-action="joinGroup">📥 Join Group</button>
       </div>
       <select id="group-select">
         <option value="">Select Group</option>
@@ -140,19 +140,19 @@
         <select id="group-member-select">
           <option value="">Select Contact</option>
         </select>
-        <button onclick="addSelectedMemberToGroup()">➕ Add Member</button>
-        <button class="danger" onclick="removeSelectedMemberFromGroup()">➖ Remove Member</button>
+        <button data-action="addSelectedMemberToGroup">➕ Add Member</button>
+        <button class="danger" data-action="removeSelectedMemberFromGroup">➖ Remove Member</button>
       </div>
       <pre id="group-view">(no group selected)</pre>
     </div>
 
     <textarea id="content" placeholder="Type your message here (max 150KB)"></textarea>
     <div class="row">
-      <button onclick="encryptMsg()">🔒 Encrypt</button>
+      <button data-action="encryptMsg">🔒 Encrypt</button>
     </div>
     <pre id="encrypted"></pre>
     <div class="row" id="encrypted-actions" style="display:none">
-      <button onclick="copyEncrypted()">📋 Copy Encrypted Message</button>
+      <button data-action="copyEncrypted">📋 Copy Encrypted Message</button>
     </div>
   </div>
 
@@ -164,7 +164,7 @@
       TOFU (Trust On First Use - auto-accept unknown senders)
     </label>
     <div class="row">
-      <button onclick="decryptMsg()">🔓 Decrypt</button>
+      <button data-action="decryptMsg">🔓 Decrypt</button>
     </div>
     <pre id="status"></pre>
     <pre id="decrypted"></pre>
@@ -180,8 +180,8 @@
         <span class="small">Status: <strong id="ble-status">🔴 Not connected</strong></span>
       </div>
       <div class="row">
-        <button onclick="bleScan()">📡 Scan for Devices</button>
-        <button onclick="bleDisconnect()">❌ Disconnect</button>
+        <button data-action="bleScan">📡 Scan for Devices</button>
+        <button data-action="bleDisconnect">❌ Disconnect</button>
       </div>
       <div class="small" style="margin-top: 8px;">
         Connected to: <span id="ble-device-name">(none)</span>
@@ -191,7 +191,7 @@
         <pre id="ble-messages">(none)</pre>
       </details>
       <div class="row" style="margin-top: 8px;">
-        <button onclick="bleSendEncrypted()">📤 Send Last Encrypted via Bluetooth</button>
+        <button data-action="bleSendEncrypted">📤 Send Last Encrypted via Bluetooth</button>
       </div>
     </div>
   </div>
@@ -211,7 +211,7 @@
   <!-- QR Code Modal -->
   <div id="qr-modal" class="modal">
     <div class="modal-content">
-      <span class="modal-close" onclick="closeQRModal()">&times;</span>
+      <span class="modal-close" data-action="closeQRModal">&times;</span>
       <h3>Your Public ID QR Code</h3>
       <div id="qr-code"></div>
       <p class="small">Scan this with another device to add you as a contact</p>
@@ -221,7 +221,7 @@
   <!-- QR Scanner Modal -->
   <div id="qr-scanner-modal" class="modal">
     <div class="modal-content">
-      <span class="modal-close" onclick="closeQRScanner()">&times;</span>
+      <span class="modal-close" data-action="closeQRScanner">&times;</span>
       <h3>Scan Contact QR Code</h3>
       <div id="qr-reader"></div>
       <p class="small">Point camera at QR code to add contact</p>

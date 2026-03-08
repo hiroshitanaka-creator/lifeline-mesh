@@ -166,3 +166,25 @@ test("pseudo-e2e BLE: mock BLEManager I/O boundary", async ({ page }) => {
   await expect(page.locator("#status")).toContainText("Received message via Bluetooth");
   await expect(page.locator("#input")).toContainText("dmesh-msg");
 });
+
+
+test("e2e: group create -> encrypt -> decrypt roundtrip", async ({ page }) => {
+  await boot(page);
+  const myIdentity = await getMyIdentity(page);
+  await addContact(page, myIdentity);
+
+  await page.getByLabel("Group").check();
+  await page.locator("#group-name").fill("Team-A");
+  await page.getByRole("button", { name: "👥 Create Group" }).click();
+  await expect(page.locator("#status")).toContainText("Group created");
+
+  await page.locator("#group-select").selectOption({ index: 1 });
+  await page.locator("#content").fill("GROUP_ROUNDTRIP_MESSAGE");
+  await page.getByRole("button", { name: "🔒 Encrypt" }).click();
+  await expect(page.locator("#status")).toContainText("Group encrypted");
+
+  const encrypted = (await page.locator("#encrypted").textContent()) || "";
+  await page.locator("#input").fill(encrypted);
+  await page.getByRole("button", { name: "🔓 Decrypt" }).click();
+  await expect(page.locator("#decrypted")).toHaveText("GROUP_ROUNDTRIP_MESSAGE");
+});

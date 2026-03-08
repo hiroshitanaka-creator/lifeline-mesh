@@ -2,8 +2,8 @@
  * Lifeline Mesh - Minimal Group Messaging (create, send, decrypt)
  */
 
-const GROUP_DOMAIN = 'DMESH_GROUP_V1';
-const GROUP_MSG_KEY_INFO = 'DMESH_GROUP_MSG_KEY';
+const GROUP_DOMAIN = "DMESH_GROUP_V1";
+const GROUP_MSG_KEY_INFO = "DMESH_GROUP_MSG_KEY";
 
 function buildGroupSignBytes({ groupId, senderKeyVersion, nonce, ciphertext }, naclUtil) {
   const domain = naclUtil.decodeUTF8(GROUP_DOMAIN);
@@ -73,7 +73,7 @@ export function encryptGroupMessage({ content, groupId, senderKey, senderSignPK,
   return {
     message: {
       v: 1,
-      kind: 'dmesh-group-msg',
+      kind: "dmesh-group-msg",
       groupId,
       ts,
       senderSignPK: naclUtil.encodeBase64(senderSignPK),
@@ -93,7 +93,7 @@ export function decryptGroupMessage({ message, senderKey, expectedSenderSignPK =
   const senderSignPK = naclUtil.decodeBase64(message.senderSignPK);
 
   if (expectedSenderSignPK && !nacl.verify(expectedSenderSignPK, senderSignPK)) {
-    throw new Error('Sender signing key mismatch');
+    throw new Error("Sender signing key mismatch");
   }
 
   const nonce = naclUtil.decodeBase64(message.nonce);
@@ -108,14 +108,14 @@ export function decryptGroupMessage({ message, senderKey, expectedSenderSignPK =
   }, naclUtil);
 
   if (!nacl.sign.detached.verify(signBytes, signature, senderSignPK)) {
-    throw new Error('Invalid group message signature');
+    throw new Error("Invalid group message signature");
   }
 
   const messageKey = deriveMessageKey(senderKey.chainKey, nacl, naclUtil);
   const plaintext = nacl.secretbox.open(ciphertext, nonce, messageKey);
 
   if (!plaintext) {
-    throw new Error('Group message decryption failed');
+    throw new Error("Group message decryption failed");
   }
 
   const payload = JSON.parse(naclUtil.encodeUTF8(plaintext));
