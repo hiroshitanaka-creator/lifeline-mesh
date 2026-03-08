@@ -263,6 +263,28 @@ Recent versions migrate browser data from the legacy IndexedDB (`lifelineMesh`) 
 
 If something looks wrong, do **not** reset data immediately. First export what is visible and compare against your previous backup.
 
+### Rollback and re-run procedure (when migration fails)
+
+If the startup migration fails or `lifelineMeshV2` appears incomplete, use this operational runbook:
+
+1. **Stop writes immediately**: keep the app open in one tab only and do not press `RESET ALL`.
+2. **Preserve evidence**: export browser console logs and take screenshots of missing contacts/keys.
+3. **Backup both databases**:
+   - `lifelineMeshV2` (new DB)
+   - `lifelineMesh` (legacy DB)
+4. **Rollback to legacy read path**:
+   - Use the previous app build that still reads `lifelineMesh` directly.
+   - Verify keys, contacts, and a decrypt operation from legacy data.
+5. **Fix forward and re-run migration**:
+   - Return to the latest build after the migration issue is fixed.
+   - Reload once so migration runs again (idempotent for already-copied records).
+   - Re-verify public ID, contact count, and one send/decrypt roundtrip.
+6. **Escalate if mismatch remains**: attach exported logs + DB snapshots to incident ticket before any manual data edits.
+
+**Important**: only clear storage after maintainers confirm both DB backups are safely captured and no further recovery path remains.
+
+### Offline operation steps
+
 1. **Open `/app/index.html` locally** (save HTML file to device)
 2. **Generate keys offline** (uses browser's crypto API)
 3. **Encrypt messages offline**
