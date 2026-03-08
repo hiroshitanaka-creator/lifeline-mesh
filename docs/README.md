@@ -28,6 +28,12 @@ Frequently asked questions about:
 - Usage scenarios (offline, lost device, key verification)
 - Development (integration, testing, contributing)
 
+### [NEXT_PHASE_EXECUTION_JA.md](./NEXT_PHASE_EXECUTION_JA.md)
+Post-merge execution roadmap (Japanese) covering:
+- Phase 6-10 goals and deliverables
+- Exit criteria per phase
+- Go/No-Go release gates
+
 ## Quick Links
 
 **For Users**:
