@@ -1,0 +1,126 @@
+{
+  "updatedAt": "2026-03-08",
+  "goal": "Lifeline Mesh completion roadmap (20 phases)",
+  "phases": [
+    {
+      "id": 1,
+      "title": "完成定義と評価軸の固定",
+      "status": "completed",
+      "deliverable": "docs/PHASE20_PLAN_JA.md"
+    },
+    {
+      "id": 2,
+      "title": "20フェーズのタスク分解",
+      "status": "completed",
+      "deliverable": "docs/PHASE20_PLAN_JA.md"
+    },
+    {
+      "id": 3,
+      "title": "フェーズ進捗の機械可読化",
+      "status": "completed",
+      "deliverable": "tools/phase-plan.json"
+    },
+    {
+      "id": 4,
+      "title": "進捗可視化の自動化",
+      "status": "completed",
+      "deliverable": "tools/generate-phase-report.js"
+    },
+    {
+      "id": 5,
+      "title": "現在地のベースライン化",
+      "status": "completed",
+      "deliverable": "docs/PHASE_PROGRESS.md"
+    },
+    {
+      "id": 6,
+      "title": "UIとcrypto/store.jsの統合開始",
+      "status": "completed",
+      "deliverable": "app/src/db.js legacy-v1 migration + app auto-init migration"
+    },
+    {
+      "id": 7,
+      "title": "crypto/transport.jsのUI接続",
+      "status": "pending",
+      "deliverable": "TransportManager wiring"
+    },
+    {
+      "id": 8,
+      "title": "互換データ移行実装",
+      "status": "pending",
+      "deliverable": "DB migration path"
+    },
+    {
+      "id": 9,
+      "title": "BLE送信の信頼性向上",
+      "status": "pending",
+      "deliverable": "BLE ACK/retry"
+    },
+    {
+      "id": 10,
+      "title": "BLE受信の堅牢化",
+      "status": "pending",
+      "deliverable": "Chunk reassembly hardening"
+    },
+    {
+      "id": 11,
+      "title": "Outbox/Inbox運用接続",
+      "status": "pending",
+      "deliverable": "Queued delivery flow"
+    },
+    {
+      "id": 12,
+      "title": "主要統合テスト追加",
+      "status": "pending",
+      "deliverable": "Integration tests"
+    },
+    {
+      "id": 13,
+      "title": "E2E最小セット導入",
+      "status": "pending",
+      "deliverable": "Playwright smoke flows"
+    },
+    {
+      "id": 14,
+      "title": "CI品質ゲート強化",
+      "status": "pending",
+      "deliverable": "Workflow quality gates"
+    },
+    {
+      "id": 15,
+      "title": "セキュリティ監査準備",
+      "status": "pending",
+      "deliverable": "Audit checklist execution"
+    },
+    {
+      "id": 16,
+      "title": "Group Messaging最小実装",
+      "status": "pending",
+      "deliverable": "Group message MVP"
+    },
+    {
+      "id": 17,
+      "title": "TypeScript段階導入",
+      "status": "pending",
+      "deliverable": "Typed boundaries"
+    },
+    {
+      "id": 18,
+      "title": "パフォーマンス改善",
+      "status": "pending",
+      "deliverable": "Worker + DB tuning"
+    },
+    {
+      "id": 19,
+      "title": "運用文書最終化",
+      "status": "pending",
+      "deliverable": "Runbook + FAQ updates"
+    },
+    {
+      "id": 20,
+      "title": "リリース判定",
+      "status": "pending",
+      "deliverable": "Completion gates all green"
+    }
+  ]
+}
