@@ -2,7 +2,7 @@
 
 - Updated: 2026-03-08
 - Goal: Lifeline Mesh completion roadmap (20 phases)
-- Completion: 6/20 (30%)
+- Completion: 9/20 (45%)
 
 | Phase | Title | Status | Deliverable |
 |---|---|---|---|
@@ -12,9 +12,9 @@
 | 4 | 進捗可視化の自動化 | ✅ completed | tools/generate-phase-report.js |
 | 5 | 現在地のベースライン化 | ✅ completed | docs/PHASE_PROGRESS.md |
 | 6 | UIとcrypto/store.jsの統合開始 | ✅ completed | app/src/db.js legacy-v1 migration + app auto-init migration |
-| 7 | crypto/transport.jsのUI接続 | ⏳ pending | TransportManager wiring |
-| 8 | 互換データ移行実装 | ⏳ pending | DB migration path |
-| 9 | BLE送信の信頼性向上 | ⏳ pending | BLE ACK/retry |
+| 7 | crypto/transport.jsのUI接続 | ✅ completed | app/src/main.js TransportManager wiring (clipboard/file) |
+| 8 | 互換データ移行実装 | ✅ completed | app/src/db.js legacy outbox/inbox migration path + normalization helpers |
+| 9 | BLE送信の信頼性向上 | ✅ completed | bluetooth/ble-manager.js runtime BLE protocol tuning + bounds + UI controls |
 | 10 | BLE受信の堅牢化 | ⏳ pending | Chunk reassembly hardening |
 | 11 | Outbox/Inbox運用接続 | ⏳ pending | Queued delivery flow |
 | 12 | 主要統合テスト追加 | ⏳ pending | Integration tests |
@@ -28,5 +28,5 @@
 | 20 | リリース判定 | ⏳ pending | Completion gates all green |
 
 ## Immediate Next Focus
-- Start Phase 7: crypto/transport.jsのUI接続
-- Expected deliverable: TransportManager wiring
+- Start Phase 10: BLE受信の堅牢化
+- Expected deliverable: Chunk reassembly hardening

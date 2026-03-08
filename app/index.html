@@ -171,6 +171,7 @@
     <pre id="encrypted" role="status" aria-live="polite"></pre>
     <div class="row" id="encrypted-actions" style="display:none">
       <button data-action="copyEncrypted">📋 Copy Encrypted Message</button>
+      <button data-action="exportEncryptedFile">💾 Export Encrypted File</button>
     </div>
   </div>
 
@@ -212,6 +213,24 @@
       <div class="row" style="margin-top: 8px;">
         <button data-action="bleSendEncrypted">📤 Send Last Encrypted via Bluetooth</button>
       </div>
+      <details style="margin-top: 12px;">
+        <summary>BLE Retry / ACK Settings</summary>
+        <div class="row">
+          <label class="small">ACK timeout (ms)<input id="ble-ack-timeout" type="number" min="100" step="100" value="2500" /></label>
+          <label class="small">Retry count<input id="ble-retry-count" type="number" min="1" step="1" value="3" /></label>
+        </div>
+        <div class="row">
+          <label class="small">Retry delay (ms)<input id="ble-retry-delay" type="number" min="0" step="50" value="750" /></label>
+          <label class="small">Chunk delay (ms)<input id="ble-chunk-delay" type="number" min="0" step="10" value="30" /></label>
+        </div>
+        <div class="row">
+          <label class="small">Reassembly timeout (ms)<input id="ble-reassembly-timeout" type="number" min="1000" step="500" value="60000" /></label>
+        </div>
+        <div class="row">
+          <button data-action="applyBleConfig">⚙️ Apply BLE Config</button>
+          <button data-action="resetBleConfig">↺ Reset Defaults</button>
+        </div>
+      </details>
     </div>
   </div>
 

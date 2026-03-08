@@ -621,20 +621,32 @@ export class BLEManager {
     return chunks;
   }
 
+  getProtocolConfig() {
+    return { ...this.protocolConfig };
+  }
+
+  updateProtocolConfig(overrides = {}) {
+    this.protocolConfig = this._buildProtocolConfig({
+      ...this.protocolConfig,
+      ...overrides
+    });
+    return this.getProtocolConfig();
+  }
+
   _buildProtocolConfig(overrides) {
-    const mtu = Math.max(23, overrides.mtu || CONFIG.MTU);
-    const packetHeaderSize = Math.max(4, overrides.packetHeaderSize || 4);
-    const chunkSize = Math.max(16, Math.min(overrides.chunkSize || CONFIG.CHUNK_SIZE, mtu - packetHeaderSize));
+    const mtu = Math.max(23, overrides.mtu ?? CONFIG.MTU);
+    const packetHeaderSize = Math.max(4, overrides.packetHeaderSize ?? 4);
+    const chunkSize = Math.max(16, Math.min(overrides.chunkSize ?? CONFIG.CHUNK_SIZE, mtu - packetHeaderSize));
 
     return {
       mtu,
       packetHeaderSize,
       chunkSize,
-      ackTimeoutMs: overrides.ackTimeoutMs || CONFIG.ACK_TIMEOUT_MS,
-      retryCount: overrides.retryCount || CONFIG.RETRY_COUNT,
-      retryDelayMs: overrides.retryDelayMs || CONFIG.RETRY_DELAY_MS,
-      chunkDelayMs: overrides.chunkDelayMs || CONFIG.CHUNK_DELAY_MS,
-      reassemblyTimeoutMs: overrides.reassemblyTimeoutMs || CONFIG.REASSEMBLY_TIMEOUT_MS
+      ackTimeoutMs: Math.max(100, overrides.ackTimeoutMs ?? CONFIG.ACK_TIMEOUT_MS),
+      retryCount: Math.max(1, overrides.retryCount ?? CONFIG.RETRY_COUNT),
+      retryDelayMs: Math.max(0, overrides.retryDelayMs ?? CONFIG.RETRY_DELAY_MS),
+      chunkDelayMs: Math.max(0, overrides.chunkDelayMs ?? CONFIG.CHUNK_DELAY_MS),
+      reassemblyTimeoutMs: Math.max(1000, overrides.reassemblyTimeoutMs ?? CONFIG.REASSEMBLY_TIMEOUT_MS)
     };
   }
 

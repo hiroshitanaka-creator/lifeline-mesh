@@ -41,20 +41,20 @@
     {
       "id": 7,
       "title": "crypto/transport.jsのUI接続",
-      "status": "pending",
-      "deliverable": "TransportManager wiring"
+      "status": "completed",
+      "deliverable": "app/src/main.js TransportManager wiring (clipboard/file)"
     },
     {
       "id": 8,
       "title": "互換データ移行実装",
-      "status": "pending",
-      "deliverable": "DB migration path"
+      "status": "completed",
+      "deliverable": "app/src/db.js legacy outbox/inbox migration path + normalization helpers"
     },
     {
       "id": 9,
       "title": "BLE送信の信頼性向上",
-      "status": "pending",
-      "deliverable": "BLE ACK/retry"
+      "status": "completed",
+      "deliverable": "bluetooth/ble-manager.js runtime BLE protocol tuning + bounds + UI controls"
     },
     {
       "id": 10,
