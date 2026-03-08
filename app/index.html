@@ -205,6 +205,22 @@
 import * as DMesh from '../crypto/core.js';
 import { BLEManager } from '../bluetooth/ble-manager.js';
 import { encryptKeys, decryptKeys, checkPasswordStrength } from '../crypto/key-backup.js';
+import {
+  DB_NAME,
+  idbGet,
+  idbPut,
+  STORE_KEYS,
+  STORE_CONTACTS,
+  STORE_SEEN,
+  saveContact,
+  getContact,
+  getAllContacts,
+  deleteContact,
+  makeSeenKey,
+  cleanupSeen,
+  clearAllData
+} from '../crypto/store.js';
+import { TransportManager, getBestTransport } from '../crypto/transport.js';
 import nacl from 'tweetnacl';
 import * as naclUtil from 'tweetnacl-util';
 import QRCode from 'qrcode';
@@ -216,6 +232,38 @@ import { Html5Qrcode } from 'html5-qrcode';
 ========================= */
 let bleManager = null;
 let lastEncryptedMessage = null;
+let transportManager = null;
+
+const LEGACY_DB_NAME = 'lifelineMesh';
+const LEGACY_DB_VERSION = 1;
+const LEGACY_STORE_KEYS = 'keys';
+const LEGACY_STORE_CONTACTS = 'contacts';
+const LEGACY_STORE_REPLAY = 'replay';
+
+const ui = {
+  encrypted: document.getElementById('encrypted'),
+  encryptedActions: document.getElementById('encrypted-actions'),
+  decryptInput: document.getElementById('input'),
+  decrypted: document.getElementById('decrypted'),
+  recipientSelect: document.getElementById('recipient-select')
+};
+
+function renderEncryptedMessage(message) {
+  const rendered = JSON.stringify(message, null, 2);
+  ui.encrypted.textContent = rendered;
+  ui.encryptedActions.style.display = 'flex';
+  lastEncryptedMessage = message;
+  return rendered;
+}
+
+async function sendEncryptedViaPreferredTransport(message) {
+  if (!transportManager) return;
+  const transportName = await getBestTransport(transportManager);
+  if (transportName !== 'clipboard') return;
+
+  await transportManager.send(transportName, message);
+  setStatus(true, 'Encrypted and copied via clipboard transport');
+}
 
 function initBLE() {
   if (!BLEManager.isSupported()) {
@@ -306,76 +354,118 @@ window.bleSendEncrypted = async function() {
 // Attach util to nacl for compatibility with existing code
 nacl.util = naclUtil;
 
-/* =========================
-  Config
-========================= */
-const DB_NAME = "lifelineMesh";
-const DB_VERSION = 1;
-const STORE_KEYS = "keys";
-const STORE_CONTACTS = "contacts";
-const STORE_REPLAY = "replay";
-
-/* =========================
-  IndexedDB helpers
-========================= */
-let dbPromise = null;
-
-function openDB() {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_KEYS)) db.createObjectStore(STORE_KEYS);
-      if (!db.objectStoreNames.contains(STORE_CONTACTS)) db.createObjectStore(STORE_CONTACTS, { keyPath: "fp" });
-      if (!db.objectStoreNames.contains(STORE_REPLAY)) db.createObjectStore(STORE_REPLAY, { keyPath: "k" });
+async function readLegacyStore(storeName) {
+  return new Promise((resolve, reject) => {
+    let createdNow = false;
+    const req = indexedDB.open(LEGACY_DB_NAME, LEGACY_DB_VERSION);
+    req.onupgradeneeded = () => {
+      createdNow = true;
     };
-    req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (createdNow) {
+        db.close();
+        indexedDB.deleteDatabase(LEGACY_DB_NAME);
+        resolve([]);
+        return;
+      }
+      if (!db.objectStoreNames.contains(storeName)) {
+        db.close();
+        resolve([]);
+        return;
+      }
+
+      const tx = db.transaction(storeName, 'readonly');
+      const getAllReq = tx.objectStore(storeName).getAll();
+      getAllReq.onsuccess = () => {
+        db.close();
+        resolve(getAllReq.result || []);
+      };
+      getAllReq.onerror = () => {
+        db.close();
+        reject(getAllReq.error);
+      };
+    };
   });
-  return dbPromise;
 }
 
-async function idbGet(store, key) {
-  const db = await openDB();
+async function readLegacyKey(key) {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readonly");
-    const req = tx.objectStore(store).get(key);
-    req.onsuccess = () => resolve(req.result);
+    let createdNow = false;
+    const req = indexedDB.open(LEGACY_DB_NAME, LEGACY_DB_VERSION);
+    req.onupgradeneeded = () => {
+      createdNow = true;
+    };
     req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (createdNow) {
+        db.close();
+        indexedDB.deleteDatabase(LEGACY_DB_NAME);
+        resolve(null);
+        return;
+      }
+      if (!db.objectStoreNames.contains(LEGACY_STORE_KEYS)) {
+        db.close();
+        resolve(null);
+        return;
+      }
+      const tx = db.transaction(LEGACY_STORE_KEYS, 'readonly');
+      const getReq = tx.objectStore(LEGACY_STORE_KEYS).get(key);
+      getReq.onsuccess = () => {
+        db.close();
+        resolve(getReq.result || null);
+      };
+      getReq.onerror = () => {
+        db.close();
+        reject(getReq.error);
+      };
+    };
   });
 }
 
-async function idbPut(store, value, key) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readwrite");
-    const st = tx.objectStore(store);
-    if (key !== undefined) st.put(value, key);
-    else st.put(value);
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
-}
+async function migrateLegacyDBToV2() {
+  const dbList = await indexedDB.databases?.();
+  if (Array.isArray(dbList) && !dbList.some(db => db.name === LEGACY_DB_NAME)) return;
 
-async function idbDel(store, key) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readwrite");
-    tx.objectStore(store).delete(key);
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
-}
+  const hasMigrated = await idbGet(STORE_KEYS, '__legacy_migration_done__');
+  if (hasMigrated) return;
 
-async function idbGetAll(store) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, "readonly");
-    const req = tx.objectStore(store).getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => reject(req.error);
-  });
+  const [legacyContacts, legacyReplay] = await Promise.all([
+    readLegacyStore(LEGACY_STORE_CONTACTS),
+    readLegacyStore(LEGACY_STORE_REPLAY)
+  ]);
+
+  for (const key of ['my_sign_pk', 'my_sign_sk', 'my_box_pk', 'my_box_sk']) {
+    const existing = await idbGet(STORE_KEYS, key);
+    if (!existing) {
+      const legacyValue = await readLegacyKey(key);
+      if (legacyValue) await idbPut(STORE_KEYS, legacyValue, key);
+    }
+  }
+
+  for (const contact of legacyContacts) {
+    if (contact?.fp && contact?.signPK && contact?.boxPK) {
+      await saveContact(contact);
+    }
+  }
+
+  for (const replay of legacyReplay) {
+    if (!replay?.k) continue;
+    const [senderFp = '', nonceB64 = ''] = replay.k.split(':');
+    const seenKey = makeSeenKey(nonceB64, senderFp);
+    await idbPut(STORE_SEEN, {
+      seenKey,
+      msgId: nonceB64 || null,
+      senderFp: senderFp || null,
+      nonceB64: nonceB64 || null,
+      seenAt: replay.seenAt || Date.now()
+    });
+  }
+
+  await idbPut(STORE_KEYS, Date.now(), '__legacy_migration_done__');
+  setStatus(true, `Legacy data migrated: ${LEGACY_DB_NAME} → ${DB_NAME}`);
 }
 
 /* =========================
@@ -383,6 +473,13 @@ async function idbGetAll(store) {
 ========================= */
 function setStatus(ok, msg) {
   document.getElementById("status").innerHTML = (ok ? `<span class="ok">✓ OK</span> ` : `<span class="ng">✗ ERROR</span> `) + msg;
+}
+
+function initTransport() {
+  transportManager = new TransportManager({
+    nacl,
+    naclUtil
+  });
 }
 
 /* =========================
@@ -559,17 +656,7 @@ window.importKeys = async function() {
 window.resetAll = async function() {
   if (!confirm("⚠️ Delete ALL data (keys, contacts, replay DB)?\nThis cannot be undone!")) return;
 
-  if (dbPromise) {
-    const db = await dbPromise;
-    db.close();
-    dbPromise = null;
-  }
-
-  await new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(DB_NAME);
-    req.onsuccess = resolve;
-    req.onerror = () => reject(req.error);
-  });
+  await clearAllData();
 
   document.getElementById("my-id").textContent = "(not loaded)";
   document.getElementById("contacts-view").textContent = "(none)";
@@ -652,7 +739,7 @@ window.addContact = async function() {
       addedAt: Date.now()
     };
 
-    await idbPut(STORE_CONTACTS, contact);
+    await saveContact(contact);
     await refreshContacts();
     setStatus(true, `Contact saved: ${contact.name} (fp: ${fpB64.slice(0, 16)}...)`);
   } catch (e) {
@@ -661,10 +748,10 @@ window.addContact = async function() {
 };
 
 window.refreshContacts = async function() {
-  const contacts = await idbGetAll(STORE_CONTACTS);
+  const contacts = await getAllContacts();
   contacts.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
-  const sel = document.getElementById("recipient-select");
+  const sel = ui.recipientSelect;
   sel.innerHTML = `<option value="">Select Recipient</option>`;
 
   for (const c of contacts) {
@@ -684,10 +771,10 @@ window.refreshContacts = async function() {
 };
 
 window.deleteSelectedContact = async function() {
-  const fp = document.getElementById("recipient-select").value;
+  const fp = ui.recipientSelect.value;
   if (!fp) return alert("Select a contact first");
 
-  await idbDel(STORE_CONTACTS, fp);
+  await deleteContact(fp);
   await refreshContacts();
   setStatus(true, `Contact deleted (fp: ${fp.slice(0, 16)}...)`);
 };
@@ -698,11 +785,11 @@ window.deleteSelectedContact = async function() {
 window.encryptMsg = async function() {
   try {
     const content = document.getElementById("content").value || "";
-    const fp = document.getElementById("recipient-select").value;
+    const fp = ui.recipientSelect.value;
 
     if (!fp) return alert("Select a recipient");
 
-    const recipient = await idbGet(STORE_CONTACTS, fp);
+    const recipient = await getContact(fp);
     if (!recipient) return alert("Recipient not found");
 
     const my = await ensureMyKeys();
@@ -716,8 +803,8 @@ window.encryptMsg = async function() {
       recipientBoxPK: nacl.util.decodeBase64(recipient.boxPK)
     }, nacl, nacl.util);
 
-    document.getElementById("encrypted").textContent = JSON.stringify(message, null, 2);
-    document.getElementById("encrypted-actions").style.display = "flex";
+    renderEncryptedMessage(message);
+    await sendEncryptedViaPreferredTransport(message);
     setStatus(true, `Encrypted for ${recipient.name}`);
   } catch (e) {
     setStatus(false, "Encryption failed: " + e.message);
@@ -725,7 +812,16 @@ window.encryptMsg = async function() {
 };
 
 window.copyEncrypted = async function() {
-  const text = document.getElementById("encrypted").textContent;
+  const text = ui.encrypted.textContent;
+  if (!text) return;
+
+  const message = lastEncryptedMessage || JSON.parse(text);
+  if (transportManager) {
+    await transportManager.send('clipboard', message);
+    setStatus(true, 'Encrypted message copied via clipboard transport');
+    return;
+  }
+
   await navigator.clipboard.writeText(text);
   setStatus(true, "Encrypted message copied to clipboard");
 };
@@ -734,24 +830,27 @@ window.copyEncrypted = async function() {
   Decryption
 ========================= */
 async function cleanupReplay() {
-  const all = await idbGetAll(STORE_REPLAY);
-  const now = Date.now();
-  const old = all.filter(x => (now - (x.seenAt || 0)) > DMesh.REPLAY_RETENTION_MS);
-  for (const o of old) await idbDel(STORE_REPLAY, o.k);
+  await cleanupSeen(DMesh.REPLAY_RETENTION_MS);
 }
 
 async function checkAndMarkReplay(senderFp, nonceB64) {
   await cleanupReplay();
-  const k = `${senderFp}:${nonceB64}`;
-  const existing = await idbGet(STORE_REPLAY, k);
+  const seenKey = makeSeenKey(nonceB64, senderFp);
+  const existing = await idbGet(STORE_SEEN, seenKey);
   if (existing) return false;
-  await idbPut(STORE_REPLAY, { k, seenAt: Date.now() });
+  await idbPut(STORE_SEEN, { seenKey, msgId: nonceB64, senderFp, seenAt: Date.now() });
   return true;
 }
 
 window.decryptMsg = async function() {
   try {
-    const message = JSON.parse(document.getElementById("input").value.trim());
+    const rawInput = ui.decryptInput.value.trim();
+    let message = null;
+    if (!rawInput && transportManager) {
+      const received = await transportManager.receive('clipboard');
+      message = received[0] || null;
+    }
+    message = message || JSON.parse(rawInput);
     const my = await ensureMyKeys();
 
     // Sender fingerprint
@@ -760,7 +859,7 @@ window.decryptMsg = async function() {
     const senderFpB64 = nacl.util.encodeBase64(senderFp);
 
     // Contact lookup
-    let contact = await idbGet(STORE_CONTACTS, senderFpB64);
+    let contact = await getContact(senderFpB64);
 
     let expectedSenderSignPK = null;
     let expectedSenderBoxPK = null;
@@ -778,7 +877,7 @@ window.decryptMsg = async function() {
         boxPK: message.senderBoxPK,
         addedAt: Date.now()
       };
-      await idbPut(STORE_CONTACTS, contact);
+      await saveContact(contact);
       await refreshContacts();
     } else {
       // Known sender - expect keys to match
@@ -799,11 +898,11 @@ window.decryptMsg = async function() {
       replayCheck
     }, nacl, nacl.util);
 
-    document.getElementById("decrypted").textContent = result.content;
+    ui.decrypted.textContent = result.content;
     setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
   } catch (e) {
     setStatus(false, "Decryption failed: " + e.message);
-    document.getElementById("decrypted").textContent = "";
+    ui.decrypted.textContent = "";
   }
 };
 
@@ -939,6 +1038,8 @@ if ('serviceWorker' in navigator) {
 ========================= */
 (async () => {
   try {
+    initTransport();
+    await migrateLegacyDBToV2();
     initBLE();  // Initialize Bluetooth
     await initOrLoad();
   } catch (e) {
