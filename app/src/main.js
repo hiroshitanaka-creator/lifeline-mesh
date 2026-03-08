@@ -33,6 +33,7 @@ import {
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, setStatus } from './ui-utils.js';
+import { createTransportManager } from '../../crypto/transport.js';
 
 
 /* =========================
@@ -41,6 +42,7 @@ import { appendBleMessage, formatErrorMessage, setStatus } from './ui-utils.js';
 let bleManager = null;
 let lastEncryptedMessage = null;
 let bleManagerFactory = () => new BLEManager();
+let transportManager = null;
 
 const DELIVERY_UI_STATUS = {
   UNSENT: "未送信",
@@ -48,6 +50,8 @@ const DELIVERY_UI_STATUS = {
   DELIVERED: "配信済み",
   FAILED: "失敗"
 };
+
+const BLE_CONFIG_STORAGE_KEY = "lifeline:bleProtocolConfig";
 
 function setDeliveryStatus(status, detail = '') {
   const chipEl = document.getElementById('delivery-status-chip');
@@ -185,6 +189,12 @@ function initBLE() {
 
   bleManager = bleManagerFactory();
 
+  const savedBleConfig = loadSavedBleProtocolConfig();
+  if (savedBleConfig) {
+    bleManager.updateProtocolConfig(savedBleConfig);
+  }
+  renderBleProtocolConfig(bleManager.getProtocolConfig());
+
   bleManager.onConnectionChange = (connected, device) => {
     const statusEl = document.getElementById('ble-status');
     const deviceEl = document.getElementById('ble-device-name');
@@ -216,6 +226,118 @@ function initBLE() {
     console.error('BLE Error:', code, error);
   };
 }
+
+function initTransportLayer() {
+  transportManager = createTransportManager({
+    nacl,
+    naclUtil: nacl.util
+  });
+
+  transportManager.onError = (error, transportName) => {
+    setStatus(false, `Transport error (${transportName}): ${error.message}`);
+  };
+}
+
+function getEncryptedMessageFromUI() {
+  const encryptedText = document.getElementById('encrypted').textContent;
+  if (!encryptedText || encryptedText === '') {
+    throw new Error('No encrypted message to send. Encrypt a message first.');
+  }
+
+  return JSON.parse(encryptedText);
+}
+
+async function sendEncryptedViaTransport(transportName) {
+  if (!transportManager) {
+    throw new Error('Transport manager not initialized');
+  }
+
+  const message = getEncryptedMessageFromUI();
+  await transportManager.send(transportName, message);
+  setStatus(true, `Encrypted message sent via ${transportName}`);
+}
+
+function getBleProtocolConfigFromInputs() {
+  const readNumber = (id, fallback) => {
+    const value = Number(document.getElementById(id)?.value);
+    return Number.isFinite(value) ? value : fallback;
+  };
+
+  return {
+    ackTimeoutMs: readNumber('ble-ack-timeout', 2500),
+    retryCount: readNumber('ble-retry-count', 3),
+    retryDelayMs: readNumber('ble-retry-delay', 750),
+    chunkDelayMs: readNumber('ble-chunk-delay', 30),
+    reassemblyTimeoutMs: readNumber('ble-reassembly-timeout', 60000)
+  };
+}
+
+function renderBleProtocolConfig(config = {}) {
+  const safe = {
+    ackTimeoutMs: config.ackTimeoutMs || 2500,
+    retryCount: config.retryCount || 3,
+    retryDelayMs: config.retryDelayMs || 750,
+    chunkDelayMs: config.chunkDelayMs || 30,
+    reassemblyTimeoutMs: config.reassemblyTimeoutMs || 60000
+  };
+
+  document.getElementById('ble-ack-timeout').value = String(safe.ackTimeoutMs);
+  document.getElementById('ble-retry-count').value = String(safe.retryCount);
+  document.getElementById('ble-retry-delay').value = String(safe.retryDelayMs);
+  document.getElementById('ble-chunk-delay').value = String(safe.chunkDelayMs);
+  document.getElementById('ble-reassembly-timeout').value = String(safe.reassemblyTimeoutMs);
+}
+
+function loadSavedBleProtocolConfig() {
+  try {
+    const raw = localStorage.getItem(BLE_CONFIG_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+window.applyBleConfig = function() {
+  if (!bleManager) {
+    setStatus(false, 'BLE manager is not initialized yet');
+    return;
+  }
+
+  try {
+    const nextConfig = getBleProtocolConfigFromInputs();
+    const applied = bleManager.updateProtocolConfig(nextConfig);
+    localStorage.setItem(BLE_CONFIG_STORAGE_KEY, JSON.stringify(applied));
+    renderBleProtocolConfig(applied);
+    setStatus(true, `BLE config updated (retry=${applied.retryCount}, ack=${applied.ackTimeoutMs}ms)`);
+  } catch (error) {
+    setStatus(false, `BLE config update failed: ${error.message}`);
+  }
+};
+
+window.resetBleConfig = function() {
+  if (!bleManager) {
+    setStatus(false, 'BLE manager is not initialized yet');
+    return;
+  }
+
+  try {
+    localStorage.removeItem(BLE_CONFIG_STORAGE_KEY);
+    const applied = bleManager.updateProtocolConfig({
+      ackTimeoutMs: 2500,
+      retryCount: 3,
+      retryDelayMs: 750,
+      chunkDelayMs: 30,
+      reassemblyTimeoutMs: 60000
+    });
+    renderBleProtocolConfig(applied);
+    setStatus(true, 'BLE config reset to defaults');
+  } catch (error) {
+    setStatus(false, `BLE config reset failed: ${error.message}`);
+  }
+};
 
 window.bleScan = async function() {
   if (!bleManager) {
@@ -290,10 +412,13 @@ function bindUIActions() {
     removeSelectedMemberFromGroup: () => window.removeSelectedMemberFromGroup(),
     encryptMsg: () => window.encryptMsg(),
     copyEncrypted: () => window.copyEncrypted(),
+    exportEncryptedFile: () => window.exportEncryptedFile(),
     decryptMsg: () => window.decryptMsg(),
     bleScan: () => window.bleScan(),
     bleDisconnect: () => window.bleDisconnect(),
     bleSendEncrypted: () => window.bleSendEncrypted(),
+    applyBleConfig: () => window.applyBleConfig(),
+    resetBleConfig: () => window.resetBleConfig(),
     closeQRModal: () => window.closeQRModal(),
     closeQRScanner: () => window.closeQRScanner(),
     installPWA: () => window.installPWA(),
@@ -901,9 +1026,19 @@ window.encryptMsg = async function() {
 };
 
 window.copyEncrypted = async function() {
-  const text = document.getElementById("encrypted").textContent;
-  await navigator.clipboard.writeText(text);
-  setStatus(true, "Encrypted message copied to clipboard");
+  try {
+    await sendEncryptedViaTransport('clipboard');
+  } catch (e) {
+    setStatus(false, formatErrorMessage('Copy failed', e));
+  }
+};
+
+window.exportEncryptedFile = async function() {
+  try {
+    await sendEncryptedViaTransport('file');
+  } catch (e) {
+    setStatus(false, formatErrorMessage('File export failed', e));
+  }
 };
 
 /* =========================
@@ -1151,6 +1286,7 @@ window.__lifelineTest = {
     bindUIActions();
     const migrationResult = await migrateLegacyV1IfNeeded();
     initBLE();  // Initialize Bluetooth
+    initTransportLayer();
     await initOrLoad();
     await refreshGroups();
     setMessageMode('direct');

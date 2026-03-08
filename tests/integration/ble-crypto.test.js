@@ -157,6 +157,37 @@ test("integration: configurable chunk/ack/retry params are applied", async () =>
   }
 });
 
+test("integration: runtime protocol config update applies bounds", async () => {
+  const manager = new BLEManager({
+    protocolConfig: {
+      ackTimeoutMs: 400,
+      retryCount: 2,
+      retryDelayMs: 5,
+      reassemblyTimeoutMs: 5000
+    }
+  });
+
+  const next = manager.updateProtocolConfig({
+    ackTimeoutMs: 50,
+    retryCount: 0,
+    retryDelayMs: -5,
+    reassemblyTimeoutMs: 200
+  });
+
+  if (next.ackTimeoutMs !== 100) {
+    throw new Error(`Expected ackTimeoutMs lower bound 100, got ${next.ackTimeoutMs}`);
+  }
+  if (next.retryCount !== 1) {
+    throw new Error(`Expected retryCount lower bound 1, got ${next.retryCount}`);
+  }
+  if (next.retryDelayMs !== 0) {
+    throw new Error(`Expected retryDelayMs lower bound 0, got ${next.retryDelayMs}`);
+  }
+  if (next.reassemblyTimeoutMs !== 1000) {
+    throw new Error(`Expected reassemblyTimeoutMs lower bound 1000, got ${next.reassemblyTimeoutMs}`);
+  }
+});
+
 test("integration: reorder + duplicate chunks still reassemble once", async () => {
   const { sender, receiver } = createLinkedManagers({
     protocolConfig: { chunkSize: 80 }

@@ -8,6 +8,8 @@
 import {
   STORE_KEYS,
   STORE_CONTACTS,
+  STORE_OUTBOX,
+  STORE_INBOX,
   STORE_SEEN,
   STORE_GROUPS,
   idbGet,
@@ -31,6 +33,8 @@ import {
 export {
   STORE_KEYS,
   STORE_CONTACTS,
+  STORE_OUTBOX,
+  STORE_INBOX,
   STORE_GROUPS,
   idbGet,
   idbPut,
@@ -86,37 +90,82 @@ async function getFromStore(db, storeName, key) {
   });
 }
 
+function normalizeDeliveryStatus(status) {
+  const value = String(status || '').toLowerCase();
+  if (value === 'sent' || value === 'delivered' || value === 'failed') {
+    return value;
+  }
+  return 'pending';
+}
+
+export function normalizeLegacyOutboxEntry(entry) {
+  if (!entry || !entry.msgId || !entry.message) {
+    return null;
+  }
+
+  return {
+    msgId: entry.msgId,
+    recipientFp: entry.recipientFp || entry.recipient || 'unknown',
+    message: entry.message,
+    createdAt: entry.createdAt || Date.now(),
+    status: normalizeDeliveryStatus(entry.status),
+    attempts: Number.isFinite(entry.attempts) ? entry.attempts : 0,
+    lastAttempt: entry.lastAttempt || null,
+    error: entry.error || null,
+    transport: entry.transport || 'ble'
+  };
+}
+
+export function normalizeLegacyInboxEntry(entry) {
+  if (!entry || !entry.msgId || !entry.message) {
+    return null;
+  }
+
+  return {
+    msgId: entry.msgId,
+    senderFp: entry.senderFp || 'unknown',
+    message: entry.message,
+    receivedAt: entry.receivedAt || Date.now(),
+    type: entry.type || 'direct',
+    read: Boolean(entry.read)
+  };
+}
+
 /**
  * Migrate legacy lifelineMesh(v1) data into lifelineMeshV2 store.
  * Idempotent: safe to call on every app start.
  *
- * @returns {Promise<{migrated: boolean, keys: number, contacts: number, seen: number}>}
+ * @returns {Promise<{migrated: boolean, keys: number, contacts: number, seen: number, outbox: number, inbox: number}>}
  */
 export async function migrateLegacyV1IfNeeded() {
   const migrationFlag = await idbGet(STORE_KEYS, '__legacy_v1_migrated__');
   if (migrationFlag?.done) {
-    return { migrated: false, keys: 0, contacts: 0, seen: 0 };
+    return { migrated: false, keys: 0, contacts: 0, seen: 0, outbox: 0, inbox: 0 };
   }
 
   const legacyDb = await openLegacyV1Database();
   if (!legacyDb) {
     await idbPut(STORE_KEYS, { done: true, at: Date.now() }, '__legacy_v1_migrated__');
-    return { migrated: false, keys: 0, contacts: 0, seen: 0 };
+    return { migrated: false, keys: 0, contacts: 0, seen: 0, outbox: 0, inbox: 0 };
   }
 
   const hasKeys = legacyDb.objectStoreNames.contains('keys');
   const hasContacts = legacyDb.objectStoreNames.contains('contacts');
   const hasReplay = legacyDb.objectStoreNames.contains('replay');
+  const hasOutbox = legacyDb.objectStoreNames.contains('outbox');
+  const hasInbox = legacyDb.objectStoreNames.contains('inbox');
 
-  if (!hasKeys && !hasContacts && !hasReplay) {
+  if (!hasKeys && !hasContacts && !hasReplay && !hasOutbox && !hasInbox) {
     legacyDb.close();
     await idbPut(STORE_KEYS, { done: true, at: Date.now() }, '__legacy_v1_migrated__');
-    return { migrated: false, keys: 0, contacts: 0, seen: 0 };
+    return { migrated: false, keys: 0, contacts: 0, seen: 0, outbox: 0, inbox: 0 };
   }
 
   let keyCount = 0;
   let contactCount = 0;
   let seenCount = 0;
+  let outboxCount = 0;
+  let inboxCount = 0;
 
   if (hasKeys) {
     const keyNames = ['my_sign_pk', 'my_sign_sk', 'my_box_pk', 'my_box_sk'];
@@ -161,14 +210,47 @@ export async function migrateLegacyV1IfNeeded() {
     }
   }
 
+  if (hasOutbox) {
+    const outboxEntries = await getAllFromStore(legacyDb, 'outbox');
+    for (const entry of outboxEntries) {
+      const normalized = normalizeLegacyOutboxEntry(entry);
+      if (!normalized) {
+        continue;
+      }
+      await idbPut(STORE_OUTBOX, normalized);
+      outboxCount += 1;
+    }
+  }
+
+  if (hasInbox) {
+    const inboxEntries = await getAllFromStore(legacyDb, 'inbox');
+    for (const entry of inboxEntries) {
+      const normalized = normalizeLegacyInboxEntry(entry);
+      if (!normalized) {
+        continue;
+      }
+      await idbPut(STORE_INBOX, normalized);
+      inboxCount += 1;
+    }
+  }
+
   legacyDb.close();
   await idbPut(STORE_KEYS, {
     done: true,
     at: Date.now(),
     keyCount,
     contactCount,
-    seenCount
+    seenCount,
+    outboxCount,
+    inboxCount
   }, '__legacy_v1_migrated__');
 
-  return { migrated: true, keys: keyCount, contacts: contactCount, seen: seenCount };
+  return {
+    migrated: true,
+    keys: keyCount,
+    contacts: contactCount,
+    seen: seenCount,
+    outbox: outboxCount,
+    inbox: inboxCount
+  };
 }
