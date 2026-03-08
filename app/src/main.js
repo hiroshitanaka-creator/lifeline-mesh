@@ -320,6 +320,35 @@ function bindUIActions() {
 }
 
 
+
+function setActionBusy(actionName, busy, loadingText) {
+  const button = document.querySelector(`[data-action="${actionName}"]`);
+  if (!button) {
+    return;
+  }
+
+  if (busy) {
+    if (!button.dataset.originalText) {
+      button.dataset.originalText = button.textContent;
+    }
+    button.disabled = true;
+    button.classList.add('loading-btn');
+    button.setAttribute('aria-busy', 'true');
+    if (loadingText) {
+      button.textContent = loadingText;
+    }
+    return;
+  }
+
+  button.disabled = false;
+  button.classList.remove('loading-btn');
+  button.removeAttribute('aria-busy');
+  if (button.dataset.originalText) {
+    button.textContent = button.dataset.originalText;
+    delete button.dataset.originalText;
+  }
+}
+
 function getLocalSignPKB64(my) {
   return nacl.util.encodeBase64(my.signPKu8);
 }
@@ -369,6 +398,7 @@ async function ensureMyKeys() {
 }
 
 window.initOrLoad = async function() {
+  setActionBusy('initOrLoad', true, '🔑 Preparing...');
   try {
     const my = await ensureMyKeys();
     const myId = DMesh.createPublicIdentity({
@@ -384,6 +414,8 @@ window.initOrLoad = async function() {
     setStatus(true, `Keys ready. Fingerprint: ${myId.fp}`);
   } catch (e) {
     setStatus(false, e.message);
+  } finally {
+    setActionBusy('initOrLoad', false);
   }
 };
 
@@ -808,6 +840,7 @@ window.removeSelectedMemberFromGroup = async function() {
   Encryption
 ========================= */
 window.encryptMsg = async function() {
+  setActionBusy('encryptMsg', true, '🔒 Encrypting...');
   try {
     const content = document.getElementById("content").value || "";
     const mode = document.querySelector('input[name="message-mode"]:checked')?.value || 'direct';
@@ -862,6 +895,8 @@ window.encryptMsg = async function() {
     setStatus(true, `Encrypted for ${recipient.name}`);
   } catch (e) {
     setStatus(false, formatErrorMessage('Encryption failed', e));
+  } finally {
+    setActionBusy('encryptMsg', false);
   }
 };
 
@@ -876,6 +911,7 @@ window.copyEncrypted = async function() {
 ========================= */
 
 window.decryptMsg = async function() {
+  setActionBusy('decryptMsg', true, '🔓 Decrypting...');
   try {
     const message = JSON.parse(document.getElementById("input").value.trim());
     const my = await ensureMyKeys();
@@ -954,6 +990,8 @@ window.decryptMsg = async function() {
   } catch (e) {
     setStatus(false, formatErrorMessage('Decryption failed', e));
     document.getElementById("decrypted").textContent = "";
+  } finally {
+    setActionBusy('decryptMsg', false);
   }
 };
 
