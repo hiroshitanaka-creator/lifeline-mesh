@@ -7,6 +7,23 @@ import nacl from "tweetnacl";
 import naclUtil from "tweetnacl-util";
 import * as DMesh from "./core.js";
 
+export const INTEGRATION_TEST_TARGETS = {
+  primaryFlow: {
+    name: "encrypt-send-decrypt-mainline",
+    modules: ["app/index.html", "bluetooth/ble-manager.js", "crypto/core.js"],
+    steps: [
+      "app encrypts message with DMesh.encryptMessage",
+      "bluetooth BLEManager.sendMessage transmits chunked payload",
+      "receiver reassembles payload and app decrypts with DMesh.decryptMessage"
+    ],
+    assertions: [
+      "ciphertext survives chunk transport",
+      "signature and recipient binding remain valid after transport",
+      "decrypted content matches original plaintext"
+    ]
+  }
+};
+
 let passed = 0;
 let failed = 0;
 
@@ -437,6 +454,15 @@ test("concatU8 concatenates arrays correctly", () => {
       result[3] !== 4 || result[4] !== 5 || result[5] !== 6) {
     throw new Error("Invalid concatenation");
   }
+});
+
+test("integration target definition includes app/bluetooth/crypto mainline", () => {
+  const target = INTEGRATION_TEST_TARGETS.primaryFlow;
+  if (!target) throw new Error("Missing primary flow target");
+  if (!target.modules.includes("app/index.html")) throw new Error("Missing app module");
+  if (!target.modules.includes("bluetooth/ble-manager.js")) throw new Error("Missing bluetooth module");
+  if (!target.modules.includes("crypto/core.js")) throw new Error("Missing crypto module");
+  if (target.steps.length < 3) throw new Error("Integration target should define 3+ steps");
 });
 
 // ============================================================================

@@ -139,8 +139,12 @@ git checkout -b fix/your-bug-fix
 # Run all tests
 npm test
 
-# Run crypto tests only
-npm run test:crypto
+# Run staged suites
+npm run test:unit
+npm run test:integration
+
+# Run e2e smoke tests (Playwright)
+npm run test:e2e
 
 # Run linting
 npm run lint
@@ -169,6 +173,16 @@ git commit -m "feat: add Bluetooth relay support"
 ## Pull Request Process
 
 ### Before Submitting
+
+### Required Test Perspectives (before PR)
+
+Please confirm your changes against these perspectives when applicable:
+
+- **TTL / expiration**: messages near and beyond expiration boundaries.
+- **Replay / resend**: duplicate delivery should be blocked by replay cache.
+- **Chunk transport robustness**: missing chunk should not produce a valid decrypted payload.
+- **Mainline integration**: encrypt → Bluetooth send/reassembly → decrypt.
+- **Critical user flow (E2E)**: key generation + primary messaging controls load in browser.
 
 - [ ] All tests pass (`npm test`)
 - [ ] No linting errors (`npm run lint`)
