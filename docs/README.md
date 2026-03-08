@@ -30,7 +30,7 @@ Frequently asked questions about:
 
 ### [NEXT_PHASE_EXECUTION_JA.md](./NEXT_PHASE_EXECUTION_JA.md)
 Post-merge execution roadmap (Japanese) covering:
-- Phase 6-10 goals and deliverables
+- Phase 1-10 goals and deliverables
 - Exit criteria per phase
 - Go/No-Go release gates
 
