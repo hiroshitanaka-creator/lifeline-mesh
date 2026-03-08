@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "validate": "npm run lint && npm run typecheck && npm run test",
+    "validate": "npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run test:e2e:playwright",
     "ci": "npm run validate",
     "prepare": "husky || true",
     "pre-commit": "lint-staged",

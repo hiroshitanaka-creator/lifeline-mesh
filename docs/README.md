@@ -13,6 +13,13 @@ Complete usage guide covering:
 - Offline usage
 - Integration with relay networks
 
+### [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md)
+Release decision checklist covering:
+- Mandatory CI/test gates
+- Known-bug acceptance threshold
+- Compatibility verification
+- Final go/no-go sign-off
+
 ### [FAQ.md](./FAQ.md)
 Frequently asked questions about:
 - General questions (what is it, who is it for)
@@ -32,6 +39,7 @@ Frequently asked questions about:
 - [Integration Guide](./FAQ.md#how-do-i-integrate-lifeline-mesh-into-my-app)
 - [Build Your Own Relay](./FAQ.md#how-do-i-build-my-own-relay)
 - [Run Tests](./FAQ.md#how-do-i-run-tests)
+- [Release Checklist](./RELEASE_CHECKLIST.md)
 
 **For Security Reviewers**:
 - [Threat Model](../spec/THREAT_MODEL.md)
