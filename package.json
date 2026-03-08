@@ -6,7 +6,7 @@
   "private": true,
   "scripts": {
     "install:all": "npm install && npm install --prefix crypto && npm install --prefix tools",
-    "test": "npm run test:crypto && npm run test:vectors",
+    "test": "npm run test:unit && npm run test:integration",
     "test:crypto": "npm --prefix crypto test",
     "test:vectors": "npm --prefix tools run validate-vectors",
     "generate:vectors": "npm --prefix tools run generate-vectors",
@@ -17,7 +17,11 @@
     "validate": "npm run lint && npm run typecheck && npm run test",
     "ci": "npm run validate",
     "prepare": "husky || true",
-    "pre-commit": "lint-staged"
+    "pre-commit": "lint-staged",
+    "test:unit": "npm run test:crypto && npm run test:vectors",
+    "test:integration": "node tests/integration/ble-crypto.test.js",
+    "test:e2e": "node tests/e2e/smoke-check.js",
+    "test:e2e:playwright": "playwright test"
   },
   "keywords": [
     "cryptography",
