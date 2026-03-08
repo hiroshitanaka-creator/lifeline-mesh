@@ -8,26 +8,44 @@
 import {
   STORE_KEYS,
   STORE_CONTACTS,
-  STORE_SEEN as STORE_REPLAY,
+  STORE_GROUPS,
   idbGet,
   idbPut,
   idbDel,
   idbGetAll,
   clearAllData,
   checkAndMarkSeen,
-  cleanupSeen
+  cleanupSeen,
+  saveGroup,
+  getGroup,
+  getAllGroups,
+  saveGroupMembers,
+  getGroupMembers,
+  addGroupMember,
+  removeGroupMember,
+  saveSenderKeyState,
+  getSenderKeyState
 } from '../../crypto/store.js';
 
 export {
   STORE_KEYS,
   STORE_CONTACTS,
-  STORE_REPLAY,
+  STORE_GROUPS,
   idbGet,
   idbPut,
   idbDel,
   idbGetAll,
   checkAndMarkSeen,
-  cleanupSeen
+  cleanupSeen,
+  saveGroup,
+  getGroup,
+  getAllGroups,
+  saveGroupMembers,
+  getGroupMembers,
+  addGroupMember,
+  removeGroupMember,
+  saveSenderKeyState,
+  getSenderKeyState
 };
 
 export async function resetDatabase() {

@@ -115,10 +115,40 @@
 
   <div class="section">
     <h2>3) Encrypt Message</h2>
+    <div class="row">
+      <label><input type="radio" name="message-mode" value="direct" checked onchange="setMessageMode('direct')" /> Direct</label>
+      <label><input type="radio" name="message-mode" value="group" onchange="setMessageMode('group')" /> Group</label>
+    </div>
+
+    <div id="direct-controls">
+      <p class="small">Recipient: <strong id="encrypt-recipient">(select above)</strong></p>
+    </div>
+
+    <div id="group-controls" style="display:none">
+      <div class="row">
+        <input id="group-name" placeholder="New group name" />
+        <button onclick="createGroup()">👥 Create Group</button>
+      </div>
+      <textarea id="group-json" placeholder='Paste group JSON to join (id/name/members/senderKey)'></textarea>
+      <div class="row">
+        <button onclick="joinGroup()">📥 Join Group</button>
+      </div>
+      <select id="group-select">
+        <option value="">Select Group</option>
+      </select>
+      <div class="row">
+        <select id="group-member-select">
+          <option value="">Select Contact</option>
+        </select>
+        <button onclick="addSelectedMemberToGroup()">➕ Add Member</button>
+        <button class="danger" onclick="removeSelectedMemberFromGroup()">➖ Remove Member</button>
+      </div>
+      <pre id="group-view">(no group selected)</pre>
+    </div>
+
     <textarea id="content" placeholder="Type your message here (max 150KB)"></textarea>
     <div class="row">
       <button onclick="encryptMsg()">🔒 Encrypt</button>
-      <span class="small">Recipient: <strong id="encrypt-recipient">(select above)</strong></span>
     </div>
     <pre id="encrypted"></pre>
     <div class="row" id="encrypted-actions" style="display:none">

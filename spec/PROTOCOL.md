@@ -583,3 +583,44 @@ Potential v2 considerations:
 - Compressed message format (zstd before encryption)
 - Multi-recipient encryption
 - Mesh routing metadata
+
+### Group Message Wire Format (`dmesh-group-msg`)
+
+Group messaging uses a SenderKey ratchet per `(groupId, senderSignPK)`.
+
+**Wire format**:
+```json
+{
+  "v": 1,
+  "kind": "dmesh-group-msg",
+  "groupId": "<base64-16-bytes>",
+  "ts": 1706012345678,
+  "senderSignPK": "<base64-32-bytes>",
+  "senderKeyVersion": 5,
+  "nonce": "<base64-24-bytes>",
+  "ciphertext": "<base64-variable>",
+  "signature": "<base64-64-bytes>"
+}
+```
+
+**Signing input** (`DMESH_GROUP_V1` domain-separated):
+- `"DMESH_GROUP_V1"`
+- `groupId` (UTF-8)
+- `senderKeyVersion` (1 byte)
+- `nonce` (24 bytes)
+- `ciphertext` (variable)
+
+**State model**:
+- Group metadata: `{ id, name, createdAt, createdBy }`
+- Membership: list of member fingerprints (`members[]`)
+- SenderKey state: `{ version, chainKey }` per sender, advanced on every message
+
+### Group Compatibility Policy
+
+- Existing direct message envelope (`dmesh-msg`) remains unchanged and fully supported.
+- Receivers route by `kind`:
+  - `dmesh-msg` → direct decrypt path
+  - `dmesh-group-msg` → group SenderKey decrypt path
+- Unknown `kind` MUST be ignored safely.
+- Membership changes (member add/remove) MUST force SenderKey rotation for the group.
+- `senderKeyVersion` mismatch is a hard failure and requires out-of-band state resync (e.g., re-join/reshare group state).
