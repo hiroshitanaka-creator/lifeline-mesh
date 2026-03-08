@@ -135,6 +135,53 @@ function setStatus(ok, msg) {
   document.getElementById("status").innerHTML = (ok ? `<span class="ok">✓ OK</span> ` : `<span class="ng">✗ ERROR</span> `) + msg;
 }
 
+function bindUIActions() {
+  const actionMap = {
+    initOrLoad: () => window.initOrLoad(),
+    resetAll: () => window.resetAll(),
+    copyMyId: () => window.copyMyId(),
+    showQRCode: () => window.showQRCode(),
+    exportKeys: () => window.exportKeys(),
+    importKeys: () => window.importKeys(),
+    addContact: () => window.addContact(),
+    scanQRCode: () => window.scanQRCode(),
+    refreshContacts: () => window.refreshContacts(),
+    deleteSelectedContact: () => window.deleteSelectedContact(),
+    createGroup: () => window.createGroup(),
+    joinGroup: () => window.joinGroup(),
+    addSelectedMemberToGroup: () => window.addSelectedMemberToGroup(),
+    removeSelectedMemberFromGroup: () => window.removeSelectedMemberFromGroup(),
+    encryptMsg: () => window.encryptMsg(),
+    copyEncrypted: () => window.copyEncrypted(),
+    decryptMsg: () => window.decryptMsg(),
+    bleScan: () => window.bleScan(),
+    bleDisconnect: () => window.bleDisconnect(),
+    bleSendEncrypted: () => window.bleSendEncrypted(),
+    closeQRModal: () => window.closeQRModal(),
+    closeQRScanner: () => window.closeQRScanner(),
+    installPWA: () => window.installPWA(),
+    dismissInstall: () => window.dismissInstall()
+  };
+
+  document.querySelectorAll('[data-action]').forEach((element) => {
+    element.addEventListener('click', (event) => {
+      const action = event.currentTarget.dataset.action;
+      const handler = actionMap[action];
+      if (!handler) {
+        console.warn('No handler for action:', action);
+        return;
+      }
+      handler();
+    });
+  });
+
+  document.querySelectorAll('input[name="message-mode"]').forEach((element) => {
+    element.addEventListener('change', () => {
+      window.setMessageMode(element.value);
+    });
+  });
+}
+
 
 function getLocalSignPKB64(my) {
   return nacl.util.encodeBase64(my.signPKu8);
@@ -925,6 +972,7 @@ window.__lifelineTest = {
 ========================= */
 (async () => {
   try {
+    bindUIActions();
     initBLE();  // Initialize Bluetooth
     await initOrLoad();
     await refreshGroups();
