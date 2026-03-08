@@ -1,267 +1,22 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#4CAF50" />
-  <meta name="description" content="End-to-end encrypted emergency messaging. Offline-first. No server required." />
-  <title>Lifeline Mesh - Emergency Messaging</title>
-
-  <!-- PWA Manifest -->
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" />
-
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 16px; max-width: 900px; }
-    textarea, input, select { width: 100%; padding: 8px; box-sizing: border-box; }
-    textarea { min-height: 110px; font-family: monospace; }
-    pre { background: #f6f6f6; padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
-    button { padding: 10px 12px; cursor: pointer; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .row > * { flex: 1 1 auto; }
-    .small { font-size: 12px; opacity: 0.8; }
-    .ok { color: #0a7; font-weight: 700; }
-    .ng { color: #c33; font-weight: 700; }
-    .danger { background: #ffecec; border: 1px solid #ffb3b3; }
-    .section { margin-bottom: 24px; }
-    details { margin: 8px 0; }
-    summary { cursor: pointer; font-weight: 600; padding: 8px; background: #f0f0f0; border-radius: 4px; }
-
-    /* Modal styles */
-    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); }
-    .modal-content { background-color: #fff; margin: 10% auto; padding: 20px; border-radius: 8px; max-width: 500px; position: relative; }
-    .modal-close { position: absolute; right: 10px; top: 10px; font-size: 28px; font-weight: bold; cursor: pointer; }
-    #qr-code { text-align: center; margin: 20px 0; }
-    #qr-reader { width: 100%; }
-
-    /* Install prompt */
-    #install-prompt { background: #4CAF50; color: white; padding: 12px; text-align: center; display: none; position: sticky; top: 0; z-index: 100; }
-    #install-prompt button { background: white; color: #4CAF50; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px; }
-
-    /* Dark Mode Support */
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a2e; color: #eee; }
-      textarea, input, select { background: #16213e; color: #eee; border: 1px solid #444; }
-      pre { background: #16213e; color: #ddd; }
-      button { background: #0f3460; color: #eee; border: 1px solid #444; }
-      button:hover { background: #1a4a7a; }
-      .danger { background: #4a1a1a; border-color: #7a3333; }
-      summary { background: #16213e; color: #eee; }
-      .modal-content { background: #1a1a2e; color: #eee; }
-      .ok { color: #4ade80; }
-      .ng { color: #f87171; }
-      a { color: #60a5fa; }
-      a:visited { color: #a78bfa; }
-      #install-prompt { background: #065f46; }
-      #install-prompt button { background: #10b981; color: #fff; }
-      h1, h2, h3 { color: #f0f0f0; }
-    }
-  </style>
-</head>
-
-<body>
-  <!-- PWA Install Prompt -->
-  <div id="install-prompt">
-    📱 Install Lifeline Mesh as an app for offline access
-    <button onclick="installPWA()">Install</button>
-    <button onclick="dismissInstall()">Later</button>
-  </div>
-
-  <h1>🌐 Lifeline Mesh</h1>
-  <p class="small">
-    End-to-end encrypted emergency messaging • Offline-first • No server required<br>
-    ✅ Ed25519 signatures • ✅ X25519 encryption • ✅ Ephemeral keys • ✅ Replay protection • ✅ TOFU
-  </p>
-
-  <div class="section">
-    <h2>1) Your Keys</h2>
-    <div class="row">
-      <button onclick="initOrLoad()">🔑 Generate / Load Keys</button>
-      <button class="danger" onclick="resetAll()">🗑️ RESET ALL</button>
-    </div>
-    <pre id="my-id">(not loaded)</pre>
-    <div class="row">
-      <button onclick="copyMyId()">📋 Copy My Public ID</button>
-      <button onclick="showQRCode()">📱 Show QR Code</button>
-      <button onclick="exportKeys()">💾 Export Keys</button>
-      <button onclick="importKeys()">📥 Import Keys</button>
-    </div>
-
-    <details>
-      <summary>Key Management</summary>
-      <p class="small">
-        <strong>QR Code:</strong> Display your public ID as QR code for easy scanning<br>
-        <strong>Export:</strong> Download your secret keys as encrypted JSON (password-protected)<br>
-        <strong>Import:</strong> Restore keys from backup file<br>
-        <strong>⚠️ Warning:</strong> Keep exported keys secure. Anyone with your secret keys can impersonate you.
-      </p>
-    </details>
-  </div>
-
-  <div class="section">
-    <h2>2) Contacts</h2>
-    <textarea id="contact-input" placeholder='{"name":"Bob","signPK":"base64","boxPK":"base64"}'></textarea>
-    <div class="row">
-      <button onclick="addContact()">➕ Add Contact</button>
-      <button onclick="scanQRCode()">📷 Scan QR Code</button>
-      <button onclick="refreshContacts()">🔄 Refresh</button>
-      <button class="danger" onclick="deleteSelectedContact()">❌ Delete Selected</button>
-    </div>
-    <select id="recipient-select">
-      <option value="">Select Recipient</option>
-    </select>
-    <pre id="contacts-view">(none)</pre>
-  </div>
-
-  <div class="section">
-    <h2>3) Encrypt Message</h2>
-    <textarea id="content" placeholder="Type your message here (max 150KB)"></textarea>
-    <div class="row">
-      <button onclick="encryptMsg()">🔒 Encrypt</button>
-      <span class="small">Recipient: <strong id="encrypt-recipient">(select above)</strong></span>
-    </div>
-    <pre id="encrypted"></pre>
-    <div class="row" id="encrypted-actions" style="display:none">
-      <button onclick="copyEncrypted()">📋 Copy Encrypted Message</button>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>4) Decrypt Message</h2>
-    <textarea id="input" placeholder="Paste encrypted JSON message here"></textarea>
-    <label class="small">
-      <input type="checkbox" id="tofu" />
-      TOFU (Trust On First Use - auto-accept unknown senders)
-    </label>
-    <div class="row">
-      <button onclick="decryptMsg()">🔓 Decrypt</button>
-    </div>
-    <pre id="status"></pre>
-    <pre id="decrypted"></pre>
-  </div>
-
-  <div class="section" id="ble-section">
-    <h2>5) Bluetooth Relay</h2>
-    <div id="ble-unsupported" style="display:none;">
-      <p class="small ng">⚠️ Web Bluetooth not supported in this browser. Use Chrome or Edge.</p>
-    </div>
-    <div id="ble-supported">
-      <div class="row">
-        <span class="small">Status: <strong id="ble-status">🔴 Not connected</strong></span>
-      </div>
-      <div class="row">
-        <button onclick="bleScan()">📡 Scan for Devices</button>
-        <button onclick="bleDisconnect()">❌ Disconnect</button>
-      </div>
-      <div class="small" style="margin-top: 8px;">
-        Connected to: <span id="ble-device-name">(none)</span>
-      </div>
-      <details style="margin-top: 12px;">
-        <summary>Received Messages via Bluetooth</summary>
-        <pre id="ble-messages">(none)</pre>
-      </details>
-      <div class="row" style="margin-top: 8px;">
-        <button onclick="bleSendEncrypted()">📤 Send Last Encrypted via Bluetooth</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <details>
-      <summary>📚 Documentation</summary>
-      <ul>
-        <li><a href="../docs/USAGE.md" target="_blank">Usage Guide</a></li>
-        <li><a href="../docs/FAQ.md" target="_blank">FAQ</a></li>
-        <li><a href="../spec/THREAT_MODEL.md" target="_blank">Threat Model</a></li>
-        <li><a href="../spec/PROTOCOL.md" target="_blank">Protocol Specification</a></li>
-      </ul>
-    </details>
-  </div>
-
-  <!-- QR Code Modal -->
-  <div id="qr-modal" class="modal">
-    <div class="modal-content">
-      <span class="modal-close" onclick="closeQRModal()">&times;</span>
-      <h3>Your Public ID QR Code</h3>
-      <div id="qr-code"></div>
-      <p class="small">Scan this with another device to add you as a contact</p>
-    </div>
-  </div>
-
-  <!-- QR Scanner Modal -->
-  <div id="qr-scanner-modal" class="modal">
-    <div class="modal-content">
-      <span class="modal-close" onclick="closeQRScanner()">&times;</span>
-      <h3>Scan Contact QR Code</h3>
-      <div id="qr-reader"></div>
-      <p class="small">Point camera at QR code to add contact</p>
-    </div>
-  </div>
-
-<script type="module">
 /* =========================
   Imports
-import * as DMesh from '../crypto/core.js';
-import { BLEManager } from '../bluetooth/ble-manager.js';
-import { encryptKeys, decryptKeys, checkPasswordStrength } from '../crypto/key-backup.js';
-import {
-  DB_NAME,
-  idbGet,
-  idbPut,
-  STORE_KEYS,
-  STORE_CONTACTS,
-  STORE_SEEN,
-  saveContact,
-  getContact,
-  getAllContacts,
-  deleteContact,
-  makeSeenKey,
-  cleanupSeen,
-  clearAllData
-} from '../crypto/store.js';
-import { TransportManager, getBestTransport } from '../crypto/transport.js';
+========================= */
+import * as DMesh from '../../crypto/core.js';
+import { BLEManager } from '../../bluetooth/ble-manager.js';
+import { encryptKeys, decryptKeys, checkPasswordStrength } from '../../crypto/key-backup.js';
 import nacl from 'tweetnacl';
 import * as naclUtil from 'tweetnacl-util';
 import QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
+import { STORE_KEYS, STORE_CONTACTS, STORE_REPLAY, idbGet, idbPut, idbDel, idbGetAll, resetDatabase } from './db.js';
+import { encryptInWorker, decryptInWorker } from './worker-client.js';
 
 
 /* =========================
   BLE Manager
+========================= */
 let bleManager = null;
 let lastEncryptedMessage = null;
-let transportManager = null;
-
-const LEGACY_DB_NAME = 'lifelineMesh';
-const LEGACY_DB_VERSION = 1;
-const LEGACY_STORE_KEYS = 'keys';
-const LEGACY_STORE_CONTACTS = 'contacts';
-const LEGACY_STORE_REPLAY = 'replay';
-
-const ui = {
-  encrypted: document.getElementById('encrypted'),
-  encryptedActions: document.getElementById('encrypted-actions'),
-  decryptInput: document.getElementById('input'),
-  decrypted: document.getElementById('decrypted'),
-  recipientSelect: document.getElementById('recipient-select')
-};
-
-function renderEncryptedMessage(message) {
-  const rendered = JSON.stringify(message, null, 2);
-  ui.encrypted.textContent = rendered;
-  ui.encryptedActions.style.display = 'flex';
-  lastEncryptedMessage = message;
-  return rendered;
-}
-
-async function sendEncryptedViaPreferredTransport(message) {
-  if (!transportManager) return;
-  const transportName = await getBestTransport(transportManager);
-  if (transportName !== 'clipboard') return;
-
-  await transportManager.send(transportName, message);
-  setStatus(true, 'Encrypted and copied via clipboard transport');
-}
 
 function initBLE() {
   if (!BLEManager.isSupported()) {
@@ -352,135 +107,16 @@ window.bleSendEncrypted = async function() {
 // Attach util to nacl for compatibility with existing code
 nacl.util = naclUtil;
 
-async function readLegacyStore(storeName) {
-  return new Promise((resolve, reject) => {
-    let createdNow = false;
-    const req = indexedDB.open(LEGACY_DB_NAME, LEGACY_DB_VERSION);
-    req.onupgradeneeded = () => {
-      createdNow = true;
-    };
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const db = req.result;
-      if (createdNow) {
-        db.close();
-        indexedDB.deleteDatabase(LEGACY_DB_NAME);
-        resolve([]);
-        return;
-      }
-      if (!db.objectStoreNames.contains(storeName)) {
-        db.close();
-        resolve([]);
-        return;
-      }
-
-      const tx = db.transaction(storeName, 'readonly');
-      const getAllReq = tx.objectStore(storeName).getAll();
-      getAllReq.onsuccess = () => {
-        db.close();
-        resolve(getAllReq.result || []);
-      };
-      getAllReq.onerror = () => {
-        db.close();
-        reject(getAllReq.error);
-      };
-    };
-  });
-}
-
-async function readLegacyKey(key) {
-  return new Promise((resolve, reject) => {
-    let createdNow = false;
-    const req = indexedDB.open(LEGACY_DB_NAME, LEGACY_DB_VERSION);
-    req.onupgradeneeded = () => {
-      createdNow = true;
-    };
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const db = req.result;
-      if (createdNow) {
-        db.close();
-        indexedDB.deleteDatabase(LEGACY_DB_NAME);
-        resolve(null);
-        return;
-      }
-      if (!db.objectStoreNames.contains(LEGACY_STORE_KEYS)) {
-        db.close();
-        resolve(null);
-        return;
-      }
-      const tx = db.transaction(LEGACY_STORE_KEYS, 'readonly');
-      const getReq = tx.objectStore(LEGACY_STORE_KEYS).get(key);
-      getReq.onsuccess = () => {
-        db.close();
-        resolve(getReq.result || null);
-      };
-      getReq.onerror = () => {
-        db.close();
-        reject(getReq.error);
-      };
-    };
-  });
-}
-
-async function migrateLegacyDBToV2() {
-  const dbList = await indexedDB.databases?.();
-  if (Array.isArray(dbList) && !dbList.some(db => db.name === LEGACY_DB_NAME)) return;
-
-  const hasMigrated = await idbGet(STORE_KEYS, '__legacy_migration_done__');
-  if (hasMigrated) return;
-
-  const [legacyContacts, legacyReplay] = await Promise.all([
-    readLegacyStore(LEGACY_STORE_CONTACTS),
-    readLegacyStore(LEGACY_STORE_REPLAY)
-  ]);
-
-  for (const key of ['my_sign_pk', 'my_sign_sk', 'my_box_pk', 'my_box_sk']) {
-    const existing = await idbGet(STORE_KEYS, key);
-    if (!existing) {
-      const legacyValue = await readLegacyKey(key);
-      if (legacyValue) await idbPut(STORE_KEYS, legacyValue, key);
-    }
-  }
-
-  for (const contact of legacyContacts) {
-    if (contact?.fp && contact?.signPK && contact?.boxPK) {
-      await saveContact(contact);
-    }
-  }
-
-  for (const replay of legacyReplay) {
-    if (!replay?.k) continue;
-    const [senderFp = '', nonceB64 = ''] = replay.k.split(':');
-    const seenKey = makeSeenKey(nonceB64, senderFp);
-    await idbPut(STORE_SEEN, {
-      seenKey,
-      msgId: nonceB64 || null,
-      senderFp: senderFp || null,
-      nonceB64: nonceB64 || null,
-      seenAt: replay.seenAt || Date.now()
-    });
-  }
-
-  await idbPut(STORE_KEYS, Date.now(), '__legacy_migration_done__');
-  setStatus(true, `Legacy data migrated: ${LEGACY_DB_NAME} → ${DB_NAME}`);
-}
-
 /* =========================
   Utility
+========================= */
 function setStatus(ok, msg) {
   document.getElementById("status").innerHTML = (ok ? `<span class="ok">✓ OK</span> ` : `<span class="ng">✗ ERROR</span> `) + msg;
 }
 
-function initTransport() {
-  transportManager = new TransportManager({
-    nacl,
-    naclUtil
-  });
-}
-
 /* =========================
   Key Management
+========================= */
 async function ensureMyKeys() {
   let signPK = await idbGet(STORE_KEYS, "my_sign_pk");
   let signSK = await idbGet(STORE_KEYS, "my_sign_sk");
@@ -518,7 +154,7 @@ window.initOrLoad = async function() {
       name: "(optional)",
       signPK: my.signPKu8,
       boxPK: my.boxPKu8
-    }, nacl, nacl.util);
+    });
 
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
     await refreshContacts();
@@ -652,7 +288,7 @@ window.importKeys = async function() {
 window.resetAll = async function() {
   if (!confirm("⚠️ Delete ALL data (keys, contacts, replay DB)?\nThis cannot be undone!")) return;
 
-  await clearAllData();
+  await resetDatabase();
 
   document.getElementById("my-id").textContent = "(not loaded)";
   document.getElementById("contacts-view").textContent = "(none)";
@@ -665,6 +301,7 @@ window.resetAll = async function() {
 
 /* =========================
    Keyboard Shortcuts
+========================= */
 document.addEventListener("keydown", (event) => {
 
   // Don't trigger shortcuts while typing
@@ -708,6 +345,7 @@ document.addEventListener("keydown", (event) => {
 
 /* =========================
   Contacts
+========================= */
 window.addContact = async function() {
   try {
     const obj = JSON.parse(document.getElementById("contact-input").value.trim());
@@ -733,7 +371,7 @@ window.addContact = async function() {
       addedAt: Date.now()
     };
 
-    await saveContact(contact);
+    await idbPut(STORE_CONTACTS, contact);
     await refreshContacts();
     setStatus(true, `Contact saved: ${contact.name} (fp: ${fpB64.slice(0, 16)}...)`);
   } catch (e) {
@@ -742,10 +380,10 @@ window.addContact = async function() {
 };
 
 window.refreshContacts = async function() {
-  const contacts = await getAllContacts();
+  const contacts = await idbGetAll(STORE_CONTACTS);
   contacts.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
-  const sel = ui.recipientSelect;
+  const sel = document.getElementById("recipient-select");
   sel.innerHTML = `<option value="">Select Recipient</option>`;
 
   for (const c of contacts) {
@@ -765,39 +403,40 @@ window.refreshContacts = async function() {
 };
 
 window.deleteSelectedContact = async function() {
-  const fp = ui.recipientSelect.value;
+  const fp = document.getElementById("recipient-select").value;
   if (!fp) return alert("Select a contact first");
 
-  await deleteContact(fp);
+  await idbDel(STORE_CONTACTS, fp);
   await refreshContacts();
   setStatus(true, `Contact deleted (fp: ${fp.slice(0, 16)}...)`);
 };
 
 /* =========================
   Encryption
+========================= */
 window.encryptMsg = async function() {
   try {
     const content = document.getElementById("content").value || "";
-    const fp = ui.recipientSelect.value;
+    const fp = document.getElementById("recipient-select").value;
 
     if (!fp) return alert("Select a recipient");
 
-    const recipient = await getContact(fp);
+    const recipient = await idbGet(STORE_CONTACTS, fp);
     if (!recipient) return alert("Recipient not found");
 
     const my = await ensureMyKeys();
 
-    const message = DMesh.encryptMessage({
+    const message = await encryptInWorker({
       content,
       senderSignPK: my.signPKu8,
       senderSignSK: my.signSKu8,
       senderBoxPK: my.boxPKu8,
       senderBoxSK: my.boxSKu8,
       recipientBoxPK: nacl.util.decodeBase64(recipient.boxPK)
-    }, nacl, nacl.util);
+    });
 
-    renderEncryptedMessage(message);
-    await sendEncryptedViaPreferredTransport(message);
+    document.getElementById("encrypted").textContent = JSON.stringify(message, null, 2);
+    document.getElementById("encrypted-actions").style.display = "flex";
     setStatus(true, `Encrypted for ${recipient.name}`);
   } catch (e) {
     setStatus(false, "Encryption failed: " + e.message);
@@ -805,44 +444,33 @@ window.encryptMsg = async function() {
 };
 
 window.copyEncrypted = async function() {
-  const text = ui.encrypted.textContent;
-  if (!text) return;
-
-  const message = lastEncryptedMessage || JSON.parse(text);
-  if (transportManager) {
-    await transportManager.send('clipboard', message);
-    setStatus(true, 'Encrypted message copied via clipboard transport');
-    return;
-  }
-
+  const text = document.getElementById("encrypted").textContent;
   await navigator.clipboard.writeText(text);
   setStatus(true, "Encrypted message copied to clipboard");
 };
 
 /* =========================
   Decryption
+========================= */
 async function cleanupReplay() {
-  await cleanupSeen(DMesh.REPLAY_RETENTION_MS);
+  const all = await idbGetAll(STORE_REPLAY);
+  const now = Date.now();
+  const old = all.filter(x => (now - (x.seenAt || 0)) > DMesh.REPLAY_RETENTION_MS);
+  for (const o of old) await idbDel(STORE_REPLAY, o.k);
 }
 
 async function checkAndMarkReplay(senderFp, nonceB64) {
   await cleanupReplay();
-  const seenKey = makeSeenKey(nonceB64, senderFp);
-  const existing = await idbGet(STORE_SEEN, seenKey);
+  const k = `${senderFp}:${nonceB64}`;
+  const existing = await idbGet(STORE_REPLAY, k);
   if (existing) return false;
-  await idbPut(STORE_SEEN, { seenKey, msgId: nonceB64, senderFp, seenAt: Date.now() });
+  await idbPut(STORE_REPLAY, { k, seenAt: Date.now() });
   return true;
 }
 
 window.decryptMsg = async function() {
   try {
-    const rawInput = ui.decryptInput.value.trim();
-    let message = null;
-    if (!rawInput && transportManager) {
-      const received = await transportManager.receive('clipboard');
-      message = received[0] || null;
-    }
-    message = message || JSON.parse(rawInput);
+    const message = JSON.parse(document.getElementById("input").value.trim());
     const my = await ensureMyKeys();
 
     // Sender fingerprint
@@ -851,7 +479,7 @@ window.decryptMsg = async function() {
     const senderFpB64 = nacl.util.encodeBase64(senderFp);
 
     // Contact lookup
-    let contact = await getContact(senderFpB64);
+    let contact = await idbGet(STORE_CONTACTS, senderFpB64);
 
     let expectedSenderSignPK = null;
     let expectedSenderBoxPK = null;
@@ -869,7 +497,7 @@ window.decryptMsg = async function() {
         boxPK: message.senderBoxPK,
         addedAt: Date.now()
       };
-      await saveContact(contact);
+      await idbPut(STORE_CONTACTS, contact);
       await refreshContacts();
     } else {
       // Known sender - expect keys to match
@@ -877,29 +505,31 @@ window.decryptMsg = async function() {
       expectedSenderBoxPK = nacl.util.decodeBase64(contact.boxPK);
     }
 
-    // Replay check function
-    const replayCheck = (fp, nonceB64) => checkAndMarkReplay(fp, nonceB64);
+    const replayAllowed = await checkAndMarkReplay(senderFpB64, message.nonce);
+    if (!replayAllowed) {
+      throw new Error('Replay detected');
+    }
 
     // Decrypt
-    const result = DMesh.decryptMessage({
+    const result = await decryptInWorker({
       message,
       recipientBoxPK: my.boxPKu8,
       recipientBoxSK: my.boxSKu8,
       expectedSenderSignPK,
-      expectedSenderBoxPK,
-      replayCheck
-    }, nacl, nacl.util);
+      expectedSenderBoxPK
+    });
 
-    ui.decrypted.textContent = result.content;
+    document.getElementById("decrypted").textContent = result.content;
     setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
   } catch (e) {
     setStatus(false, "Decryption failed: " + e.message);
-    ui.decrypted.textContent = "";
+    document.getElementById("decrypted").textContent = "";
   }
 };
 
 /* =========================
   QR Code Functions
+========================= */
 window.showQRCode = async function() {
   const idText = document.getElementById("my-id").textContent;
   if (!idText || idText === "(not loaded)") {
@@ -984,6 +614,7 @@ window.onclick = function(event) {
 
 /* =========================
   PWA Support
+========================= */
 let deferredPrompt;
 
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -1025,16 +656,12 @@ if ('serviceWorker' in navigator) {
 
 /* =========================
   Auto-init
+========================= */
 (async () => {
   try {
-    initTransport();
-    await migrateLegacyDBToV2();
     initBLE();  // Initialize Bluetooth
     await initOrLoad();
   } catch (e) {
     console.error("Auto-init failed:", e);
   }
 })();
-</script>
-</body>
-</html>

@@ -19,6 +19,15 @@ This document provides detailed technical implementation guidance for Lifeline M
 
 ---
 
+## Progress Status (Current Sprint)
+
+- [x] Phase 1: Minimal Group Messaging implementation added under `crypto/` (group create / send / decrypt).
+- [x] Phase 2: Incremental TypeScript migration started from boundary-heavy areas (`crypto/message-schema.ts`, `crypto/transport-io.ts`).
+- [x] Phase 3: `app/index.html` script split into `app/src` modules and wired via external entrypoint.
+- [x] Phase 4: Web Worker candidates extracted for encryption / verification / chunk reassembly (`app/src/workers/crypto-worker.js`).
+
+---
+
 ## 1. Immediate Issues to Address
 
 ### 1.1 Key Export Vulnerability Fix

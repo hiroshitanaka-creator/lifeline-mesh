@@ -6,6 +6,7 @@
 import nacl from "tweetnacl";
 import naclUtil from "tweetnacl-util";
 import * as DMesh from "./core.js";
+import * as GroupMesh from "./group.js";
 
 export const INTEGRATION_TEST_TARGETS = {
   primaryFlow: {
@@ -477,3 +478,4 @@ console.log(`Failed: ${failed}`);
 if (failed > 0) {
   process.exit(1);
 }
+
