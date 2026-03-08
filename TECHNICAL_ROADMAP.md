@@ -335,70 +335,77 @@ export class BLEManager {
 }
 ```
 
-### 2.4 Mesh Routing (Future)
+### 2.4 Mesh Routing (MVP: 1-Hop Relay First)
+
+To reduce implementation risk, split mesh routing into a minimal production path before multi-hop routing.
+
+#### Scope split
+
+**Phase 1 (implement now): 1-hop relay only**
+- Forward messages to directly connected peers only.
+- No dynamic routing table.
+- No path discovery.
+- Single relay metadata block: `{ relay: { via, hops, maxHops } }`.
+- Enforce `hops < maxHops` and default `maxHops = 1`.
+- Deduplicate by `msgId + senderFp` before forwarding.
+
+**Phase 2 (later): N-hop routing**
+- Add route advertisements and expiry.
+- Prefer shortest path / freshest route.
+- Add loop prevention beyond simple TTL.
+
+#### Phase 1 reference behavior
 
 ```javascript
-// bluetooth/mesh-router.js
+// bluetooth/mesh-router.js (MVP behavior)
 
 export class MeshRouter {
   constructor() {
-    this.routingTable = new Map();  // peerId -> [nextHop, hopCount, timestamp]
-    this.messageCache = new Map();  // messageId -> [timestamp, delivered]
-    this.TTL_DEFAULT = 5;
-    this.CACHE_DURATION = 60000;    // 1 minute
+    this.seen = new Map(); // transferId -> timestamp
+    this.SEEN_TTL_MS = 60 * 1000;
+    this.DEFAULT_MAX_HOPS = 1;
   }
 
-  /**
-   * Update route
-   */
-  updateRoute(destination, nextHop, hopCount) {
-    const existing = this.routingTable.get(destination);
+  shouldForward(message, localPeerId) {
+    const transferId = message.msgId || `${message.sndr}:${message.ts}`;
+    const relay = message.relay || { via: localPeerId, hops: 0, maxHops: this.DEFAULT_MAX_HOPS };
 
-    if (!existing || hopCount < existing[1]) {
-      this.routingTable.set(destination, [nextHop, hopCount, Date.now()]);
-    }
-  }
-
-  /**
-   * Determine if message should be forwarded
-   */
-  shouldForward(messageId, ttl) {
-    // Already seen?
-    if (this.messageCache.has(messageId)) {
-      return false;
+    if (this.seen.has(transferId)) {
+      return false; // duplicate
     }
 
-    // TTL expired?
-    if (ttl <= 0) {
-      return false;
+    if (relay.hops >= relay.maxHops) {
+      return false; // hop budget exceeded
     }
 
-    this.messageCache.set(messageId, [Date.now(), false]);
+    this.seen.set(transferId, Date.now());
+    message.relay = {
+      via: localPeerId,
+      hops: relay.hops + 1,
+      maxHops: relay.maxHops
+    };
+
     return true;
   }
 
-  /**
-   * Get next hop for destination
-   */
-  getNextHop(destination) {
-    const route = this.routingTable.get(destination);
-    return route ? route[0] : null;
-  }
-
-  /**
-   * Cleanup old cache entries
-   */
-  cleanup() {
-    const now = Date.now();
-
-    for (const [id, [timestamp]] of this.messageCache) {
-      if (now - timestamp > this.CACHE_DURATION) {
-        this.messageCache.delete(id);
+  cleanup(now = Date.now()) {
+    for (const [id, ts] of this.seen.entries()) {
+      if (now - ts > this.SEEN_TTL_MS) {
+        this.seen.delete(id);
       }
     }
   }
 }
 ```
+
+#### Integration checklist for Phase 1
+
+1. `BLEManager` receives message chunk stream.
+2. Complete messages are deduplicated and stored in inbox.
+3. If message is not for this node and `shouldForward(...) === true`, enqueue to outbox for each currently connected peer except ingress peer.
+4. Forwarded messages use the same ACK/retry/outbox flow as local outbound messages.
+
+This makes routing testable with two links (A↔B↔C) while avoiding full route distribution complexity.
 
 ---
 

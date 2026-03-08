@@ -53,7 +53,13 @@ export const CONFIG = {
   RETRY_DELAY_MS: 1000,
 
   // Delay between chunks in milliseconds
-  CHUNK_DELAY_MS: 50
+  CHUNK_DELAY_MS: 50,
+
+  // ACK wait timeout (per message attempt)
+  ACK_TIMEOUT_MS: 2500,
+
+  // Maximum time to keep incomplete receive state
+  REASSEMBLY_TIMEOUT_MS: 15000
 };
 
 // Error codes

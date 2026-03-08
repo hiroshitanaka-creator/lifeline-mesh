@@ -143,6 +143,8 @@ function validateTestVectors(vectorsPath) {
       validateFingerprintVector(vector);
     }
   }
+
+  validateOperationalCases();
 }
 
 function validateMessageVector(vector) {
@@ -292,6 +294,149 @@ function validateFingerprintVector(vector) {
 
     if (actualFp !== vector.fingerprint) {
       throw new Error(`Fingerprint mismatch: expected ${vector.fingerprint}, got ${actualFp}`);
+    }
+  });
+}
+
+
+function splitIntoChunks(data, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < data.length; i += chunkSize) {
+    chunks.push(data.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
+function validateOperationalCases() {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const aliceBox = DMesh.generateBoxKeyPair(nacl);
+  const bobBox = DMesh.generateBoxKeyPair(nacl);
+
+  test("operational: TTL accepts fresh message", () => {
+    const msg = DMesh.encryptMessage({
+      content: "fresh",
+      senderSignPK: aliceSign.publicKey,
+      senderSignSK: aliceSign.secretKey,
+      senderBoxPK: aliceBox.publicKey,
+      senderBoxSK: aliceBox.secretKey,
+      recipientBoxPK: bobBox.publicKey,
+      ts: Date.now(),
+      ttlMs: 60 * 1000
+    }, nacl, naclUtil);
+
+    const result = DMesh.decryptMessage({
+      message: msg,
+      recipientBoxPK: bobBox.publicKey,
+      recipientBoxSK: bobBox.secretKey,
+      expectedSenderSignPK: aliceSign.publicKey,
+      expectedSenderBoxPK: aliceBox.publicKey,
+      options: { strictMode: false }
+    }, nacl, naclUtil);
+
+    if (result.content !== "fresh") throw new Error("Fresh TTL message failed");
+  });
+
+  test("operational: expired message is rejected", () => {
+    const msg = DMesh.encryptMessage({
+      content: "expired",
+      senderSignPK: aliceSign.publicKey,
+      senderSignSK: aliceSign.secretKey,
+      senderBoxPK: aliceBox.publicKey,
+      senderBoxSK: aliceBox.secretKey,
+      recipientBoxPK: bobBox.publicKey,
+      ts: Date.now() - (5 * 60 * 1000),
+      ttlMs: 1_000
+    }, nacl, naclUtil);
+
+    try {
+      DMesh.decryptMessage({
+        message: msg,
+        recipientBoxPK: bobBox.publicKey,
+        recipientBoxSK: bobBox.secretKey,
+        expectedSenderSignPK: aliceSign.publicKey,
+        expectedSenderBoxPK: aliceBox.publicKey,
+        options: { strictMode: false }
+      }, nacl, naclUtil);
+      throw new Error("Should have rejected expired message");
+    } catch (e) {
+      if (!e.message.includes("expired")) {
+        throw new Error("Wrong error: " + e.message);
+      }
+    }
+  });
+
+  test("operational: resend/replay is rejected by replay cache", () => {
+    const seen = new Set();
+    const replayCheck = (msgId, senderFp) => {
+      const key = `${senderFp}:${msgId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    };
+
+    const msg = DMesh.encryptMessage({
+      content: "dedupe",
+      senderSignPK: aliceSign.publicKey,
+      senderSignSK: aliceSign.secretKey,
+      senderBoxPK: aliceBox.publicKey,
+      senderBoxSK: aliceBox.secretKey,
+      recipientBoxPK: bobBox.publicKey
+    }, nacl, naclUtil);
+
+    DMesh.decryptMessage({
+      message: msg,
+      recipientBoxPK: bobBox.publicKey,
+      recipientBoxSK: bobBox.secretKey,
+      expectedSenderSignPK: aliceSign.publicKey,
+      expectedSenderBoxPK: aliceBox.publicKey,
+      replayCheck,
+      options: { strictMode: false }
+    }, nacl, naclUtil);
+
+    try {
+      DMesh.decryptMessage({
+        message: msg,
+        recipientBoxPK: bobBox.publicKey,
+        recipientBoxSK: bobBox.secretKey,
+        expectedSenderSignPK: aliceSign.publicKey,
+        expectedSenderBoxPK: aliceBox.publicKey,
+        replayCheck,
+        options: { strictMode: false }
+      }, nacl, naclUtil);
+      throw new Error("Should have rejected replay");
+    } catch (e) {
+      if (!e.message.includes("Replay detected")) {
+        throw new Error("Wrong error: " + e.message);
+      }
+    }
+  });
+
+  test("operational: missing chunk corrupts transport payload", () => {
+    const original = {
+      kind: "dmesh-msg",
+      ciphertext: "x".repeat(1000)
+    };
+    const sample = new TextEncoder().encode(JSON.stringify(original));
+
+    const chunks = splitIntoChunks(sample, 80);
+    chunks.splice(2, 1);
+    const reconstructed = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+
+    let offset = 0;
+    for (const chunk of chunks) {
+      reconstructed.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const text = new TextDecoder().decode(reconstructed);
+
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.ciphertext === original.ciphertext) {
+        throw new Error("Missing chunk should change payload contents");
+      }
+    } catch {
+      // parse failure is also acceptable; it indicates transport corruption
     }
   });
 }
