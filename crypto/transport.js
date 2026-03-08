@@ -594,6 +594,38 @@ export class TransportManager {
   }
 
   /**
+   * Send through preferred transport, then fallback transports on failure.
+   * @param {string} preferredTransport - Primary transport name
+   * @param {object} message - Message to send
+   * @param {string[]} [fallbackOrder] - Ordered fallback transports
+   * @returns {Promise<{transport:string,result:string[]}>}
+   */
+  async sendWithFallback(preferredTransport, message, fallbackOrder = ["clipboard", "file"]) {
+    try {
+      const result = await this.send(preferredTransport, message);
+      return { transport: preferredTransport, result };
+    } catch (primaryError) {
+      const available = await this.getAvailableTransports();
+      for (const name of fallbackOrder) {
+        if (name === preferredTransport) {
+          continue;
+        }
+        if (!available.some((t) => t.name === name)) {
+          continue;
+        }
+        try {
+          const result = await this.send(name, message);
+          return { transport: name, result };
+        } catch {
+          // keep trying next fallback
+        }
+      }
+
+      throw primaryError;
+    }
+  }
+
+  /**
    * Receive from specific transport
    * @param {string} transportName - Transport to use
    * @param {*} [arg] - Transport-specific argument (e.g., File for FileTransport)
