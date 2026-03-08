@@ -207,6 +207,35 @@ All crypto runs **client-side in your browser**.
 
 ## Usage
 
+
+### What are the BLE constraints and supported browsers?
+
+**BLE constraints in this prototype**:
+- Uses Web Bluetooth GATT; browser prompts and user interaction are mandatory for device selection.
+- Effective message size limit is 150KB before BLE chunking.
+- Reliability is application-level: chunk framing + ACK + retry + timeout.
+- Delivery while offline is store-and-forward via IndexedDB outbox (sent when a connection is restored).
+- Incomplete chunk reassembly is discarded after timeout to avoid stale state buildup.
+
+**Browser support (practical)**:
+- Chrome / Edge desktop: supported.
+- Chrome / Edge Android: supported.
+- Safari: limited/experimental Web Bluetooth support.
+- Firefox: not supported (no Web Bluetooth API).
+
+When BLE is unavailable, use other relay methods (QR, clipboard, file/USB) and keep encrypted messages in outbox for later forwarding.
+
+### What is the recommended BLE operation procedure in the field?
+
+1. Open Lifeline Mesh in Chrome or Edge.
+2. Exchange identities first (to verify recipient bindings).
+3. Connect over BLE and send as usual.
+4. If disconnected, keep composing messages; they are queued to outbox.
+5. Reconnect and trigger outbox flush to deliver pending messages.
+6. Monitor failures: after retry/timeout exhaustion, message status becomes `failed` and requires operator retry.
+
+Operational note: keep devices within short range and avoid moving during large chunked transfers.
+
 ### Can I use this without Internet?
 
 **Yes!** Lifeline Mesh works completely offline:

@@ -535,7 +535,24 @@ export async function deleteContact(fp) {
  * @returns {Promise<object[]|null>} - Complete chunks array if all received, null otherwise
  */
 export async function storeChunk(chunk) {
+  if (!Number.isInteger(chunk.seq) || chunk.seq < 0) {
+    throw new Error("Invalid chunk sequence index");
+  }
+
+  if (!Number.isInteger(chunk.total) || chunk.total <= 0) {
+    throw new Error("Invalid chunk total");
+  }
+
+  if (chunk.seq >= chunk.total) {
+    throw new Error("Chunk sequence exceeds total");
+  }
+
   const chunkKey = `${chunk.msgId}:${chunk.seq}`;
+  const existing = await idbGet(STORE_CHUNKS, chunkKey);
+  if (existing) {
+    return null; // Duplicate chunk, ignore
+  }
+
   await idbPut(STORE_CHUNKS, {
     chunkKey,
     msgId: chunk.msgId,
@@ -545,25 +562,42 @@ export async function storeChunk(chunk) {
     receivedAt: Date.now()
   });
 
-  // Check if we have all chunks
   const allChunks = await idbGetByIndex(STORE_CHUNKS, "msgId", chunk.msgId);
-  if (allChunks.length === chunk.total) {
-    // Clean up stored chunks
+
+  // Reject inconsistent metadata (e.g. mixed totals)
+  const inconsistent = allChunks.some(c => c.total !== chunk.total);
+  if (inconsistent) {
     for (const c of allChunks) {
       await idbDel(STORE_CHUNKS, c.chunkKey);
     }
-    // Return complete chunks for reassembly
-    return allChunks.map(c => ({
-      v: 1,
-      kind: "dmesh-chunk",
-      msgId: c.msgId,
-      seq: c.seq,
-      total: c.total,
-      data: c.data
-    }));
+    throw new Error("Inconsistent chunk totals detected");
   }
 
-  return null; // Still waiting for more chunks
+  const sorted = allChunks.sort((a, b) => a.seq - b.seq);
+
+  // Gap-aware completion check for out-of-order delivery
+  if (sorted.length !== chunk.total) {
+    return null;
+  }
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].seq !== i) {
+      return null; // Missing chunk index despite equal count
+    }
+  }
+
+  for (const c of sorted) {
+    await idbDel(STORE_CHUNKS, c.chunkKey);
+  }
+
+  return sorted.map(c => ({
+    v: 1,
+    kind: "dmesh-chunk",
+    msgId: c.msgId,
+    seq: c.seq,
+    total: c.total,
+    data: c.data
+  }));
 }
 
 /**

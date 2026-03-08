@@ -20,6 +20,15 @@ import {
   BLE_ERROR
 } from "./constants.js";
 
+import {
+  addToOutbox,
+  addToInbox,
+  getPendingOutbox,
+  removeFromOutbox,
+  updateOutboxStatus,
+  DELIVERY_STATUS
+} from "../crypto/store.js";
+
 /**
  * BLE Manager for Lifeline Mesh
  */
@@ -36,9 +45,12 @@ export class BLEManager {
     this.onConnectionChange = null;
     this.onError = null;
 
-    // Message reassembly buffer
-    this.reassemblyBuffer = null;
-    this.expectedChunks = 0;
+    // Receive state by message transfer id
+    this.receiveStates = new Map();
+
+    // Outbound tracking
+    this.pendingAcks = new Map();
+    this.outboxFlushPromise = null;
 
     // Connection state
     this.isConnected = false;
@@ -89,13 +101,11 @@ export class BLEManager {
     }
 
     try {
-      // Request device with our service UUID
       this.device = await navigator.bluetooth.requestDevice({
         filters: [{ services: [SERVICE_UUID] }],
         optionalServices: [SERVICE_UUID]
       });
 
-      // Listen for disconnection
       this.device.addEventListener("gattserverdisconnected", () => {
         this._handleDisconnect();
       });
@@ -123,13 +133,9 @@ export class BLEManager {
     }
 
     try {
-      // Connect to GATT server
       this.server = await device.gatt.connect();
-
-      // Get our service
       this.service = await this.server.getPrimaryService(SERVICE_UUID);
 
-      // Get characteristics
       this.txCharacteristic = await this.service.getCharacteristic(
         CHARACTERISTICS.MESSAGE_TX
       );
@@ -138,7 +144,6 @@ export class BLEManager {
         CHARACTERISTICS.MESSAGE_RX
       );
 
-      // Subscribe to notifications
       await this.rxCharacteristic.startNotifications();
       this.rxCharacteristic.addEventListener(
         "characteristicvaluechanged",
@@ -151,6 +156,8 @@ export class BLEManager {
       if (this.onConnectionChange) {
         this.onConnectionChange(true, device);
       }
+
+      await this.flushOutbox();
 
       console.log("[BLE] Connected to", device.name || device.id);
     } catch (error) {
@@ -172,54 +179,27 @@ export class BLEManager {
   /**
    * Send a message to connected peer
    * @param {Object} message - Lifeline Mesh encrypted message object
+   * @param {Object} [options]
    * @returns {Promise<void>}
    */
-  async sendMessage(message) {
+  async sendMessage(message, options = {}) {
+    const recipientFp = options.recipientFp || message.rcpt || "unknown";
+
+    await addToOutbox(message, recipientFp, {
+      transport: "ble",
+      status: DELIVERY_STATUS.PENDING
+    });
+
     if (!this.isConnected || !this.txCharacteristic) {
-      throw new Error(BLE_ERROR.DISCONNECTED);
+      console.warn("[BLE] Offline, queued message in outbox", message.msgId);
+      return;
     }
 
-    try {
-      // Serialize message to JSON
-      const jsonStr = JSON.stringify(message);
-      const messageBytes = new TextEncoder().encode(jsonStr);
-
-      // Check size
-      if (messageBytes.length > 150 * 1024) {
-        throw new Error("Message too large (max 150KB)");
-      }
-
-      // Chunk the message
-      const chunks = this._chunkData(messageBytes);
-
-      console.log(`[BLE] Sending message in ${chunks.length} chunk(s)`);
-
-      // Send each chunk
-      for (let i = 0; i < chunks.length; i++) {
-        const header = new Uint8Array([
-          MSG_TYPE.DIRECT,
-          i, // Chunk index
-          chunks.length, // Total chunks
-          0 // Reserved
-        ]);
-
-        const packet = new Uint8Array(header.length + chunks[i].length);
-        packet.set(header, 0);
-        packet.set(chunks[i], header.length);
-
-        await this.txCharacteristic.writeValue(packet);
-
-        // Small delay between chunks
-        if (i < chunks.length - 1) {
-          await this._delay(CONFIG.CHUNK_DELAY_MS);
-        }
-      }
-
-      console.log("[BLE] Message sent successfully");
-    } catch (error) {
-      console.error("[BLE] Send failed:", error);
-      throw new Error(BLE_ERROR.SEND_FAILED);
-    }
+    await this._sendQueuedEntry({
+      msgId: message.msgId,
+      message,
+      attempts: 0
+    });
   }
 
   /**
@@ -232,84 +212,301 @@ export class BLEManager {
       throw new Error(BLE_ERROR.DISCONNECTED);
     }
 
-    const jsonStr = JSON.stringify(identity);
-    const identityBytes = new TextEncoder().encode(jsonStr);
-
-    const header = new Uint8Array([
-      MSG_TYPE.IDENTITY,
-      0, // Single chunk
-      1, // Total: 1
-      0 // Reserved
-    ]);
-
-    const packet = new Uint8Array(header.length + identityBytes.length);
-    packet.set(header, 0);
-    packet.set(identityBytes, header.length);
-
-    await this.txCharacteristic.writeValue(packet);
+    const payload = new TextEncoder().encode(JSON.stringify(identity));
+    await this._writePacket(MSG_TYPE.IDENTITY, 0, 1, 0, payload);
     console.log("[BLE] Identity sent");
   }
 
+  /**
+   * Flush pending outbox messages when connected
+   */
+  async flushOutbox() {
+    if (this.outboxFlushPromise) {
+      return this.outboxFlushPromise;
+    }
+
+    this.outboxFlushPromise = (async () => {
+      if (!this.isConnected || !this.txCharacteristic) {
+        return;
+      }
+
+      const pending = await getPendingOutbox();
+      for (const entry of pending) {
+        if (entry.transport && entry.transport !== "ble") {
+          continue;
+        }
+        await this._sendQueuedEntry(entry);
+      }
+    })();
+
+    try {
+      await this.outboxFlushPromise;
+    } finally {
+      this.outboxFlushPromise = null;
+    }
+  }
+
   // ============ Private Methods ============
+
+  async _sendQueuedEntry(entry) {
+    const msgId = entry.msgId;
+
+    try {
+      await updateOutboxStatus(msgId, DELIVERY_STATUS.PENDING, {
+        transport: "ble",
+        error: null
+      });
+      await this._sendMessageWithAck(entry.message);
+      await updateOutboxStatus(msgId, DELIVERY_STATUS.DELIVERED, {
+        deliveredAt: Date.now()
+      });
+      await removeFromOutbox(msgId);
+    } catch (error) {
+      const attempts = (entry.attempts || 0) + 1;
+      const finalStatus = attempts >= CONFIG.RETRY_COUNT
+        ? DELIVERY_STATUS.FAILED
+        : DELIVERY_STATUS.PENDING;
+
+      await updateOutboxStatus(msgId, finalStatus, {
+        transport: "ble",
+        error: error.message
+      });
+
+      if (!this.isConnected) {
+        console.warn("[BLE] Message kept in outbox due to disconnect", msgId);
+        return;
+      }
+
+      if (attempts >= CONFIG.RETRY_COUNT) {
+        console.error("[BLE] Message delivery failed after retries", msgId);
+        throw new Error(BLE_ERROR.SEND_FAILED);
+      }
+
+      await this._delay(CONFIG.RETRY_DELAY_MS);
+      await this._sendQueuedEntry({ ...entry, attempts });
+    }
+  }
+
+  async _sendMessageWithAck(message) {
+    if (!this.isConnected || !this.txCharacteristic) {
+      throw new Error(BLE_ERROR.DISCONNECTED);
+    }
+
+    const messageBytes = new TextEncoder().encode(JSON.stringify(message));
+
+    if (messageBytes.length > 150 * 1024) {
+      throw new Error("Message too large (max 150KB)");
+    }
+
+    const chunks = this._chunkData(messageBytes);
+    const transferId = this._getTransferId(message);
+
+    console.log(`[BLE] Sending message ${transferId} in ${chunks.length} chunk(s)`);
+
+    for (let i = 0; i < chunks.length; i++) {
+      const framedPayload = this._encodeChunkPayload(transferId, chunks[i]);
+      await this._writePacket(MSG_TYPE.DIRECT, i, chunks.length, 0, framedPayload);
+      if (i < chunks.length - 1) {
+        await this._delay(CONFIG.CHUNK_DELAY_MS);
+      }
+    }
+
+    await this._waitForAck(transferId);
+    console.log("[BLE] Message sent and ACK received", transferId);
+  }
+
+  _waitForAck(transferId) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingAcks.delete(transferId);
+        reject(new Error(`ACK timeout for ${transferId}`));
+      }, CONFIG.ACK_TIMEOUT_MS);
+
+      this.pendingAcks.set(transferId, {
+        resolve: () => {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+    });
+  }
+
+  async _writePacket(msgType, chunkIndex, totalChunks, reserved, payload) {
+    const header = new Uint8Array([msgType, chunkIndex, totalChunks, reserved]);
+    const packet = new Uint8Array(header.length + payload.length);
+    packet.set(header, 0);
+    packet.set(payload, header.length);
+    await this.txCharacteristic.writeValue(packet);
+  }
 
   /**
    * Handle incoming data from characteristic
    * @private
    */
-  _handleIncomingData(event) {
+  async _handleIncomingData(event) {
     try {
       const dataView = event.target.value;
 
-      // Parse header
       const msgType = dataView.getUint8(0);
       const chunkIndex = dataView.getUint8(1);
       const totalChunks = dataView.getUint8(2);
-      // Reserved byte at index 3
-
-      // Extract payload
       const payload = new Uint8Array(dataView.buffer.slice(4));
 
-      console.log(
-        `[BLE] Received chunk ${chunkIndex + 1}/${totalChunks}, type: ${msgType}`
+      if (msgType === MSG_TYPE.ACK) {
+        const ackId = new TextDecoder().decode(payload);
+        this._resolveAck(ackId);
+        return;
+      }
+
+      const decoded = this._decodeChunkPayload(payload);
+      const state = this._getOrCreateReceiveState(msgType, totalChunks, decoded.transferId);
+
+      if (chunkIndex >= state.totalChunks) {
+        throw new Error(`Chunk index out of range: ${chunkIndex}/${state.totalChunks}`);
+      }
+
+      if (state.chunks[chunkIndex]) {
+        state.duplicates += 1;
+        console.log("[BLE] Duplicate chunk ignored", chunkIndex, state.transferId);
+        return;
+      }
+
+      state.chunks[chunkIndex] = decoded.data;
+      state.receivedCount += 1;
+      state.lastUpdated = Date.now();
+
+      if (state.receivedCount !== state.totalChunks) {
+        return;
+      }
+
+      const completeData = this._reassembleChunks(state.chunks);
+      this.receiveStates.delete(state.transferId);
+
+      const jsonStr = new TextDecoder().decode(completeData);
+      const message = JSON.parse(jsonStr);
+
+      await addToInbox(
+        {
+          msgId: message.msgId || state.transferId,
+          senderFp: message.sndr || "unknown",
+          content: message,
+          type: message.kind || "ble",
+          payload: message,
+          ts: message.ts || Date.now()
+        },
+        message
       );
 
-      // Initialize reassembly buffer if this is first chunk
-      if (chunkIndex === 0) {
-        this.reassemblyBuffer = new Array(totalChunks);
-        this.expectedChunks = totalChunks;
-      }
+      await this._sendAck(state.transferId);
 
-      // Store chunk
-      if (this.reassemblyBuffer) {
-        this.reassemblyBuffer[chunkIndex] = payload;
-      }
-
-      // Check if we have all chunks
-      const receivedCount = this.reassemblyBuffer
-        ? this.reassemblyBuffer.filter(Boolean).length
-        : 0;
-
-      if (receivedCount === this.expectedChunks) {
-        // Reassemble complete message
-        const completeData = this._reassembleChunks(this.reassemblyBuffer);
-        this.reassemblyBuffer = null;
-        this.expectedChunks = 0;
-
-        // Parse JSON
-        const jsonStr = new TextDecoder().decode(completeData);
-        const message = JSON.parse(jsonStr);
-
-        console.log("[BLE] Message reassembled, type:", msgType);
-
-        // Dispatch to callback
-        if (this.onMessageReceived) {
-          this.onMessageReceived(message, msgType);
-        }
+      if (this.onMessageReceived) {
+        this.onMessageReceived(message, msgType);
       }
     } catch (error) {
       console.error("[BLE] Error processing incoming data:", error);
       if (this.onError) {
         this.onError(BLE_ERROR.RECEIVE_FAILED, error);
+      }
+    }
+  }
+
+  _getOrCreateReceiveState(msgType, totalChunks, transferId) {
+    this._cleanupExpiredReceiveStates();
+
+    const existing = this.receiveStates.get(transferId);
+
+    if (existing) {
+      if (existing.totalChunks !== totalChunks) {
+        throw new Error(`Mismatched totalChunks for ${transferId}`);
+      }
+      return existing;
+    }
+
+    const state = {
+      transferId,
+      msgType,
+      totalChunks,
+      chunks: new Array(totalChunks).fill(null),
+      receivedCount: 0,
+      duplicates: 0,
+      createdAt: Date.now(),
+      lastUpdated: Date.now()
+    };
+
+    this.receiveStates.set(transferId, state);
+    return state;
+  }
+
+  _encodeChunkPayload(transferId, chunkData) {
+    const envelope = {
+      transferId,
+      data: this._toBase64(chunkData)
+    };
+    return new TextEncoder().encode(JSON.stringify(envelope));
+  }
+
+  _decodeChunkPayload(payload) {
+    const parsed = JSON.parse(new TextDecoder().decode(payload));
+    if (!parsed.transferId || !parsed.data) {
+      throw new Error("Invalid chunk envelope");
+    }
+
+    return {
+      transferId: parsed.transferId,
+      data: this._fromBase64(parsed.data)
+    };
+  }
+
+  _toBase64(data) {
+    let binary = "";
+    for (let i = 0; i < data.length; i++) {
+      binary += String.fromCharCode(data[i]);
+    }
+    return btoa(binary);
+  }
+
+  _fromBase64(base64) {
+    const binary = atob(base64);
+    const result = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      result[i] = binary.charCodeAt(i);
+    }
+    return result;
+  }
+
+  _getTransferId(message) {
+    if (!message || typeof message !== "object") {
+      return `anonymous-${Date.now()}`;
+    }
+    return message.msgId || `${message.kind || "msg"}:${message.ts || Date.now()}`;
+  }
+
+  _resolveAck(ackId) {
+    const pending = this.pendingAcks.get(ackId);
+    if (!pending) {
+      console.log("[BLE] ACK received for unknown transfer", ackId);
+      return;
+    }
+
+    this.pendingAcks.delete(ackId);
+    pending.resolve();
+  }
+
+  async _sendAck(transferId) {
+    if (!this.txCharacteristic) {
+      return;
+    }
+
+    const payload = new TextEncoder().encode(transferId);
+    await this._writePacket(MSG_TYPE.ACK, 0, 1, 0, payload);
+  }
+
+  _cleanupExpiredReceiveStates() {
+    const now = Date.now();
+    for (const [transferId, state] of this.receiveStates.entries()) {
+      if (now - state.lastUpdated > CONFIG.REASSEMBLY_TIMEOUT_MS) {
+        console.warn("[BLE] Dropping stale receive state", transferId);
+        this.receiveStates.delete(transferId);
       }
     }
   }
@@ -325,7 +522,11 @@ export class BLEManager {
     this.service = null;
     this.txCharacteristic = null;
     this.rxCharacteristic = null;
-    this.reassemblyBuffer = null;
+    this.receiveStates.clear();
+
+    for (const [transferId] of this.pendingAcks) {
+      this.pendingAcks.delete(transferId);
+    }
 
     if (this.onConnectionChange) {
       this.onConnectionChange(false, this.device);
@@ -349,6 +550,17 @@ export class BLEManager {
    * @private
    */
   _reassembleChunks(chunks) {
+    const missing = [];
+    for (let i = 0; i < chunks.length; i++) {
+      if (!chunks[i]) {
+        missing.push(i);
+      }
+    }
+
+    if (missing.length > 0) {
+      throw new Error(`Cannot reassemble, missing chunks: ${missing.join(",")}`);
+    }
+
     const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
     const result = new Uint8Array(totalLength);
 
