@@ -8,7 +8,17 @@ import nacl from 'tweetnacl';
 import * as naclUtil from 'tweetnacl-util';
 import QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
-import { STORE_KEYS, STORE_CONTACTS, STORE_REPLAY, idbGet, idbPut, idbDel, idbGetAll, resetDatabase } from './db.js';
+import {
+  STORE_KEYS,
+  STORE_CONTACTS,
+  idbGet,
+  idbPut,
+  idbDel,
+  idbGetAll,
+  resetDatabase,
+  checkAndMarkSeen,
+  cleanupSeen
+} from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 
 
@@ -452,21 +462,6 @@ window.copyEncrypted = async function() {
 /* =========================
   Decryption
 ========================= */
-async function cleanupReplay() {
-  const all = await idbGetAll(STORE_REPLAY);
-  const now = Date.now();
-  const old = all.filter(x => (now - (x.seenAt || 0)) > DMesh.REPLAY_RETENTION_MS);
-  for (const o of old) await idbDel(STORE_REPLAY, o.k);
-}
-
-async function checkAndMarkReplay(senderFp, nonceB64) {
-  await cleanupReplay();
-  const k = `${senderFp}:${nonceB64}`;
-  const existing = await idbGet(STORE_REPLAY, k);
-  if (existing) return false;
-  await idbPut(STORE_REPLAY, { k, seenAt: Date.now() });
-  return true;
-}
 
 window.decryptMsg = async function() {
   try {
@@ -505,7 +500,8 @@ window.decryptMsg = async function() {
       expectedSenderBoxPK = nacl.util.decodeBase64(contact.boxPK);
     }
 
-    const replayAllowed = await checkAndMarkReplay(senderFpB64, message.nonce);
+    await cleanupSeen(DMesh.REPLAY_RETENTION_MS);
+    const replayAllowed = await checkAndMarkSeen(message.msgId, senderFpB64);
     if (!replayAllowed) {
       throw new Error('Replay detected');
     }
@@ -653,6 +649,19 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+
+
+window.__lifelineTest = {
+  setBleManager(manager) {
+    bleManager = manager;
+  },
+  simulateBleReceive(message) {
+    if (!bleManager?.onMessageReceived) {
+      throw new Error('BLE manager not initialized');
+    }
+    bleManager.onMessageReceived(message, 'encrypted');
+  }
+};
 
 /* =========================
   Auto-init
