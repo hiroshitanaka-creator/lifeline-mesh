@@ -6,6 +6,7 @@
 import nacl from "tweetnacl";
 import naclUtil from "tweetnacl-util";
 import * as DMesh from "./core.js";
+import * as GroupMesh from "./group.js";
 
 let passed = 0;
 let failed = 0;
@@ -439,6 +440,33 @@ test("concatU8 concatenates arrays correctly", () => {
   }
 });
 
+test("group messaging create/encrypt/decrypt minimal flow", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const group = GroupMesh.createGroup({
+    name: "Response Team",
+    createdBy: "alice",
+    members: []
+  }, nacl, naclUtil);
+
+  const senderKey = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+  const encrypted = GroupMesh.encryptGroupMessage({
+    content: "Team check-in",
+    groupId: group.id,
+    senderKey,
+    senderSignPK: aliceSign.publicKey,
+    senderSignSK: aliceSign.secretKey
+  }, nacl, naclUtil);
+
+  const decrypted = GroupMesh.decryptGroupMessage({
+    message: encrypted.message,
+    senderKey,
+    expectedSenderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  if (decrypted.payload.content !== "Team check-in") throw new Error("Group decrypt mismatch");
+  if (encrypted.nextSenderKey.version !== 2) throw new Error("Group ratchet failed");
+});
+
 // ============================================================================
 // Summary
 // ============================================================================
@@ -451,3 +479,4 @@ console.log(`Failed: ${failed}`);
 if (failed > 0) {
   process.exit(1);
 }
+
