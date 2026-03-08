@@ -51,6 +51,7 @@ export class BLEManager {
     this.onMessageReceived = null;
     this.onConnectionChange = null;
     this.onError = null;
+    this.onTransferState = null;
 
     // Receive state by message transfer id
     this.receiveStates = new Map();
@@ -200,6 +201,7 @@ export class BLEManager {
       }
 
       await this.flushOutbox();
+      this._emitTransferState("connected", { deviceId: device.id, deviceName: device.name || "unknown" });
 
       console.log("[BLE] Connected to", device.name || device.id);
     } catch (error) {
@@ -215,6 +217,7 @@ export class BLEManager {
     if (this.device && this.device.gatt.connected) {
       this.io.disconnectGatt(this.device);
     }
+    this._emitTransferState("disconnecting");
     this._handleDisconnect();
   }
 
@@ -233,6 +236,7 @@ export class BLEManager {
     });
 
     if (!this.isConnected || !this.txCharacteristic) {
+      this._emitTransferState("queued", { msgId: message.msgId });
       console.warn("[BLE] Offline, queued message in outbox", message.msgId);
       return;
     }
@@ -291,10 +295,22 @@ export class BLEManager {
 
   // ============ Private Methods ============
 
+  _emitTransferState(state, details = {}) {
+    if (!this.onTransferState) {
+      return;
+    }
+    this.onTransferState({
+      state,
+      ts: Date.now(),
+      ...details
+    });
+  }
+
   async _sendQueuedEntry(entry) {
     const msgId = entry.msgId;
 
     try {
+      this._emitTransferState("sending", { msgId, attempt: (entry.attempts || 0) + 1 });
       await this.store.updateOutboxStatus(msgId, DELIVERY_STATUS.PENDING, {
         transport: "ble",
         error: null
@@ -304,6 +320,7 @@ export class BLEManager {
         deliveredAt: Date.now()
       });
       await this.store.removeFromOutbox(msgId);
+      this._emitTransferState("delivered", { msgId });
     } catch (error) {
       const attempts = (entry.attempts || 0) + 1;
       const finalStatus = attempts >= this.protocolConfig.retryCount
@@ -316,16 +333,20 @@ export class BLEManager {
       });
 
       if (!this.isConnected) {
+        this._emitTransferState("queued", { msgId, reason: "disconnect" });
         console.warn("[BLE] Message kept in outbox due to disconnect", msgId);
         return;
       }
 
       if (attempts >= this.protocolConfig.retryCount) {
+        this._emitTransferState("fallback", { msgId, error: error.message });
         await this._sendFallback(entry.message, error);
+        this._emitTransferState("failed", { msgId, error: error.message });
         console.error("[BLE] Message delivery failed after retries", msgId);
         throw new Error(BLE_ERROR.SEND_FAILED);
       }
 
+      this._emitTransferState("retrying", { msgId, attempt: attempts + 1, error: error.message });
       await this._delay(this.protocolConfig.retryDelayMs);
       await this._sendQueuedEntry({ ...entry, attempts });
     }
@@ -580,6 +601,8 @@ export class BLEManager {
     for (const [transferId] of this.pendingAcks) {
       this.pendingAcks.delete(transferId);
     }
+
+    this._emitTransferState("disconnected", { deviceId: this.device?.id });
 
     if (this.onConnectionChange) {
       this.onConnectionChange(false, this.device);

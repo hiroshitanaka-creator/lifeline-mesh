@@ -40,6 +40,44 @@ let bleManager = null;
 let lastEncryptedMessage = null;
 let bleManagerFactory = () => new BLEManager();
 
+function renderBleTransportState(state, details = {}) {
+  const statusEl = document.getElementById('ble-status');
+  if (!statusEl) {
+    return;
+  }
+
+  const labels = {
+    connected: '🟢 Connected',
+    disconnecting: '🟠 Disconnecting',
+    disconnected: '🔴 Not connected',
+    queued: '🟡 Queued for retry',
+    sending: '📤 Sending',
+    retrying: '🔄 Retrying',
+    fallback: '🧭 Falling back transport',
+    failed: '❌ Send failed',
+    delivered: '✅ Delivered'
+  };
+
+  const classMap = {
+    connected: 'ok',
+    delivered: 'ok',
+    sending: 'small',
+    retrying: 'small',
+    queued: 'small',
+    fallback: 'small',
+    disconnecting: 'small',
+    disconnected: 'ng',
+    failed: 'ng'
+  };
+
+  statusEl.textContent = labels[state] || `ℹ️ ${state}`;
+  statusEl.className = classMap[state] || '';
+
+  if (state === 'failed' && details.error) {
+    setStatus(false, `BLE send failed: ${details.error}`);
+  }
+}
+
 function initBLE() {
   if (!BLEManager.isSupported()) {
     document.getElementById('ble-unsupported').style.display = 'block';
@@ -54,12 +92,10 @@ function initBLE() {
     const deviceEl = document.getElementById('ble-device-name');
 
     if (connected) {
-      statusEl.textContent = '🟢 Connected';
-      statusEl.className = 'ok';
+      renderBleTransportState('connected');
       deviceEl.textContent = device.name || device.id || 'Unknown device';
     } else {
-      statusEl.textContent = '🔴 Not connected';
-      statusEl.className = 'ng';
+      renderBleTransportState('disconnected');
       deviceEl.textContent = '(none)';
     }
   };
@@ -71,6 +107,10 @@ function initBLE() {
     // Auto-fill decrypt input
     document.getElementById('input').value = JSON.stringify(message, null, 2);
     setStatus(true, 'Received message via Bluetooth - ready to decrypt');
+  };
+
+  bleManager.onTransferState = ({ state, ...details }) => {
+    renderBleTransportState(state, details);
   };
 
   bleManager.onError = (code, error) => {
@@ -86,8 +126,10 @@ window.bleScan = async function() {
   }
 
   try {
+    renderBleTransportState('queued');
     setStatus(true, 'Scanning for devices...');
     await bleManager.scan();
+    renderBleTransportState('sending');
     setStatus(true, 'Connecting...');
     await bleManager.connect();
     setStatus(true, 'Connected via Bluetooth!');

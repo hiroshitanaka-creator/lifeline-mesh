@@ -26,3 +26,11 @@ Use this checklist before tagging a release.
 - [ ] Security periodic checklist completed (see `SECURITY.md`).
 - [ ] Release notes include risks, mitigations, and rollback instructions.
 - [ ] At least one maintainer approval recorded for go/no-go decision.
+
+
+## 関連Runbook
+- `docs/OPERATIONS_RUNBOOK.md`
+- `docs/VULNERABILITY_RESPONSE_JA.md`
+- `docs/MONITORING_POLICY_JA.md`
+- `docs/RELEASE_GONOGO_AGENDA_JA.md`
+- `docs/BLE_SUPPORT_MATRIX.md`
