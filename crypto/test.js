@@ -466,6 +466,47 @@ test("integration target definition includes app/bluetooth/crypto mainline", () 
   if (target.steps.length < 3) throw new Error("Integration target should define 3+ steps");
 });
 
+
+test("group sender key ratchet supports continuous send/receive", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const group = GroupMesh.createGroup({
+    name: "Rescue Team",
+    createdBy: "alice-fp",
+    members: ["alice-fp", "bob-fp"]
+  }, nacl, naclUtil);
+
+  let senderState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+  let receiverState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+
+  const contents = ["msg-1", "msg-2", "msg-3", "msg-4"];
+
+  for (const content of contents) {
+    const { message, nextSenderKey } = GroupMesh.encryptGroupMessage({
+      content,
+      groupId: group.id,
+      senderKey: senderState,
+      senderSignPK: aliceSign.publicKey,
+      senderSignSK: aliceSign.secretKey
+    }, nacl, naclUtil);
+
+    const decrypted = GroupMesh.decryptGroupMessage({
+      message,
+      senderKey: receiverState,
+      expectedSenderSignPK: aliceSign.publicKey
+    }, nacl, naclUtil);
+
+    if (decrypted.payload.content !== content) {
+      throw new Error("Group content mismatch during ratchet");
+    }
+
+    senderState = nextSenderKey;
+    receiverState = decrypted.nextSenderKey;
+  }
+
+  if (senderState.version !== receiverState.version) {
+    throw new Error("Sender and receiver chain versions diverged");
+  }
+});
 // ============================================================================
 // Summary
 // ============================================================================

@@ -2,6 +2,7 @@
   Imports
 ========================= */
 import * as DMesh from '../../crypto/core.js';
+import * as GroupMesh from '../../crypto/group.js';
 import { BLEManager } from '../../bluetooth/ble-manager.js';
 import { encryptKeys, decryptKeys, checkPasswordStrength } from '../../crypto/key-backup.js';
 import nacl from 'tweetnacl';
@@ -17,7 +18,16 @@ import {
   idbGetAll,
   resetDatabase,
   checkAndMarkSeen,
-  cleanupSeen
+  cleanupSeen,
+  saveGroup,
+  getGroup,
+  getAllGroups,
+  saveGroupMembers,
+  getGroupMembers,
+  addGroupMember,
+  removeGroupMember,
+  saveSenderKeyState,
+  getSenderKeyState
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 
@@ -125,6 +135,22 @@ function setStatus(ok, msg) {
   document.getElementById("status").innerHTML = (ok ? `<span class="ok">✓ OK</span> ` : `<span class="ng">✗ ERROR</span> `) + msg;
 }
 
+
+function getLocalSignPKB64(my) {
+  return nacl.util.encodeBase64(my.signPKu8);
+}
+
+function hydrateLocalSenderState(state) {
+  return GroupMesh.hydrateSenderKey(state, nacl.util);
+}
+
+function encodeSenderState(senderKey) {
+  return {
+    version: senderKey.version,
+    chainKey: nacl.util.encodeBase64(senderKey.chainKey)
+  };
+}
+
 /* =========================
   Key Management
 ========================= */
@@ -169,6 +195,7 @@ window.initOrLoad = async function() {
 
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
     await refreshContacts();
+    await refreshGroups();
     setStatus(true, `Keys ready. Fingerprint: ${myId.fp}`);
   } catch (e) {
     setStatus(false, e.message);
@@ -304,6 +331,7 @@ window.resetAll = async function() {
   document.getElementById("my-id").textContent = "(not loaded)";
   document.getElementById("contacts-view").textContent = "(none)";
   document.getElementById("recipient-select").innerHTML = `<option value="">Select Recipient</option>`;
+  document.getElementById("group-select").innerHTML = `<option value="">Select Group</option>`;
   document.getElementById("encrypted").textContent = "";
   document.getElementById("decrypted").textContent = "";
   setStatus(true, "All data deleted");
@@ -409,6 +437,17 @@ window.refreshContacts = async function() {
     document.getElementById("encrypt-recipient").textContent = selected || "(select above)";
   };
 
+  const groupMemberSel = document.getElementById("group-member-select");
+  if (groupMemberSel) {
+    groupMemberSel.innerHTML = `<option value="">Select Contact</option>`;
+    for (const c of contacts) {
+      const opt = document.createElement("option");
+      opt.value = c.fp;
+      opt.textContent = `${c.name} [${c.fp.slice(0, 12)}...]`;
+      groupMemberSel.appendChild(opt);
+    }
+  }
+
   document.getElementById("contacts-view").textContent =
     contacts.length ? JSON.stringify(contacts, null, 2) : "(none)";
 };
@@ -422,20 +461,207 @@ window.deleteSelectedContact = async function() {
   setStatus(true, `Contact deleted (fp: ${fp.slice(0, 16)}...)`);
 };
 
+
+/* =========================
+  Group Messaging
+========================= */
+window.setMessageMode = function(mode) {
+  const isGroup = mode === 'group';
+  document.querySelectorAll('input[name="message-mode"]').forEach((el) => {
+    el.checked = el.value === mode;
+  });
+  document.getElementById('direct-controls').style.display = isGroup ? 'none' : 'block';
+  document.getElementById('group-controls').style.display = isGroup ? 'block' : 'none';
+};
+
+window.refreshGroups = async function() {
+  const groups = await getAllGroups();
+  groups.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  const sel = document.getElementById('group-select');
+  sel.innerHTML = `<option value="">Select Group</option>`;
+
+  for (const g of groups) {
+    const opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = `${g.name} [${g.id.slice(0, 8)}...]`;
+    sel.appendChild(opt);
+  }
+
+  sel.onchange = async () => {
+    await renderSelectedGroup();
+  };
+
+  await renderSelectedGroup();
+};
+
+async function renderSelectedGroup() {
+  const groupId = document.getElementById('group-select').value;
+  if (!groupId) {
+    document.getElementById('group-view').textContent = '(no group selected)';
+    return;
+  }
+  const group = await getGroup(groupId);
+  if (!group) {
+    document.getElementById('group-view').textContent = '(group not found)';
+    return;
+  }
+  const members = await getGroupMembers(groupId);
+  document.getElementById('group-view').textContent = JSON.stringify({ ...group, members }, null, 2);
+}
+
+async function forceRotateSenderKey(group) {
+  group.senderKey = {
+    version: (group.senderKey?.version || 0) + 1,
+    chainKey: nacl.util.encodeBase64(nacl.randomBytes(32))
+  };
+  group.updatedAt = Date.now();
+  await saveGroup(group);
+
+  const my = await ensureMyKeys();
+  await saveSenderKeyState(group.id, getLocalSignPKB64(my), group.senderKey);
+}
+
+window.createGroup = async function() {
+  try {
+    const name = (document.getElementById('group-name').value || '').trim();
+    if (!name) return alert('Group name is required');
+
+    const my = await ensureMyKeys();
+    const myFp = nacl.util.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
+    const group = GroupMesh.createGroup({
+      name,
+      createdBy: myFp,
+      members: [myFp]
+    }, nacl, nacl.util);
+
+    await saveGroup(group);
+    await saveGroupMembers(group.id, group.members);
+    await saveSenderKeyState(group.id, getLocalSignPKB64(my), group.senderKey);
+
+    await refreshGroups();
+    document.getElementById('group-select').value = group.id;
+    await renderSelectedGroup();
+    setStatus(true, `Group created: ${group.name}`);
+  } catch (e) {
+    setStatus(false, 'Create group failed: ' + e.message);
+  }
+};
+
+window.joinGroup = async function() {
+  try {
+    const raw = document.getElementById('group-json').value.trim();
+    const parsed = JSON.parse(raw);
+    if (!parsed.id || !parsed.senderKey) {
+      throw new Error('Invalid group JSON');
+    }
+
+    const my = await ensureMyKeys();
+    const myFp = nacl.util.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
+    const members = Array.from(new Set([...(parsed.members || []), myFp]));
+    parsed.members = members;
+
+    await saveGroup(parsed);
+    await saveGroupMembers(parsed.id, members);
+    await saveSenderKeyState(parsed.id, getLocalSignPKB64(my), parsed.senderKey);
+
+    await refreshGroups();
+    document.getElementById('group-select').value = parsed.id;
+    await renderSelectedGroup();
+    setStatus(true, `Joined group: ${parsed.name || parsed.id}`);
+  } catch (e) {
+    setStatus(false, 'Join group failed: ' + e.message);
+  }
+};
+
+window.addSelectedMemberToGroup = async function() {
+  try {
+    const groupId = document.getElementById('group-select').value;
+    const memberFp = document.getElementById('group-member-select').value;
+    if (!groupId || !memberFp) return alert('Select group and member');
+
+    const group = await getGroup(groupId);
+    if (!group) return alert('Group not found');
+
+    const members = new Set(await getGroupMembers(groupId));
+    members.add(memberFp);
+    await addGroupMember(groupId, memberFp);
+    group.members = Array.from(members);
+
+    await forceRotateSenderKey(group);
+    await saveGroupMembers(groupId, group.members);
+    await renderSelectedGroup();
+    setStatus(true, 'Member added. SenderKey rotated.');
+  } catch (e) {
+    setStatus(false, 'Add member failed: ' + e.message);
+  }
+};
+
+window.removeSelectedMemberFromGroup = async function() {
+  try {
+    const groupId = document.getElementById('group-select').value;
+    const memberFp = document.getElementById('group-member-select').value;
+    if (!groupId || !memberFp) return alert('Select group and member');
+
+    const group = await getGroup(groupId);
+    if (!group) return alert('Group not found');
+
+    await removeGroupMember(groupId, memberFp);
+    const members = (await getGroupMembers(groupId)).filter((fp) => fp !== memberFp);
+    group.members = members;
+
+    await forceRotateSenderKey(group);
+    await saveGroupMembers(groupId, members);
+    await renderSelectedGroup();
+    setStatus(true, 'Member removed. SenderKey rotated.');
+  } catch (e) {
+    setStatus(false, 'Remove member failed: ' + e.message);
+  }
+};
+
 /* =========================
   Encryption
 ========================= */
 window.encryptMsg = async function() {
   try {
     const content = document.getElementById("content").value || "";
-    const fp = document.getElementById("recipient-select").value;
+    const mode = document.querySelector('input[name="message-mode"]:checked')?.value || 'direct';
+    const my = await ensureMyKeys();
 
+    if (mode === 'group') {
+      const groupId = document.getElementById('group-select').value;
+      if (!groupId) return alert('Select a group');
+
+      const group = await getGroup(groupId);
+      if (!group) return alert('Group not found');
+
+      const localSignPK = getLocalSignPKB64(my);
+      const senderState = await getSenderKeyState(groupId, localSignPK);
+      if (!senderState) {
+        throw new Error('SenderKey state not found. Re-join group.');
+      }
+
+      const senderKey = hydrateLocalSenderState(senderState);
+      const encrypted = GroupMesh.encryptGroupMessage({
+        content,
+        groupId,
+        senderKey,
+        senderSignPK: my.signPKu8,
+        senderSignSK: my.signSKu8
+      }, nacl, nacl.util);
+
+      await saveSenderKeyState(groupId, localSignPK, encodeSenderState(encrypted.nextSenderKey));
+      document.getElementById("encrypted").textContent = JSON.stringify(encrypted.message, null, 2);
+      document.getElementById("encrypted-actions").style.display = "flex";
+      setStatus(true, `Group encrypted for ${group.name}`);
+      return;
+    }
+
+    const fp = document.getElementById("recipient-select").value;
     if (!fp) return alert("Select a recipient");
 
     const recipient = await idbGet(STORE_CONTACTS, fp);
     if (!recipient) return alert("Recipient not found");
-
-    const my = await ensureMyKeys();
 
     const message = await encryptInWorker({
       content,
@@ -468,6 +694,28 @@ window.decryptMsg = async function() {
   try {
     const message = JSON.parse(document.getElementById("input").value.trim());
     const my = await ensureMyKeys();
+
+    if (message.kind === 'dmesh-group-msg') {
+      const group = await getGroup(message.groupId);
+      if (!group) throw new Error('Unknown group');
+
+      const senderState = await getSenderKeyState(message.groupId, message.senderSignPK);
+      if (!senderState) throw new Error('Missing sender state for group sender');
+
+      if (senderState.version !== message.senderKeyVersion) {
+        throw new Error('SenderKey version mismatch. Re-sync group state required.');
+      }
+
+      const decrypted = GroupMesh.decryptGroupMessage({
+        message,
+        senderKey: hydrateLocalSenderState(senderState)
+      }, nacl, nacl.util);
+
+      await saveSenderKeyState(message.groupId, message.senderSignPK, encodeSenderState(decrypted.nextSenderKey));
+      document.getElementById("decrypted").textContent = decrypted.payload.content;
+      setStatus(true, `✓ Group message decrypted (${group.name})`);
+      return;
+    }
 
     // Sender fingerprint
     const senderSignPK = nacl.util.decodeBase64(message.senderSignPK);
@@ -679,6 +927,8 @@ window.__lifelineTest = {
   try {
     initBLE();  // Initialize Bluetooth
     await initOrLoad();
+    await refreshGroups();
+    setMessageMode('direct');
   } catch (e) {
     console.error("Auto-init failed:", e);
   }

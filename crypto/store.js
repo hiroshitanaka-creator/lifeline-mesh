@@ -15,7 +15,7 @@
 // ============================================================================
 
 export const DB_NAME = "lifelineMeshV2";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 // Store names
 export const STORE_KEYS = "keys";
@@ -24,6 +24,9 @@ export const STORE_OUTBOX = "outbox";
 export const STORE_INBOX = "inbox";
 export const STORE_SEEN = "seen";
 export const STORE_CHUNKS = "chunks"; // Partial chunk reassembly
+export const STORE_GROUPS = "groups";
+export const STORE_GROUP_MEMBERS = "groupMembers";
+export const STORE_SENDER_KEYS = "senderKeys";
 
 // Cleanup intervals
 export const SEEN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -118,6 +121,29 @@ export function openDB() {
       // Migration from v1 database if needed
       if (oldVersion < 2) {
         console.log("Migrating database from v1 to v2");
+      }
+
+      if (oldVersion < 3) {
+        if (!db.objectStoreNames.contains(STORE_GROUPS)) {
+          const groupsStore = db.createObjectStore(STORE_GROUPS, { keyPath: "id" });
+          groupsStore.createIndex("name", "name", { unique: false });
+          groupsStore.createIndex("updatedAt", "updatedAt", { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(STORE_GROUP_MEMBERS)) {
+          const membersStore = db.createObjectStore(STORE_GROUP_MEMBERS, { keyPath: "memberKey" });
+          membersStore.createIndex("groupId", "groupId", { unique: false });
+          membersStore.createIndex("memberFp", "memberFp", { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains(STORE_SENDER_KEYS)) {
+          const senderKeysStore = db.createObjectStore(STORE_SENDER_KEYS, { keyPath: "stateKey" });
+          senderKeysStore.createIndex("groupId", "groupId", { unique: false });
+          senderKeysStore.createIndex("senderSignPK", "senderSignPK", { unique: false });
+          senderKeysStore.createIndex("updatedAt", "updatedAt", { unique: false });
+        }
+
+        console.log("Migrating database from v2 to v3 (group stores)");
       }
     };
   });
@@ -625,6 +651,82 @@ export async function cleanupOldChunks(maxAgeMs = 24 * 60 * 60 * 1000) {
 }
 
 // ============================================================================
+// Group Operations (Group metadata, members, sender key state)
+// ============================================================================
+
+export async function saveGroup(group) {
+  const existing = await idbGet(STORE_GROUPS, group.id);
+  const entry = {
+    ...existing,
+    ...group,
+    createdAt: existing?.createdAt || group.createdAt || Date.now(),
+    updatedAt: Date.now()
+  };
+  await idbPut(STORE_GROUPS, entry);
+}
+
+export function getGroup(groupId) {
+  return idbGet(STORE_GROUPS, groupId);
+}
+
+export function getAllGroups() {
+  return idbGetAll(STORE_GROUPS);
+}
+
+export async function saveGroupMembers(groupId, members = []) {
+  const existingMembers = await idbGetByIndex(STORE_GROUP_MEMBERS, "groupId", groupId);
+  for (const existing of existingMembers) {
+    await idbDel(STORE_GROUP_MEMBERS, existing.memberKey);
+  }
+
+  for (const memberFp of members) {
+    await idbPut(STORE_GROUP_MEMBERS, {
+      memberKey: `${groupId}:${memberFp}`,
+      groupId,
+      memberFp,
+      updatedAt: Date.now()
+    });
+  }
+}
+
+export async function addGroupMember(groupId, memberFp) {
+  await idbPut(STORE_GROUP_MEMBERS, {
+    memberKey: `${groupId}:${memberFp}`,
+    groupId,
+    memberFp,
+    updatedAt: Date.now()
+  });
+}
+
+export async function removeGroupMember(groupId, memberFp) {
+  await idbDel(STORE_GROUP_MEMBERS, `${groupId}:${memberFp}`);
+}
+
+export async function getGroupMembers(groupId) {
+  const members = await idbGetByIndex(STORE_GROUP_MEMBERS, "groupId", groupId);
+  return members.map((entry) => entry.memberFp);
+}
+
+export async function saveSenderKeyState(groupId, senderSignPK, senderKeyState) {
+  await idbPut(STORE_SENDER_KEYS, {
+    stateKey: `${groupId}:${senderSignPK}`,
+    groupId,
+    senderSignPK,
+    senderKeyState,
+    updatedAt: Date.now()
+  });
+}
+
+export async function getSenderKeyState(groupId, senderSignPK) {
+  const state = await idbGet(STORE_SENDER_KEYS, `${groupId}:${senderSignPK}`);
+  return state?.senderKeyState || null;
+}
+
+export function getSenderKeysForGroup(groupId) {
+  return idbGetByIndex(STORE_SENDER_KEYS, "groupId", groupId);
+}
+
+// ============================================================================
 // Database Maintenance
 // ============================================================================
 
@@ -647,7 +749,10 @@ export async function getStats() {
     outbox: await idbCount(STORE_OUTBOX),
     inbox: await idbCount(STORE_INBOX),
     seen: await idbCount(STORE_SEEN),
-    chunks: await idbCount(STORE_CHUNKS)
+    chunks: await idbCount(STORE_CHUNKS),
+    groups: await idbCount(STORE_GROUPS),
+    groupMembers: await idbCount(STORE_GROUP_MEMBERS),
+    senderKeys: await idbCount(STORE_SENDER_KEYS)
   };
 }
 
@@ -656,7 +761,17 @@ export async function getStats() {
  */
 export async function clearAllData() {
   const db = await openDB();
-  const storeNames = [STORE_KEYS, STORE_CONTACTS, STORE_OUTBOX, STORE_INBOX, STORE_SEEN, STORE_CHUNKS];
+  const storeNames = [
+    STORE_KEYS,
+    STORE_CONTACTS,
+    STORE_OUTBOX,
+    STORE_INBOX,
+    STORE_SEEN,
+    STORE_CHUNKS,
+    STORE_GROUPS,
+    STORE_GROUP_MEMBERS,
+    STORE_SENDER_KEYS
+  ];
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeNames, "readwrite");
