@@ -27,6 +27,7 @@ import { encryptInWorker, decryptInWorker } from './worker-client.js';
 ========================= */
 let bleManager = null;
 let lastEncryptedMessage = null;
+let bleManagerFactory = () => new BLEManager();
 
 function initBLE() {
   if (!BLEManager.isSupported()) {
@@ -35,7 +36,7 @@ function initBLE() {
     return;
   }
 
-  bleManager = new BLEManager();
+  bleManager = bleManagerFactory();
 
   bleManager.onConnectionChange = (connected, device) => {
     const statusEl = document.getElementById('ble-status');
@@ -652,8 +653,16 @@ if ('serviceWorker' in navigator) {
 
 
 window.__lifelineTest = {
+  BLEManager,
   setBleManager(manager) {
     bleManager = manager;
+  },
+  setBleManagerFactory(factory) {
+    bleManagerFactory = factory;
+  },
+  resetBle() {
+    bleManager = null;
+    initBLE();
   },
   simulateBleReceive(message) {
     if (!bleManager?.onMessageReceived) {
