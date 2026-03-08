@@ -26,6 +26,11 @@
     .section { margin-bottom: 24px; }
     details { margin: 8px 0; }
     summary { cursor: pointer; font-weight: 600; padding: 8px; background: #f0f0f0; border-radius: 4px; }
+    .delivery-chip { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; margin-right: 8px; }
+    .delivery-unsent { background: #fef3c7; color: #92400e; }
+    .delivery-retrying { background: #dbeafe; color: #1e3a8a; }
+    .delivery-delivered { background: #dcfce7; color: #166534; }
+    .delivery-failed { background: #fee2e2; color: #991b1b; }
 
     /* Modal styles */
     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); }
@@ -48,6 +53,10 @@
       .danger { background: #4a1a1a; border-color: #7a3333; }
       summary { background: #16213e; color: #eee; }
       .modal-content { background: #1a1a2e; color: #eee; }
+      .delivery-unsent { background: #713f12; color: #fde68a; }
+      .delivery-retrying { background: #1e3a8a; color: #bfdbfe; }
+      .delivery-delivered { background: #166534; color: #bbf7d0; }
+      .delivery-failed { background: #7f1d1d; color: #fecaca; }
       .ok { color: #4ade80; }
       .ng { color: #f87171; }
       a { color: #60a5fa; }
@@ -194,6 +203,22 @@
         <button data-action="bleSendEncrypted">📤 Send Last Encrypted via Bluetooth</button>
       </div>
     </div>
+  </div>
+
+
+
+  <div class="section" id="delivery-section">
+    <h2>6) Delivery Operations</h2>
+    <div class="row">
+      <span class="small">Queue Status:</span>
+      <span id="delivery-status-chip" class="delivery-chip delivery-unsent">未送信</span>
+      <span id="delivery-status-detail" class="small">Outbox empty</span>
+    </div>
+    <pre id="failure-guide" class="small">送信失敗時は、まず再送を実行し、必要であれば Clipboard / File / QR に切り替えてください。</pre>
+    <details>
+      <summary>Outbox Snapshot</summary>
+      <pre id="outbox-view">(none)</pre>
+    </details>
   </div>
 
   <div class="section">

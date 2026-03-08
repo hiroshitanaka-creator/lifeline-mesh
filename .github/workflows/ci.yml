@@ -46,6 +46,10 @@ jobs:
           mkdir -p artifacts
           npm run test:integration 2>&1 | tee artifacts/integration-test.log
 
+
+      - name: Check compatibility policy gate
+        run: npm run check:compat
+
       - name: Run Playwright E2E
         run: npm run test:e2e:playwright
 

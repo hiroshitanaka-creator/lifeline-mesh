@@ -12,6 +12,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import {
   STORE_KEYS,
   STORE_CONTACTS,
+  STORE_OUTBOX,
   idbGet,
   idbPut,
   idbDel,
@@ -39,6 +40,89 @@ import { appendBleMessage, formatErrorMessage, setStatus } from './ui-utils.js';
 let bleManager = null;
 let lastEncryptedMessage = null;
 let bleManagerFactory = () => new BLEManager();
+
+const DELIVERY_UI_STATUS = {
+  UNSENT: "未送信",
+  RETRYING: "再送中",
+  DELIVERED: "配信済み",
+  FAILED: "失敗"
+};
+
+function setDeliveryStatus(status, detail = '') {
+  const chipEl = document.getElementById('delivery-status-chip');
+  const detailEl = document.getElementById('delivery-status-detail');
+  if (!chipEl || !detailEl) {
+    return;
+  }
+
+  const classMap = {
+    [DELIVERY_UI_STATUS.UNSENT]: 'delivery-unsent',
+    [DELIVERY_UI_STATUS.RETRYING]: 'delivery-retrying',
+    [DELIVERY_UI_STATUS.DELIVERED]: 'delivery-delivered',
+    [DELIVERY_UI_STATUS.FAILED]: 'delivery-failed'
+  };
+
+  chipEl.textContent = status;
+  chipEl.className = `delivery-chip ${classMap[status] || 'delivery-unsent'}`;
+  detailEl.textContent = detail || 'No additional details';
+}
+
+function renderFailureGuide(state, details = {}) {
+  const guideEl = document.getElementById('failure-guide');
+  if (!guideEl) {
+    return;
+  }
+
+  const base = '失敗時は「再送」→「Clipboard」→「File/QR」の順で迂回してください。';
+
+  if (state === 'failed') {
+    guideEl.textContent = `送信が失敗しました（${details.error || 'unknown'}）。${base}`;
+    return;
+  }
+
+  if (state === 'fallback') {
+    guideEl.textContent = `BLE再送上限に到達したため、代替経路へ切替中です。${base}`;
+    return;
+  }
+
+  if (state === 'retrying') {
+    guideEl.textContent = `再送中です（attempt ${details.attempt || '?'}）。しばらく待って再確認してください。`;
+    return;
+  }
+
+  guideEl.textContent = '送信失敗時は、まず再送を実行し、必要であれば Clipboard / File / QR に切り替えてください。';
+}
+
+async function refreshOutboxSnapshot() {
+  const outboxEl = document.getElementById('outbox-view');
+  if (!outboxEl) {
+    return;
+  }
+
+  try {
+    const entries = await idbGetAll(STORE_OUTBOX);
+    if (!entries.length) {
+      outboxEl.textContent = '(none)';
+      return;
+    }
+
+    const compact = entries
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .slice(0, 20)
+      .map((entry) => ({
+        msgId: entry.msgId,
+        status: entry.status,
+        attempts: entry.attempts || 0,
+        transport: entry.transport || 'ble',
+        lastAttempt: entry.lastAttempt || null,
+        error: entry.error || null
+      }));
+
+    outboxEl.textContent = JSON.stringify(compact, null, 2);
+  } catch (error) {
+    outboxEl.textContent = `outbox read failed: ${error.message}`;
+  }
+}
 
 function renderBleTransportState(state, details = {}) {
   const statusEl = document.getElementById('ble-status');
@@ -76,6 +160,19 @@ function renderBleTransportState(state, details = {}) {
   if (state === 'failed' && details.error) {
     setStatus(false, `BLE send failed: ${details.error}`);
   }
+
+  if (state === 'failed') {
+    setDeliveryStatus(DELIVERY_UI_STATUS.FAILED, details.error || 'Retry exhausted');
+  } else if (state === 'retrying' || state === 'fallback') {
+    setDeliveryStatus(DELIVERY_UI_STATUS.RETRYING, `${state}${details.attempt ? ` (attempt ${details.attempt})` : ''}`);
+  } else if (state === 'delivered') {
+    setDeliveryStatus(DELIVERY_UI_STATUS.DELIVERED, details.msgId ? `msgId: ${details.msgId}` : 'Delivered');
+  } else if (state === 'queued' || state === 'sending' || state === 'disconnecting' || state === 'disconnected') {
+    setDeliveryStatus(DELIVERY_UI_STATUS.UNSENT, state);
+  }
+
+  renderFailureGuide(state, details);
+  refreshOutboxSnapshot();
 }
 
 function initBLE() {
@@ -161,6 +258,7 @@ window.bleSendEncrypted = async function() {
     const message = JSON.parse(encryptedText);
     await bleManager.sendMessage(message);
     setStatus(true, 'Message sent via Bluetooth!');
+    await refreshOutboxSnapshot();
   } catch (e) {
     setStatus(false, formatErrorMessage('Bluetooth send failed', e));
   }
@@ -281,6 +379,7 @@ window.initOrLoad = async function() {
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
     await refreshContacts();
     await refreshGroups();
+    await refreshOutboxSnapshot();
     setStatus(true, `Keys ready. Fingerprint: ${myId.fp}`);
   } catch (e) {
     setStatus(false, e.message);
@@ -1015,6 +1114,10 @@ window.__lifelineTest = {
     await initOrLoad();
     await refreshGroups();
     setMessageMode('direct');
+    await refreshOutboxSnapshot();
+    setInterval(() => {
+      refreshOutboxSnapshot();
+    }, 5000);
   } catch (e) {
     console.error("Auto-init failed:", e);
   }
