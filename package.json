@@ -21,7 +21,8 @@
     "test:unit": "npm run test:crypto && npm run test:vectors",
     "test:integration": "node tests/integration/ble-crypto.test.js",
     "test:e2e": "node tests/e2e/smoke-check.js",
-    "test:e2e:playwright": "playwright test"
+    "test:e2e:playwright": "playwright test",
+    "check:phase": "node tools/phase-gate-check.js"
   },
   "keywords": [
     "cryptography",
