@@ -27,7 +27,8 @@ import {
   addGroupMember,
   removeGroupMember,
   saveSenderKeyState,
-  getSenderKeyState
+  getSenderKeyState,
+  migrateLegacyV1IfNeeded
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, setStatus } from './ui-utils.js';
@@ -1011,10 +1012,15 @@ window.__lifelineTest = {
 (async () => {
   try {
     bindUIActions();
+    const migrationResult = await migrateLegacyV1IfNeeded();
     initBLE();  // Initialize Bluetooth
     await initOrLoad();
     await refreshGroups();
     setMessageMode('direct');
+
+    if (migrationResult.migrated) {
+      setStatus(true, `Legacy DB migrated (keys:${migrationResult.keys}, contacts:${migrationResult.contacts}, replay:${migrationResult.seen})`);
+    }
   } catch (e) {
     console.error("Auto-init failed:", e);
   }
