@@ -33,7 +33,9 @@ import {
  * BLE Manager for Lifeline Mesh
  */
 export class BLEManager {
-  constructor() {
+  constructor(options = {}) {
+    const { io = BLEManager.createBrowserIO() } = options;
+
     this.device = null;
     this.server = null;
     this.service = null;
@@ -54,6 +56,25 @@ export class BLEManager {
 
     // Connection state
     this.isConnected = false;
+
+    // I/O boundary (Web Bluetooth adapter)
+    this.io = io;
+  }
+
+  static createBrowserIO() {
+    return {
+      hasBluetooth: () => typeof navigator !== "undefined" && "bluetooth" in navigator,
+      requestDevice: (requestOptions) => navigator.bluetooth.requestDevice(requestOptions),
+      connectGatt: (device) => device.gatt.connect(),
+      getPrimaryService: (server, uuid) => server.getPrimaryService(uuid),
+      getCharacteristic: (service, uuid) => service.getCharacteristic(uuid),
+      startNotifications: (characteristic) => characteristic.startNotifications(),
+      addCharacteristicListener: (characteristic, eventName, handler) =>
+        characteristic.addEventListener(eventName, handler),
+      addDisconnectListener: (device, handler) =>
+        device.addEventListener("gattserverdisconnected", handler),
+      disconnectGatt: (device) => device.gatt.disconnect()
+    };
   }
 
   /**
@@ -61,7 +82,7 @@ export class BLEManager {
    * @returns {boolean}
    */
   static isSupported() {
-    return "bluetooth" in navigator;
+    return BLEManager.createBrowserIO().hasBluetooth();
   }
 
   /**
@@ -96,17 +117,17 @@ export class BLEManager {
    * @returns {Promise<BluetoothDevice>}
    */
   async scan() {
-    if (!BLEManager.isSupported()) {
+    if (!this.io.hasBluetooth()) {
       throw new Error(BLE_ERROR.NOT_SUPPORTED);
     }
 
     try {
-      this.device = await navigator.bluetooth.requestDevice({
+      this.device = await this.io.requestDevice({
         filters: [{ services: [SERVICE_UUID] }],
         optionalServices: [SERVICE_UUID]
       });
 
-      this.device.addEventListener("gattserverdisconnected", () => {
+      this.io.addDisconnectListener(this.device, () => {
         this._handleDisconnect();
       });
 
@@ -133,19 +154,22 @@ export class BLEManager {
     }
 
     try {
-      this.server = await device.gatt.connect();
-      this.service = await this.server.getPrimaryService(SERVICE_UUID);
+      this.server = await this.io.connectGatt(device);
+      this.service = await this.io.getPrimaryService(this.server, SERVICE_UUID);
 
-      this.txCharacteristic = await this.service.getCharacteristic(
+      this.txCharacteristic = await this.io.getCharacteristic(
+        this.service,
         CHARACTERISTICS.MESSAGE_TX
       );
 
-      this.rxCharacteristic = await this.service.getCharacteristic(
+      this.rxCharacteristic = await this.io.getCharacteristic(
+        this.service,
         CHARACTERISTICS.MESSAGE_RX
       );
 
-      await this.rxCharacteristic.startNotifications();
-      this.rxCharacteristic.addEventListener(
+      await this.io.startNotifications(this.rxCharacteristic);
+      this.io.addCharacteristicListener(
+        this.rxCharacteristic,
         "characteristicvaluechanged",
         (event) => this._handleIncomingData(event)
       );
@@ -171,7 +195,7 @@ export class BLEManager {
    */
   disconnect() {
     if (this.device && this.device.gatt.connected) {
-      this.device.gatt.disconnect();
+      this.io.disconnectGatt(this.device);
     }
     this._handleDisconnect();
   }
