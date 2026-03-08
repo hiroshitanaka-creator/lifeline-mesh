@@ -6,7 +6,8 @@
   "main": "core.js",
   "exports": {
     ".": "./core.js",
-    "./errors": "./errors.js"
+    "./errors": "./errors.js",
+    "./group": "./group.js"
   },
   "scripts": {
     "test": "node test.js"

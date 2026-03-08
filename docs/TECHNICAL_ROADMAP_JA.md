@@ -3,6 +3,15 @@
 
 ---
 
+## 進捗ステータス（現行スプリント）
+
+- [x] フェーズ1: `crypto/` 配下に Group Messaging の最小実装（グループ作成 / 送信 / 復号）を追加。
+- [x] フェーズ2: 境界が複雑な領域から段階的TypeScript化を開始（`crypto/message-schema.ts`, `crypto/transport-io.ts`）。
+- [x] フェーズ3: `app/index.html` のスクリプトを `app/src` モジュールへ分割し、外部エントリポイント化。
+- [x] フェーズ4: UI応答性維持のため、暗号化 / 検証 / 再構成候補をWeb Workerへ切り出し（`app/src/workers/crypto-worker.js`）。
+
+---
+
 ## 1. 即座に対処すべき問題
 
 ### 1.1 鍵エクスポートの脆弱性修正

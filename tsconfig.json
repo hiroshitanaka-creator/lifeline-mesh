@@ -3,7 +3,11 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -17,12 +21,16 @@
     "strict": false,
     "noImplicitAny": false,
     "strictNullChecks": false,
-    "typeRoots": ["./types", "./node_modules/@types"]
+    "typeRoots": [
+      "./types",
+      "./node_modules/@types"
+    ]
   },
   "include": [
     "crypto/**/*.js",
     "tools/**/*.js",
-    "types/**/*.d.ts"
+    "types/**/*.d.ts",
+    "crypto/**/*.ts"
   ],
   "exclude": [
     "node_modules",
