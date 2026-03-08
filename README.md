@@ -79,6 +79,7 @@ Every contribution matters. Let's build this together.
 ### For Users
 - **[Usage Guide](docs/USAGE.md)** - Quick start, security practices, troubleshooting
 - **[FAQ](docs/FAQ.md)** - 30+ questions about security, features, and usage
+- **[Web Bluetooth Support](docs/WEB_BLUETOOTH_SUPPORT.md)** - Browser/platform compatibility and fallback guidance
 
 ### For Developers
 - **[Protocol Specification](spec/PROTOCOL.md)** - Detailed technical specification
@@ -208,7 +209,7 @@ Automatically deployed from `main` branch via GitHub Actions.
 - [x] All tests passing
 - [x] Documentation complete
 - [ ] Consider self-hosting TweetNaCl (avoid CDN dependency)
-- [ ] Add Content Security Policy headers
+- [x] Add Content Security Policy headers
 - [ ] Set up monitoring/analytics (optional)
 
 ---
