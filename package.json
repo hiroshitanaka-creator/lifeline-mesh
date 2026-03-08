@@ -14,16 +14,17 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "validate": "npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run test:e2e:playwright",
+    "validate": "npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run check:compat && npm run test:e2e:playwright",
     "ci": "npm run validate",
     "prepare": "husky || true",
     "pre-commit": "lint-staged",
     "test:unit": "npm run test:crypto && npm run test:vectors",
     "test:integration": "node tests/integration/ble-crypto.test.js",
     "test:e2e": "node tests/e2e/smoke-check.js",
-    "test:e2e:playwright": "playwright test",
+    "test:e2e:playwright": "node tests/e2e/run-playwright.js",
     "check:phase": "node tools/phase-gate-check.js",
-    "phase:report": "node tools/generate-phase-report.js"
+    "test:e2e:install": "npx playwright install --with-deps chromium",
+    "check:compat": "node tools/check-compat-policy.js"
   },
   "keywords": [
     "cryptography",
