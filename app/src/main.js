@@ -54,6 +54,9 @@ const DELIVERY_UI_STATUS = {
 };
 
 const BLE_CONFIG_STORAGE_KEY = "lifeline:bleProtocolConfig";
+const MAX_MESSAGE_BYTES = 150 * 1024;
+const MAX_BLE_CHUNKS = 255;
+const DEFAULT_BLE_CHUNK_SIZE = 140;
 
 function formatRemainingDuration(ms) {
   const safeMs = Math.max(0, Number(ms) || 0);
@@ -396,6 +399,7 @@ window.applyBleConfig = function() {
     const applied = bleManager.updateProtocolConfig(nextConfig);
     localStorage.setItem(BLE_CONFIG_STORAGE_KEY, JSON.stringify(applied));
     renderBleProtocolConfig(applied);
+    updateMessageDraftMetrics();
     setStatus(true, `BLE config updated (retry=${applied.retryCount}, ack=${applied.ackTimeoutMs}ms)`);
   } catch (error) {
     setStatus(false, `BLE config update failed: ${error.message}`);
@@ -418,6 +422,7 @@ window.resetBleConfig = function() {
       reassemblyTimeoutMs: 60000
     });
     renderBleProtocolConfig(applied);
+    updateMessageDraftMetrics();
     setStatus(true, 'BLE config reset to defaults');
   } catch (error) {
     setStatus(false, `BLE config reset failed: ${error.message}`);
@@ -492,6 +497,7 @@ window.flushOutboxNow = async function() {
     await bleManager.flushOutbox();
     await refreshOutboxSnapshot();
     await refreshInboxSnapshot();
+    updateMessageDraftMetrics();
     setStatus(true, 'Outbox flush completed');
   } catch (error) {
     setStatus(false, formatErrorMessage('Outbox flush failed', error));
@@ -534,7 +540,8 @@ function bindUIActions() {
     closeQRModal: () => window.closeQRModal(),
     closeQRScanner: () => window.closeQRScanner(),
     installPWA: () => window.installPWA(),
-    dismissInstall: () => window.dismissInstall()
+    dismissInstall: () => window.dismissInstall(),
+    applyDisasterTemplate: () => window.applyDisasterTemplate()
   };
 
   document.querySelectorAll('[data-action]').forEach((element) => {
@@ -553,6 +560,10 @@ function bindUIActions() {
     element.addEventListener('change', () => {
       window.setMessageMode(element.value);
     });
+  });
+
+  document.getElementById('content')?.addEventListener('input', () => {
+    updateMessageDraftMetrics();
   });
 }
 
@@ -585,6 +596,114 @@ function setActionBusy(actionName, busy, loadingText) {
     delete button.dataset.originalText;
   }
 }
+
+
+
+function estimateBleChunkCount(byteLength) {
+  const activeChunkSize = bleManager?.protocolConfig?.chunkSize || DEFAULT_BLE_CHUNK_SIZE;
+  if (!byteLength) {
+    return 0;
+  }
+  return Math.ceil(byteLength / Math.max(1, activeChunkSize));
+}
+
+function updateMessageDraftMetrics() {
+  const contentEl = document.getElementById('content');
+  const metricsEl = document.getElementById('message-metrics');
+  const progressEl = document.getElementById('message-size-progress');
+  const chunkEl = document.getElementById('chunk-estimate');
+  if (!contentEl || !metricsEl || !progressEl || !chunkEl) {
+    return;
+  }
+
+  const text = contentEl.value || '';
+  const byteLength = new TextEncoder().encode(text).length;
+  const usagePercent = Math.min(100, Math.round((byteLength / MAX_MESSAGE_BYTES) * 100));
+  const estimatedChunks = estimateBleChunkCount(byteLength);
+  const overLimit = byteLength > MAX_MESSAGE_BYTES || estimatedChunks > MAX_BLE_CHUNKS;
+
+  metricsEl.textContent = `${byteLength} / ${MAX_MESSAGE_BYTES} bytes • ${usagePercent}%`;
+  progressEl.max = MAX_MESSAGE_BYTES;
+  progressEl.value = Math.min(byteLength, MAX_MESSAGE_BYTES);
+  chunkEl.textContent = `Estimated BLE chunks: ${estimatedChunks} / ${MAX_BLE_CHUNKS}`;
+  chunkEl.className = overLimit ? 'small ng' : 'small';
+
+  if (overLimit) {
+    chunkEl.textContent += ' ⚠️ message may exceed BLE limits';
+  }
+}
+
+function getDisasterTemplateContent(templateKey) {
+  const templates = {
+    safety: [
+      '【安否確認】',
+      '氏名: ',
+      '現在地: ',
+      '状態: 無事 / 軽傷 / 重傷',
+      '必要な支援: ',
+      '同行者: ',
+      '次の連絡予定: '
+    ].join('\n'),
+    supplies: [
+      '【物資支援依頼】',
+      '場所: ',
+      '必要物資: 水 / 食料 / 毛布 / 衛生用品 / その他',
+      '人数: ',
+      '緊急度: 高 / 中 / 低',
+      '受け渡し可能時間: ',
+      '連絡先情報: '
+    ].join('\n'),
+    evacuation: [
+      '【避難連絡】',
+      '出発地点: ',
+      '避難先: ',
+      '移動手段: 徒歩 / 車 / その他',
+      '同行者人数: ',
+      '危険情報: ',
+      '到着予定時刻: '
+    ].join('\n'),
+    medical: [
+      '【医療支援要請】',
+      '場所: ',
+      '対象者: ',
+      '症状・けが: ',
+      '意識: あり / なし',
+      '呼吸: あり / なし',
+      '必要な処置・搬送: '
+    ].join('\n')
+  };
+
+  return templates[templateKey] || '';
+}
+
+window.applyDisasterTemplate = function() {
+  const selector = document.getElementById('disaster-template');
+  const contentEl = document.getElementById('content');
+  const key = selector?.value || '';
+  if (!key) {
+    setStatus(false, 'テンプレートを選択してください');
+    return;
+  }
+
+  const template = getDisasterTemplateContent(key);
+  if (!template) {
+    setStatus(false, 'テンプレートの読み込みに失敗しました');
+    return;
+  }
+
+  const current = contentEl.value?.trim();
+  if (current) {
+    const shouldOverwrite = confirm('既存のメッセージを上書きしますか？');
+    if (!shouldOverwrite) {
+      return;
+    }
+  }
+
+  contentEl.value = template;
+  updateMessageDraftMetrics();
+  contentEl.focus();
+  setStatus(true, 'テンプレートを適用しました。必要項目を入力してください。');
+};
 
 function getLocalSignPKB64(my) {
   return nacl.util.encodeBase64(my.signPKu8);
@@ -1404,6 +1523,7 @@ window.__lifelineTest = {
     setMessageMode('direct');
     await refreshOutboxSnapshot();
     await refreshInboxSnapshot();
+    updateMessageDraftMetrics();
     setInterval(() => {
       refreshOutboxSnapshot();
       refreshInboxSnapshot();
