@@ -13,6 +13,7 @@ import {
   STORE_KEYS,
   STORE_CONTACTS,
   STORE_OUTBOX,
+  OUTBOX_RETRY_INTERVAL_MS,
   idbGet,
   idbPut,
   idbDel,
@@ -32,7 +33,7 @@ import {
   migrateLegacyV1IfNeeded
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
-import { appendBleMessage, formatErrorMessage, setStatus } from './ui-utils.js';
+import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
 import { createTransportManager } from '../../crypto/transport.js';
 
 
@@ -52,6 +53,27 @@ const DELIVERY_UI_STATUS = {
 };
 
 const BLE_CONFIG_STORAGE_KEY = "lifeline:bleProtocolConfig";
+
+function formatRemainingDuration(ms) {
+  const safeMs = Math.max(0, Number(ms) || 0);
+  if (safeMs < 1000) {
+    return `${safeMs}ms`;
+  }
+
+  const totalSeconds = Math.ceil(safeMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes < 1) {
+    return `${seconds}s`;
+  }
+
+  if (seconds === 0) {
+    return `${minutes}m`;
+  }
+
+  return `${minutes}m ${seconds}s`;
+}
 
 function setDeliveryStatus(status, detail = '') {
   const chipEl = document.getElementById('delivery-status-chip');
@@ -114,14 +136,28 @@ async function refreshOutboxSnapshot() {
     const compact = entries
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
       .slice(0, 20)
-      .map((entry) => ({
-        msgId: entry.msgId,
-        status: entry.status,
-        attempts: entry.attempts || 0,
-        transport: entry.transport || 'ble',
-        lastAttempt: entry.lastAttempt || null,
-        error: entry.error || null
-      }));
+      .map((entry) => {
+        const cooldownExpiresAt = (entry.status === 'failed' && entry.lastAttempt)
+          ? entry.lastAttempt + OUTBOX_RETRY_INTERVAL_MS
+          : null;
+        const cooldownRemainingMs = cooldownExpiresAt
+          ? Math.max(0, cooldownExpiresAt - Date.now())
+          : null;
+
+        return {
+          msgId: entry.msgId,
+          status: entry.status,
+          attempts: entry.attempts || 0,
+          transport: entry.transport || 'ble',
+          lastAttempt: entry.lastAttempt || null,
+          error: entry.error || null,
+          cooldownUntil: cooldownExpiresAt,
+          cooldownRemaining: cooldownRemainingMs,
+          cooldownRemainingText: cooldownRemainingMs !== null
+            ? formatRemainingDuration(cooldownRemainingMs)
+            : null
+        };
+      });
 
     outboxEl.textContent = JSON.stringify(compact, null, 2);
   } catch (error) {
@@ -159,7 +195,16 @@ function renderBleTransportState(state, details = {}) {
     failed: 'ng'
   };
 
-  statusEl.textContent = labels[state] || `ℹ️ ${state}`;
+  let statusText = labels[state] || `ℹ️ ${state}`;
+  if (state === 'queued' && details.reason === 'retry-cooldown') {
+    const eta = details.nextRetryAt ? formatLocalTime(details.nextRetryAt) : null;
+    const remaining = details.remainingMs !== undefined
+      ? formatRemainingDuration(details.remainingMs)
+      : null;
+    statusText = `🟡 Retry scheduled${remaining ? ` (${remaining})` : ''}${eta ? ` @ ${eta}` : ''}`;
+  }
+
+  statusEl.textContent = statusText;
   statusEl.className = classMap[state] || '';
 
   if (state === 'failed' && details.error) {
@@ -173,7 +218,10 @@ function renderBleTransportState(state, details = {}) {
   } else if (state === 'delivered') {
     setDeliveryStatus(DELIVERY_UI_STATUS.DELIVERED, details.msgId ? `msgId: ${details.msgId}` : 'Delivered');
   } else if (state === 'queued' || state === 'sending' || state === 'disconnecting' || state === 'disconnected') {
-    setDeliveryStatus(DELIVERY_UI_STATUS.UNSENT, state);
+    const queuedDetail = state === 'queued' && details.reason === 'retry-cooldown'
+      ? `retry-cooldown (${formatRemainingDuration(details.remainingMs || 0)})`
+      : state;
+    setDeliveryStatus(DELIVERY_UI_STATUS.UNSENT, queuedDetail);
   }
 
   renderFailureGuide(state, details);

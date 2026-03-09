@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-03-08",
+  "updatedAt": "2026-03-09",
   "goal": "Lifeline Mesh completion roadmap (20 phases)",
   "phases": [
     {
@@ -59,8 +59,8 @@
     {
       "id": 10,
       "title": "BLE受信の堅牢化",
-      "status": "pending",
-      "deliverable": "Chunk reassembly hardening"
+      "status": "completed",
+      "deliverable": "Chunk reassembly hardening (header validation + transfer consistency + 255-chunk guard)"
     },
     {
       "id": 11,
