@@ -26,7 +26,9 @@ import {
   getPendingOutbox,
   removeFromOutbox,
   updateOutboxStatus,
-  DELIVERY_STATUS
+  checkAndMarkSeen,
+  DELIVERY_STATUS,
+  OUTBOX_RETRY_INTERVAL_MS
 } from "../crypto/store.js";
 
 /**
@@ -59,6 +61,7 @@ export class BLEManager {
     // Outbound tracking
     this.pendingAcks = new Map();
     this.outboxFlushPromise = null;
+    this.outboxRetryTimer = null;
 
     // Connection state
     this.isConnected = false;
@@ -76,7 +79,8 @@ export class BLEManager {
       addToInbox,
       getPendingOutbox,
       removeFromOutbox,
-      updateOutboxStatus
+      updateOutboxStatus,
+      checkAndMarkSeen
     };
   }
 
@@ -201,6 +205,7 @@ export class BLEManager {
       }
 
       await this.flushOutbox();
+      this._startOutboxRetryLoop();
       this._emitTransferState("connected", { deviceId: device.id, deviceName: device.name || "unknown" });
 
       console.log("[BLE] Connected to", device.name || device.id);
@@ -280,6 +285,14 @@ export class BLEManager {
       for (const entry of pending) {
         const decision = this._classifyOutboxEntry(entry);
         if (!decision.shouldSend) {
+          if (decision.reason === "retry-cooldown" && entry?.msgId) {
+            this._emitTransferState("queued", {
+              msgId: entry.msgId,
+              reason: decision.reason,
+              nextRetryAt: decision.nextRetryAt,
+              remainingMs: decision.remainingMs
+            });
+          }
           continue;
         }
         await this._sendQueuedEntry(decision.normalizedEntry);
@@ -364,6 +377,9 @@ export class BLEManager {
     }
 
     const chunks = this._chunkData(messageBytes);
+    if (chunks.length > 0xff) {
+      throw new Error(`Message too large for BLE framing: ${chunks.length} chunks (max 255)`);
+    }
     const transferId = this._getTransferId(message);
 
     console.log(`[BLE] Sending message ${transferId} in ${chunks.length} chunk(s)`);
@@ -412,6 +428,10 @@ export class BLEManager {
     try {
       const dataView = event.target.value;
 
+      if (!dataView || dataView.byteLength < 4) {
+        throw new Error("Invalid BLE packet: header too short");
+      }
+
       const msgType = dataView.getUint8(0);
       const chunkIndex = dataView.getUint8(1);
       const totalChunks = dataView.getUint8(2);
@@ -450,6 +470,17 @@ export class BLEManager {
       const jsonStr = new TextDecoder().decode(completeData);
       const message = JSON.parse(jsonStr);
 
+      const seenKey = `${message.msgId || state.transferId}:${message.sndr || "unknown"}`;
+      const shouldStore = this.store.checkAndMarkSeen
+        ? await this.store.checkAndMarkSeen(message.msgId || state.transferId, message.sndr || "unknown")
+        : true;
+
+      if (!shouldStore) {
+        console.log("[BLE] Duplicate message ignored", seenKey);
+        await this._sendAck(state.transferId);
+        return;
+      }
+
       await this.store.addToInbox(
         {
           msgId: message.msgId || state.transferId,
@@ -478,11 +509,18 @@ export class BLEManager {
   _getOrCreateReceiveState(msgType, totalChunks, transferId) {
     this._cleanupExpiredReceiveStates();
 
+    if (totalChunks < 1 || totalChunks > 0xff) {
+      throw new Error(`Invalid totalChunks: ${totalChunks}`);
+    }
+
     const existing = this.receiveStates.get(transferId);
 
     if (existing) {
       if (existing.totalChunks !== totalChunks) {
         throw new Error(`Mismatched totalChunks for ${transferId}`);
+      }
+      if (existing.msgType !== msgType) {
+        throw new Error(`Mismatched msgType for ${transferId}`);
       }
       return existing;
     }
@@ -585,6 +623,28 @@ export class BLEManager {
     }
   }
 
+  _startOutboxRetryLoop() {
+    this._stopOutboxRetryLoop();
+
+    this.outboxRetryTimer = globalThis.setInterval(() => {
+      if (!this.isConnected || !this.txCharacteristic) {
+        return;
+      }
+
+      this.flushOutbox().catch((error) => {
+        console.warn("[BLE] Background outbox flush failed", error?.message || error);
+      });
+    }, OUTBOX_RETRY_INTERVAL_MS);
+  }
+
+  _stopOutboxRetryLoop() {
+    if (!this.outboxRetryTimer) {
+      return;
+    }
+    globalThis.clearInterval(this.outboxRetryTimer);
+    this.outboxRetryTimer = null;
+  }
+
   /**
    * Handle disconnection
    * @private
@@ -597,6 +657,7 @@ export class BLEManager {
     this.txCharacteristic = null;
     this.rxCharacteristic = null;
     this.receiveStates.clear();
+    this._stopOutboxRetryLoop();
 
     for (const [transferId] of this.pendingAcks) {
       this.pendingAcks.delete(transferId);
@@ -657,6 +718,23 @@ export class BLEManager {
     if (entry.transport && entry.transport !== "ble") {
       return { shouldSend: false, reason: "transport-mismatch" };
     }
+    if (entry.status === DELIVERY_STATUS.DELIVERED || entry.status === DELIVERY_STATUS.SENT) {
+      return { shouldSend: false, reason: "already-delivered" };
+    }
+
+    if (entry.status === DELIVERY_STATUS.FAILED) {
+      const lastAttempt = entry.lastAttempt || entry.createdAt || 0;
+      const elapsedMs = Date.now() - lastAttempt;
+      if (elapsedMs < OUTBOX_RETRY_INTERVAL_MS) {
+        return {
+          shouldSend: false,
+          reason: "retry-cooldown",
+          nextRetryAt: lastAttempt + OUTBOX_RETRY_INTERVAL_MS,
+          remainingMs: OUTBOX_RETRY_INTERVAL_MS - elapsedMs
+        };
+      }
+    }
+
     return {
       shouldSend: true,
       reason: "ble-pending",

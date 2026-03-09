@@ -4,6 +4,7 @@ import naclUtil from "../../crypto/node_modules/tweetnacl-util/nacl-util.js";
 import * as DMesh from "../../crypto/core.js";
 import { BLEManager } from "../../bluetooth/ble-manager.js";
 import { TransportManager } from "../../crypto/transport.js";
+import { OUTBOX_RETRY_INTERVAL_MS } from "../../crypto/store.js";
 
 const tests = [];
 let passed = 0;
@@ -20,6 +21,7 @@ function packetToDataView(packet) {
 function createInMemoryStore() {
   const outbox = new Map();
   const inbox = [];
+  const seen = new Set();
   return {
     inbox,
     async addToOutbox(message, recipientFp, meta = {}) {
@@ -46,6 +48,14 @@ function createInMemoryStore() {
         return;
       }
       outbox.set(msgId, { ...existing, status, ...fields });
+    },
+    async checkAndMarkSeen(msgId, senderFp) {
+      const key = `${msgId}:${senderFp}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
     },
     snapshot() {
       return [...outbox.values()];
@@ -267,6 +277,112 @@ test("integration: missing BLE chunk does not emit complete message", async () =
   }
 });
 
+test("integration: duplicate complete BLE message is deduplicated in inbox", async () => {
+  const { sender, receiver, receiverStore } = createLinkedManagers({
+    protocolConfig: { chunkSize: 80 }
+  });
+
+  const outgoingPackets = [];
+  sender.txCharacteristic = {
+    async writeValue(packet) {
+      outgoingPackets.push(packet.slice());
+    }
+  };
+  sender._waitForAck = async () => {};
+
+  let received = 0;
+  receiver.onMessageReceived = () => {
+    received += 1;
+  };
+
+  await sender.sendMessage({
+    kind: "dmesh-msg",
+    msgId: "dedupe-case",
+    sndr: "sender-a",
+    payload: "d".repeat(300),
+    ts: Date.now()
+  });
+
+  const directPackets = outgoingPackets.filter((packet) => packet[0] !== 0x03);
+
+  for (const packet of directPackets) {
+    await receiver._handleIncomingData({ target: { value: packetToDataView(packet) } });
+  }
+  for (const packet of directPackets) {
+    await receiver._handleIncomingData({ target: { value: packetToDataView(packet) } });
+  }
+
+  if (received !== 1) {
+    throw new Error(`Expected one onMessageReceived callback for duplicate complete message, got ${received}`);
+  }
+  if (receiverStore.inbox.length !== 1) {
+    throw new Error(`Expected one inbox entry after duplicate delivery, got ${receiverStore.inbox.length}`);
+  }
+});
+
+test("integration: rejects invalid BLE packet header before decode", async () => {
+  const { receiver } = createLinkedManagers();
+
+  const errors = [];
+  receiver.onError = (code) => {
+    errors.push(code);
+  };
+
+  await receiver._handleIncomingData({
+    target: {
+      value: new DataView(new Uint8Array([0x01, 0x00, 0x01]).buffer)
+    }
+  });
+
+  if (!errors.includes("BLE_RECEIVE_FAILED")) {
+    throw new Error("Expected BLE_RECEIVE_FAILED for short header packet");
+  }
+});
+
+test("integration: rejects receive state mismatch by msgType", async () => {
+  const manager = new BLEManager();
+
+  manager._getOrCreateReceiveState(0x01, 2, "transfer-1");
+
+  let threw = false;
+  try {
+    manager._getOrCreateReceiveState(0x02, 2, "transfer-1");
+  } catch (error) {
+    threw = /Mismatched msgType/.test(error.message);
+  }
+
+  if (!threw) {
+    throw new Error("Expected mismatched msgType to throw");
+  }
+});
+
+test("integration: low-level send rejects payload requiring over 255 chunks", async () => {
+  const manager = new BLEManager({
+    protocolConfig: { chunkSize: 16 }
+  });
+
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  const tooLarge = {
+    kind: "dmesh-msg",
+    msgId: "too-many-chunks",
+    payload: "z".repeat(5000),
+    ts: Date.now()
+  };
+
+  let threw = false;
+  try {
+    await manager._sendMessageWithAck(tooLarge);
+  } catch (error) {
+    threw = /max 255/.test(error.message);
+  }
+
+  if (!threw) {
+    throw new Error("Expected sendMessage to reject when chunk count exceeds protocol limit");
+  }
+});
+
 test("integration: flushOutbox skips invalid and non-ble entries", async () => {
   const store = {
     async getPendingOutbox() {
@@ -295,6 +411,190 @@ test("integration: flushOutbox skips invalid and non-ble entries", async () => {
 
   if (sent.length !== 1 || sent[0] !== "ble-1") {
     throw new Error(`Expected only ble-1 to be sent, got: ${sent.join(",")}`);
+  }
+});
+
+test("integration: flushOutbox retries stale failed entries but skips cooldown failures", async () => {
+  const now = Date.now();
+  const store = {
+    async getPendingOutbox() {
+      return [
+        {
+          transport: "ble",
+          msgId: "failed-recent",
+          status: "failed",
+          lastAttempt: now,
+          message: { kind: "dmesh-msg", msgId: "failed-recent", payload: "cooldown" }
+        },
+        {
+          transport: "ble",
+          msgId: "failed-stale",
+          status: "failed",
+          lastAttempt: now - OUTBOX_RETRY_INTERVAL_MS - 1,
+          message: { kind: "dmesh-msg", msgId: "failed-stale", payload: "retry" }
+        },
+        {
+          transport: "ble",
+          msgId: "pending-1",
+          status: "pending",
+          message: { kind: "dmesh-msg", msgId: "pending-1", payload: "pending" }
+        }
+      ];
+    },
+    async addToOutbox() {},
+    async addToInbox() {},
+    async removeFromOutbox() {},
+    async updateOutboxStatus() {}
+  };
+
+  const manager = new BLEManager({ store });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  const sent = [];
+  manager._sendQueuedEntry = async (entry) => {
+    sent.push(entry.msgId);
+  };
+
+  await manager.flushOutbox();
+
+  if (sent.length !== 2 || !sent.includes("failed-stale") || !sent.includes("pending-1")) {
+    throw new Error(`Expected stale failed + pending to be sent, got: ${sent.join(",")}`);
+  }
+  if (sent.includes("failed-recent")) {
+    throw new Error("Expected recent failed entry to remain in cooldown");
+  }
+});
+
+test("integration: flushOutbox emits queued state for retry-cooldown entries", async () => {
+  const now = Date.now();
+  const store = {
+    async getPendingOutbox() {
+      return [
+        {
+          transport: "ble",
+          msgId: "failed-recent-emit",
+          status: "failed",
+          lastAttempt: now,
+          message: { kind: "dmesh-msg", msgId: "failed-recent-emit", payload: "cooldown" }
+        }
+      ];
+    },
+    async addToOutbox() {},
+    async addToInbox() {},
+    async removeFromOutbox() {},
+    async updateOutboxStatus() {}
+  };
+
+  const manager = new BLEManager({ store });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  const states = [];
+  manager.onTransferState = ({ state, ...details }) => {
+    states.push({ state, ...details });
+  };
+
+  manager._sendQueuedEntry = async () => {
+    throw new Error("Cooldown entry must not be sent");
+  };
+
+  await manager.flushOutbox();
+
+  const queued = states.find((entry) => entry.state === "queued" && entry.msgId === "failed-recent-emit");
+  if (!queued) {
+    throw new Error("Expected queued state for cooldown entry");
+  }
+  if (queued.reason !== "retry-cooldown") {
+    throw new Error(`Expected retry-cooldown reason, got ${queued.reason}`);
+  }
+  if (!(queued.remainingMs > 0)) {
+    throw new Error(`Expected positive remainingMs, got ${queued.remainingMs}`);
+  }
+  if (!(queued.nextRetryAt > now)) {
+    throw new Error(`Expected nextRetryAt > now, got ${queued.nextRetryAt}`);
+  }
+});
+
+
+test("integration: outbox retry loop triggers flush while connected", async () => {
+  const manager = new BLEManager();
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  let intervalHandler = null;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+
+  globalThis.setInterval = (handler) => {
+    intervalHandler = handler;
+    return 1234;
+  };
+
+  let clearedTimer = null;
+  globalThis.clearInterval = (timerId) => {
+    clearedTimer = timerId;
+  };
+
+  let flushCalls = 0;
+  manager.flushOutbox = async () => {
+    flushCalls += 1;
+  };
+
+  try {
+    manager._startOutboxRetryLoop();
+    if (typeof intervalHandler !== "function") {
+      throw new Error("Expected retry loop to register interval handler");
+    }
+
+    await intervalHandler();
+
+    if (flushCalls !== 1) {
+      throw new Error(`Expected flushOutbox to be called once, got ${flushCalls}`);
+    }
+
+    manager._stopOutboxRetryLoop();
+    if (clearedTimer !== 1234) {
+      throw new Error(`Expected clearInterval to be called with 1234, got ${clearedTimer}`);
+    }
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+  }
+});
+
+test("integration: outbox retry loop skips flush when disconnected", async () => {
+  const manager = new BLEManager();
+  manager.isConnected = false;
+  manager.txCharacteristic = null;
+
+  let intervalHandler = null;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+
+  globalThis.setInterval = (handler) => {
+    intervalHandler = handler;
+    return 99;
+  };
+
+  globalThis.clearInterval = () => {};
+
+  let flushCalls = 0;
+  manager.flushOutbox = async () => {
+    flushCalls += 1;
+  };
+
+  try {
+    manager._startOutboxRetryLoop();
+    await intervalHandler();
+
+    if (flushCalls !== 0) {
+      throw new Error("Expected no background flush when disconnected");
+    }
+  } finally {
+    manager._stopOutboxRetryLoop();
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
   }
 });
 

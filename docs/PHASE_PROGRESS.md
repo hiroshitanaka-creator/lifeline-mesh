@@ -1,8 +1,8 @@
 # Phase Progress Report
 
-- Updated: 2026-03-08
+- Updated: 2026-03-09
 - Goal: Lifeline Mesh completion roadmap (20 phases)
-- Completion: 9/20 (45%)
+- Completion: 10/20 (50%)
 
 | Phase | Title | Status | Deliverable |
 |---|---|---|---|
@@ -15,7 +15,7 @@
 | 7 | crypto/transport.jsのUI接続 | ✅ completed | app/src/main.js TransportManager wiring (clipboard/file) |
 | 8 | 互換データ移行実装 | ✅ completed | app/src/db.js legacy outbox/inbox migration path + normalization helpers |
 | 9 | BLE送信の信頼性向上 | ✅ completed | bluetooth/ble-manager.js runtime BLE protocol tuning + bounds + UI controls |
-| 10 | BLE受信の堅牢化 | ⏳ pending | Chunk reassembly hardening |
+| 10 | BLE受信の堅牢化 | ✅ completed | Chunk reassembly hardening (header validation + transfer consistency + 255-chunk guard) |
 | 11 | Outbox/Inbox運用接続 | ⏳ pending | Queued delivery flow |
 | 12 | 主要統合テスト追加 | ⏳ pending | Integration tests |
 | 13 | E2E最小セット導入 | ⏳ pending | Playwright smoke flows |
@@ -28,5 +28,5 @@
 | 20 | リリース判定 | ⏳ pending | Completion gates all green |
 
 ## Immediate Next Focus
-- Start Phase 10: BLE受信の堅牢化
-- Expected deliverable: Chunk reassembly hardening
+- Start Phase 11: Outbox/Inbox運用接続
+- Expected deliverable: Queued delivery flow
