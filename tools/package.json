@@ -6,7 +6,8 @@
   "scripts": {
     "generate-vectors": "node generate-test-vectors.js > test-vectors.json",
     "validate-vectors": "node validate-test-vectors.js test-vectors.json",
-    "generate-sri": "node generate-sri.js"
+    "generate-sri": "node generate-sri.js",
+    "security-audit": "node security-audit-check.js"
   },
   "keywords": [
     "testing",

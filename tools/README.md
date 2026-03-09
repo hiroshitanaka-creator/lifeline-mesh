@@ -69,6 +69,26 @@ node generate-sri.js
 - Mitigates supply chain attacks
 - Required for production security
 
+
+### Security Audit Preparation
+
+#### `security-audit-check.js`
+Runs Phase 15 security-audit preparation checks and generates a Markdown report.
+
+**Usage:**
+```bash
+node tools/security-audit-check.js
+```
+
+**Output:**
+- `docs/SECURITY_AUDIT_REPORT.md`
+
+**Checks performed:**
+- `npm audit` for root/`crypto`/`tools` (high+ threshold, WARN on findings)
+- `npm run lint`
+- `npm run check:compat`
+- Static unsafe sink scan (`innerHTML`/`outerHTML`/`insertAdjacentHTML`/`eval` patterns)
+
 ## Installation
 
 All tools require the crypto module dependencies:

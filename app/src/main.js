@@ -13,6 +13,7 @@ import {
   STORE_KEYS,
   STORE_CONTACTS,
   STORE_OUTBOX,
+  STORE_INBOX,
   OUTBOX_RETRY_INTERVAL_MS,
   idbGet,
   idbPut,
@@ -165,6 +166,41 @@ async function refreshOutboxSnapshot() {
   }
 }
 
+async function refreshInboxSnapshot() {
+  const inboxEl = document.getElementById('inbox-view');
+  if (!inboxEl) {
+    return;
+  }
+
+  try {
+    const entries = await idbGetAll(STORE_INBOX);
+    if (!entries.length) {
+      inboxEl.textContent = '(none)';
+      return;
+    }
+
+    const unreadCount = entries.filter((entry) => !entry.read).length;
+    const compact = entries
+      .sort((a, b) => (b.receivedAt || b.ts || 0) - (a.receivedAt || a.ts || 0))
+      .slice(0, 20)
+      .map((entry) => ({
+        msgId: entry.msgId,
+        senderFp: entry.senderFp || 'unknown',
+        type: entry.type || 'direct',
+        read: Boolean(entry.read),
+        receivedAt: entry.receivedAt || entry.ts || null
+      }));
+
+    inboxEl.textContent = JSON.stringify({
+      total: entries.length,
+      unread: unreadCount,
+      recent: compact
+    }, null, 2);
+  } catch (error) {
+    inboxEl.textContent = `inbox read failed: ${error.message}`;
+  }
+}
+
 function renderBleTransportState(state, details = {}) {
   const statusEl = document.getElementById('ble-status');
   if (!statusEl) {
@@ -226,6 +262,7 @@ function renderBleTransportState(state, details = {}) {
 
   renderFailureGuide(state, details);
   refreshOutboxSnapshot();
+  refreshInboxSnapshot();
 }
 
 function initBLE() {
@@ -414,8 +451,8 @@ window.bleDisconnect = function() {
 };
 
 window.bleSendEncrypted = async function() {
-  if (!bleManager || !bleManager.isConnected) {
-    setStatus(false, 'Not connected via Bluetooth');
+  if (!bleManager) {
+    setStatus(false, 'Bluetooth not supported');
     return;
   }
 
@@ -428,10 +465,36 @@ window.bleSendEncrypted = async function() {
   try {
     const message = JSON.parse(encryptedText);
     await bleManager.sendMessage(message);
-    setStatus(true, 'Message sent via Bluetooth!');
+    if (bleManager.isConnected) {
+      setStatus(true, 'Message sent via Bluetooth!');
+    } else {
+      setStatus(true, 'Bluetooth is offline. Message queued in Outbox for later delivery.');
+    }
     await refreshOutboxSnapshot();
   } catch (e) {
     setStatus(false, formatErrorMessage('Bluetooth send failed', e));
+  }
+};
+
+window.flushOutboxNow = async function() {
+  if (!bleManager) {
+    setStatus(false, 'Bluetooth not supported');
+    return;
+  }
+
+  if (!bleManager.isConnected) {
+    setStatus(false, 'Bluetooth is offline. Connect a device and retry flush.');
+    await refreshOutboxSnapshot();
+    return;
+  }
+
+  try {
+    await bleManager.flushOutbox();
+    await refreshOutboxSnapshot();
+    await refreshInboxSnapshot();
+    setStatus(true, 'Outbox flush completed');
+  } catch (error) {
+    setStatus(false, formatErrorMessage('Outbox flush failed', error));
   }
 };
 
@@ -465,6 +528,7 @@ function bindUIActions() {
     bleScan: () => window.bleScan(),
     bleDisconnect: () => window.bleDisconnect(),
     bleSendEncrypted: () => window.bleSendEncrypted(),
+    flushOutboxNow: () => window.flushOutboxNow(),
     applyBleConfig: () => window.applyBleConfig(),
     resetBleConfig: () => window.resetBleConfig(),
     closeQRModal: () => window.closeQRModal(),
@@ -1339,8 +1403,10 @@ window.__lifelineTest = {
     await refreshGroups();
     setMessageMode('direct');
     await refreshOutboxSnapshot();
+    await refreshInboxSnapshot();
     setInterval(() => {
       refreshOutboxSnapshot();
+      refreshInboxSnapshot();
     }, 5000);
   } catch (e) {
     console.error("Auto-init failed:", e);

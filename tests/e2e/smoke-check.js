@@ -13,7 +13,7 @@ for (const file of required) {
 }
 
 const spec = fs.readFileSync("tests/e2e/main-flow.spec.js", "utf8");
-if (!spec.includes("Generate / Load Keys") || !spec.includes("Scan for Devices")) {
+if (!spec.includes("Generate / Load Keys") || !spec.includes("Scan for Devices") || !spec.includes("Flush queued messages now")) {
   throw new Error("E2E spec does not cover primary user flow controls");
 }
 

@@ -733,6 +733,89 @@ test("integration: BLE manager emits transport states for retry/failure", async 
   }
 });
 
+
+test("integration: offline send queues in outbox, then connected flush delivers and clears queue", async () => {
+  const senderStore = createInMemoryStore();
+  const receiverStore = createInMemoryStore();
+
+  const sender = new BLEManager({
+    store: senderStore,
+    protocolConfig: { retryCount: 2, retryDelayMs: 1 }
+  });
+
+  const receiver = new BLEManager({
+    store: receiverStore,
+    protocolConfig: { retryCount: 2, retryDelayMs: 1 }
+  });
+
+  sender.isConnected = false;
+  sender.txCharacteristic = null;
+  receiver.isConnected = true;
+
+  const transferStates = [];
+  sender.onTransferState = ({ state }) => {
+    transferStates.push(state);
+  };
+
+  const queuedMessage = {
+    kind: "dmesh-msg",
+    msgId: "offline-queued-1",
+    ts: Date.now(),
+    rcpt: "recipient-a",
+    sndr: "sender-a",
+    payload: "queued-payload"
+  };
+
+  await sender.sendMessage(queuedMessage, { recipientFp: "recipient-a" });
+
+  const queuedEntry = senderStore.snapshot().find((entry) => entry.msgId === queuedMessage.msgId);
+  if (!queuedEntry) {
+    throw new Error("Expected message to be queued in outbox while offline");
+  }
+  if (queuedEntry.status !== "pending") {
+    throw new Error(`Expected queued status=pending, got ${queuedEntry.status}`);
+  }
+  if (!transferStates.includes("queued")) {
+    throw new Error("Expected queued transfer state when sending offline");
+  }
+
+  sender.txCharacteristic = {
+    async writeValue(packet) {
+      await receiver._handleIncomingData({
+        target: { value: packetToDataView(packet) }
+      });
+    }
+  };
+
+  receiver.txCharacteristic = {
+    async writeValue(packet) {
+      setTimeout(() => {
+        sender._handleIncomingData({
+          target: { value: packetToDataView(packet) }
+        });
+      }, 0);
+    }
+  };
+
+  sender.isConnected = true;
+  await sender.flushOutbox();
+
+  const remaining = senderStore.snapshot();
+  if (remaining.length !== 0) {
+    throw new Error(`Expected outbox to be empty after flush, got ${remaining.length} entry(ies)`);
+  }
+
+  const deliveredStateSeen = transferStates.includes("delivered");
+  if (!deliveredStateSeen) {
+    throw new Error("Expected delivered transfer state after flush");
+  }
+
+  const received = receiverStore.inbox.find((entry) => entry.msgId === queuedMessage.msgId);
+  if (!received) {
+    throw new Error("Expected queued message to be delivered to receiver inbox after reconnect");
+  }
+});
+
 for (const { name, fn } of tests) {
   try {
     await fn();

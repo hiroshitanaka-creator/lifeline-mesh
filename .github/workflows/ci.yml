@@ -2,24 +2,132 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "claude/*" ]
+    branches: ["main", "claude/*"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  validate:
+  lint_typecheck:
+    name: Lint + Typecheck
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix crypto
+          npm ci --prefix tools
+          npm ci --prefix app
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+  unit_tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix crypto
+          npm ci --prefix tools
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+  integration_tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix crypto
+          npm ci --prefix tools
+
+      - name: Run integration tests and capture logs
+        run: |
+          mkdir -p artifacts
+          npm run test:integration 2>&1 | tee artifacts/integration-test.log
+
+      - name: Upload integration logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: artifacts/integration-test.log
+          if-no-files-found: ignore
+
+  compat_gate:
+    name: Compatibility policy gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix tools
+
+      - name: Check compatibility policy gate
+        run: npm run check:compat
+
+  e2e_playwright:
+    name: E2E Playwright
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
           cache: "npm"
 
       - name: Install dependencies
@@ -32,44 +140,32 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Run lint
-        run: npm run lint
-
-      - name: Run typecheck
-        run: npm run typecheck
-
-      - name: Run unit tests
-        run: npm run test:unit
-
-      - name: Run integration tests and capture logs
-        run: |
-          mkdir -p artifacts
-          npm run test:integration 2>&1 | tee artifacts/integration-test.log
-
-
-      - name: Check compatibility policy gate
-        run: npm run check:compat
-
       - name: Run Playwright E2E
         run: npm run test:e2e:playwright
-
-      - name: Upload integration logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: integration-logs-${{ matrix.node-version }}
-          path: artifacts/integration-test.log
-          if-no-files-found: ignore
 
       - name: Upload Playwright traces/reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts-${{ matrix.node-version }}
+          name: playwright-artifacts
           path: |
             test-results
             playwright-report
           if-no-files-found: ignore
+
+  validate_gate:
+    name: Validate gate summary
+    runs-on: ubuntu-latest
+    needs:
+      - lint_typecheck
+      - unit_tests
+      - integration_tests
+      - compat_gate
+      - e2e_playwright
+    steps:
+      - name: CI quality gates passed
+        run: |
+          echo "lint/typecheck/unit/integration/compat/e2e all passed"
 
   security:
     runs-on: ubuntu-latest
@@ -95,6 +191,9 @@ jobs:
           npm audit --prefix crypto --audit-level=high || true
           npm audit --prefix tools --audit-level=high || true
 
+
+      - name: Run security audit preparation checks
+        run: npm run check:security-audit
       - name: Check for sensitive files
         run: |
           echo "Checking for potential secrets..."
