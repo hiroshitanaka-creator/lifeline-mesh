@@ -164,7 +164,20 @@
     </div>
 
     <label for="content" class="small">Message content</label>
+    <div class="row" style="margin: 8px 0;">
+      <select id="disaster-template" aria-label="Disaster message template selector">
+        <option value="">災害テンプレートを選択</option>
+        <option value="safety">安否確認</option>
+        <option value="supplies">物資支援依頼</option>
+        <option value="evacuation">避難連絡</option>
+        <option value="medical">医療支援要請</option>
+      </select>
+      <button data-action="applyDisasterTemplate">🧩 テンプレート適用</button>
+    </div>
     <textarea id="content" aria-label="Message content" placeholder="Type your message here (max 150KB)"></textarea>
+    <div class="small" id="message-metrics" style="margin-top: 6px;">0 / 153600 bytes • 0%</div>
+    <progress id="message-size-progress" max="153600" value="0" style="width: 100%; height: 10px;"></progress>
+    <pre id="chunk-estimate" class="small" style="margin-top: 6px;">Estimated BLE chunks: 0 / 255</pre>
     <div class="row">
       <button data-action="encryptMsg">🔒 Encrypt</button>
     </div>
