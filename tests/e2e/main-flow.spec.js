@@ -167,6 +167,47 @@ test("pseudo-e2e BLE: mock BLEManager I/O boundary", async ({ page }) => {
   await expect(page.locator("#input")).toContainText("dmesh-msg");
 });
 
+test("delivery ops: manual outbox flush action follows connected/offline state", async ({ page }) => {
+  await boot(page);
+
+  await page.evaluate(() => {
+    window.__flushCalls = 0;
+    window.__mockBleManager = {
+      isConnected: false,
+      sendMessage() {
+        return null;
+      },
+      flushOutbox() {
+        window.__flushCalls += 1;
+      }
+    };
+    window.__lifelineTest.setBleManager(window.__mockBleManager);
+  });
+
+  await page.locator("#encrypted").evaluate((el) => {
+    el.textContent = JSON.stringify({
+      kind: "dmesh-msg",
+      msgId: "e2e-queued-msg",
+      payload: "queued"
+    });
+  });
+
+  await page.getByRole("button", { name: "📤 Send Last Encrypted via Bluetooth" }).click();
+  await expect(page.locator("#status")).toContainText("queued in Outbox");
+
+  await page.getByRole("button", { name: "🔁 Flush queued messages now" }).click();
+  await expect(page.locator("#status")).toContainText("Bluetooth is offline");
+
+  await page.evaluate(() => {
+    window.__mockBleManager.isConnected = true;
+  });
+
+  await page.getByRole("button", { name: "🔁 Flush queued messages now" }).click();
+  await expect(page.locator("#status")).toContainText("Outbox flush completed");
+
+  const flushCalls = await page.evaluate(() => window.__flushCalls);
+  expect(flushCalls).toBe(1);
+});
 
 test("e2e: group create -> encrypt -> decrypt roundtrip", async ({ page }) => {
   await boot(page);

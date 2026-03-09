@@ -243,10 +243,17 @@
       <span id="delivery-status-chip" class="delivery-chip delivery-unsent">未送信</span>
       <span id="delivery-status-detail" class="small">Outbox empty</span>
     </div>
+    <div class="row" style="margin-top: 8px;">
+      <button data-action="flushOutboxNow">🔁 Flush queued messages now</button>
+    </div>
     <pre id="failure-guide" class="small">送信失敗時は、まず再送を実行し、必要であれば Clipboard / File / QR に切り替えてください。</pre>
     <details>
       <summary>Outbox Snapshot</summary>
       <pre id="outbox-view">(none)</pre>
+    </details>
+    <details>
+      <summary>Inbox Snapshot</summary>
+      <pre id="inbox-view">(none)</pre>
     </details>
   </div>
 

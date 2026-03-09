@@ -65,38 +65,38 @@
     {
       "id": 11,
       "title": "Outbox/Inbox運用接続",
-      "status": "pending",
-      "deliverable": "Queued delivery flow"
+      "status": "completed",
+      "deliverable": "Queued delivery flow (offline enqueue + manual flush + inbox/outbox snapshots)"
     },
     {
       "id": 12,
       "title": "主要統合テスト追加",
-      "status": "pending",
-      "deliverable": "Integration tests"
+      "status": "completed",
+      "deliverable": "Integration tests (queued offline→flush delivery flow in tests/integration/ble-crypto.test.js)"
     },
     {
       "id": 13,
       "title": "E2E最小セット導入",
-      "status": "pending",
-      "deliverable": "Playwright smoke flows"
+      "status": "completed",
+      "deliverable": "Playwright smoke flows (delivery ops manual flush connected/offline path)"
     },
     {
       "id": 14,
       "title": "CI品質ゲート強化",
-      "status": "pending",
-      "deliverable": "Workflow quality gates"
+      "status": "completed",
+      "deliverable": "Workflow quality gates (split CI jobs: lint/typecheck/unit/integration/compat/e2e + validate summary)"
     },
     {
       "id": 15,
       "title": "セキュリティ監査準備",
-      "status": "pending",
-      "deliverable": "Audit checklist execution"
+      "status": "completed",
+      "deliverable": "Audit checklist execution (tools/security-audit-check.js + docs/SECURITY_AUDIT_REPORT.md)"
     },
     {
       "id": 16,
       "title": "Group Messaging最小実装",
-      "status": "pending",
-      "deliverable": "Group message MVP"
+      "status": "completed",
+      "deliverable": "Group message MVP (integration tests: tests/integration/group-messaging.test.js + E2E group roundtrip)"
     },
     {
       "id": 17,

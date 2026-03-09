@@ -29,3 +29,7 @@ Run this checklist at least once per release cycle (or monthly for long-lived br
 - [ ] Run `npm audit` (root, `crypto/`, `tools/`) and triage all high/critical findings.
 - [ ] Update pinned dependencies for security patches and re-run `npm run validate`.
 - [ ] Review CI actions versions and lockfiles for unexpected drift.
+
+### 4) Audit execution record
+- [ ] Run `npm run check:security-audit` to generate `docs/SECURITY_AUDIT_REPORT.md`.
+- [ ] Attach or reference the generated report in the release/Go-NoGo evidence.
