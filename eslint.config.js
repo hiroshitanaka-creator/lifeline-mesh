@@ -31,6 +31,14 @@ export default [
         setInterval: "readonly",
         clearInterval: "readonly",
         crypto: "readonly",
+        // Web Worker globals
+        self: "readonly",
+        Worker: "readonly",
+        importScripts: "readonly",
+        // Storage & performance
+        localStorage: "readonly",
+        sessionStorage: "readonly",
+        performance: "readonly",
         // External libraries
         nacl: "readonly",
         QRCode: "readonly",
