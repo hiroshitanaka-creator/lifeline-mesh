@@ -12,7 +12,7 @@
  * Each transport implements the same interface for seamless switching.
  */
 
-/* global setTimeout, FileReader */
+/* global FileReader */
 
 import {
   chunkMessage,
@@ -453,7 +453,7 @@ export class FileTransport extends BaseTransport {
    * @param {File} file - File object
    * @returns {Promise<object[]>}
    */
-  receive(file) {
+  receive(file = null) {
     if (!file) return Promise.resolve([]);
 
     return new Promise((resolve) => {
@@ -461,7 +461,7 @@ export class FileTransport extends BaseTransport {
 
       reader.onload = (e) => {
         try {
-          const parsed = JSON.parse(e.target.result);
+          const parsed = JSON.parse(/** @type {string} */ (/** @type {FileReader} */ (e.target).result));
           if (parsed.kind === "dmesh-msg" || parsed.kind === "dmesh-id") {
             if (this.onMessage) this.onMessage(parsed);
             resolve([parsed]);
@@ -495,7 +495,7 @@ export class FileTransport extends BaseTransport {
     input.style.display = "none";
 
     input.onchange = async (e) => {
-      const file = e.target.files?.[0];
+      const file = /** @type {HTMLInputElement} */ (e.target).files?.[0];
       if (file) {
         const messages = await this.receive(file);
         if (onFileSelected) onFileSelected(messages);
