@@ -23,6 +23,14 @@ export default [
         alert: "readonly",
         confirm: "readonly",
         prompt: "readonly",
+        // Web APIs
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        crypto: "readonly",
         // External libraries
         nacl: "readonly",
         QRCode: "readonly",
