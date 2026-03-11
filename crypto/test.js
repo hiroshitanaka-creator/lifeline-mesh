@@ -6,6 +6,7 @@
 import nacl from "tweetnacl";
 import naclUtil from "tweetnacl-util";
 import * as DMesh from "./core.js";
+import * as Group from "./group.js";
 
 let passed = 0;
 let failed = 0;
@@ -436,6 +437,312 @@ test("concatU8 concatenates arrays correctly", () => {
   if (result[0] !== 1 || result[1] !== 2 || result[2] !== 3 ||
       result[3] !== 4 || result[4] !== 5 || result[5] !== 6) {
     throw new Error("Invalid concatenation");
+  }
+});
+
+// ============================================================================
+// Group Messaging Tests
+// ============================================================================
+
+test("generateSenderKey produces valid sender key", () => {
+  const sk = Group.generateSenderKey(nacl, naclUtil);
+  if (sk.version !== 1) throw new Error("Invalid version");
+  if (!sk.chainKey) throw new Error("Missing chainKey");
+  if (!sk.signKeyPair) throw new Error("Missing signKeyPair");
+  if (sk.signKeyPair.publicKey.length !== 32) throw new Error("Invalid signPK length");
+  if (sk.signKeyPair.secretKey.length !== 64) throw new Error("Invalid signSK length");
+
+  const chainKeyBytes = naclUtil.decodeBase64(sk.chainKey);
+  if (chainKeyBytes.length !== 32) throw new Error("Invalid chainKey length");
+});
+
+test("ratchetChainKey produces different key each time", () => {
+  const sk = Group.generateSenderKey(nacl, naclUtil);
+  const ck0 = sk.chainKey;
+  const ck1 = Group.ratchetChainKey(ck0, nacl, naclUtil);
+  const ck2 = Group.ratchetChainKey(ck1, nacl, naclUtil);
+
+  if (ck0 === ck1) throw new Error("Chain key did not advance");
+  if (ck1 === ck2) throw new Error("Chain key did not advance (step 2)");
+
+  // Verify determinism: same input always produces same output
+  const ck1Again = Group.ratchetChainKey(ck0, nacl, naclUtil);
+  if (ck1 !== ck1Again) throw new Error("Ratchet is not deterministic");
+});
+
+test("deriveMessageKey is deterministic", () => {
+  const sk = Group.generateSenderKey(nacl, naclUtil);
+  const msgKey1 = Group.deriveMessageKey(sk.chainKey, nacl, naclUtil);
+  const msgKey2 = Group.deriveMessageKey(sk.chainKey, nacl, naclUtil);
+
+  if (msgKey1.length !== 32) throw new Error("Invalid message key length");
+  for (let i = 0; i < 32; i++) {
+    if (msgKey1[i] !== msgKey2[i]) throw new Error("Message key is not deterministic");
+  }
+});
+
+test("deriveMessageKey differs from chain key", () => {
+  const sk = Group.generateSenderKey(nacl, naclUtil);
+  const chainKeyBytes = naclUtil.decodeBase64(sk.chainKey);
+  const msgKey = Group.deriveMessageKey(sk.chainKey, nacl, naclUtil);
+
+  let same = true;
+  for (let i = 0; i < 32; i++) {
+    if (msgKey[i] !== chainKeyBytes[i]) { same = false; break; }
+  }
+  if (same) throw new Error("Message key must differ from chain key");
+});
+
+test("encryptGroupMessage and decryptGroupMessage roundtrip", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const senderKey = Group.generateSenderKey(nacl, naclUtil);
+  const groupId = naclUtil.encodeBase64(nacl.randomBytes(16));
+
+  const msg = Group.encryptGroupMessage({
+    content: "Hello group!",
+    groupId,
+    senderKey,
+    senderSignSK: aliceSign.secretKey,
+    senderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  if (msg.v !== 1) throw new Error("Invalid version");
+  if (msg.kind !== "dmesh-group-msg") throw new Error("Invalid kind");
+  if (msg.groupId !== groupId) throw new Error("GroupId mismatch");
+  if (!msg.nonce) throw new Error("Missing nonce");
+  if (!msg.ciphertext) throw new Error("Missing ciphertext");
+  if (!msg.signature) throw new Error("Missing signature");
+  if (!msg.senderKeyPK) throw new Error("Missing senderKeyPK");
+
+  const result = Group.decryptGroupMessage({
+    message: msg,
+    senderKey,
+    expectedSenderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  if (result.content !== "Hello group!") throw new Error("Content mismatch");
+  if (!result.ts) throw new Error("Missing ts");
+  if (result.senderSignPK.length !== 32) throw new Error("Invalid senderSignPK");
+});
+
+test("decryptGroupMessage rejects tampered signature", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const senderKey = Group.generateSenderKey(nacl, naclUtil);
+  const groupId = naclUtil.encodeBase64(nacl.randomBytes(16));
+
+  const msg = Group.encryptGroupMessage({
+    content: "Hello group!",
+    groupId,
+    senderKey,
+    senderSignSK: aliceSign.secretKey,
+    senderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  // Tamper with the signature
+  msg.signature = naclUtil.encodeBase64(nacl.randomBytes(64));
+
+  try {
+    Group.decryptGroupMessage({
+      message: msg,
+      senderKey,
+      expectedSenderSignPK: aliceSign.publicKey
+    }, nacl, naclUtil);
+    throw new Error("Should have rejected tampered signature");
+  } catch (e) {
+    if (!e.message.includes("Invalid group message signature")) {
+      throw new Error("Wrong error: " + e.message);
+    }
+  }
+});
+
+test("decryptGroupMessage rejects wrong chain key", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const senderKey = Group.generateSenderKey(nacl, naclUtil);
+  const groupId = naclUtil.encodeBase64(nacl.randomBytes(16));
+
+  const msg = Group.encryptGroupMessage({
+    content: "Hello group!",
+    groupId,
+    senderKey,
+    senderSignSK: aliceSign.secretKey,
+    senderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  // Use the ratcheted (wrong) chain key for decryption
+  const wrongSenderKey = {
+    ...senderKey,
+    chainKey: Group.ratchetChainKey(senderKey.chainKey, nacl, naclUtil)
+  };
+
+  try {
+    Group.decryptGroupMessage({
+      message: msg,
+      senderKey: wrongSenderKey,
+      expectedSenderSignPK: aliceSign.publicKey
+    }, nacl, naclUtil);
+    throw new Error("Should have failed with wrong chain key");
+  } catch (e) {
+    if (!e.message.includes("decryption failed")) {
+      throw new Error("Wrong error: " + e.message);
+    }
+  }
+});
+
+test("decryptGroupMessage rejects sender key version mismatch", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const senderKey = Group.generateSenderKey(nacl, naclUtil);
+  const groupId = naclUtil.encodeBase64(nacl.randomBytes(16));
+
+  const msg = Group.encryptGroupMessage({
+    content: "Hello group!",
+    groupId,
+    senderKey,
+    senderSignSK: aliceSign.secretKey,
+    senderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  const wrongVersionKey = { ...senderKey, version: 999 };
+
+  try {
+    Group.decryptGroupMessage({
+      message: msg,
+      senderKey: wrongVersionKey,
+      expectedSenderSignPK: aliceSign.publicKey
+    }, nacl, naclUtil);
+    throw new Error("Should have rejected version mismatch");
+  } catch (e) {
+    if (!e.message.includes("version mismatch")) {
+      throw new Error("Wrong error: " + e.message);
+    }
+  }
+});
+
+test("decryptGroupMessage rejects unexpected sender", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const eveSign = DMesh.generateSignKeyPair(nacl);
+  const senderKey = Group.generateSenderKey(nacl, naclUtil);
+  const groupId = naclUtil.encodeBase64(nacl.randomBytes(16));
+
+  const msg = Group.encryptGroupMessage({
+    content: "Hello group!",
+    groupId,
+    senderKey,
+    senderSignSK: aliceSign.secretKey,
+    senderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  try {
+    Group.decryptGroupMessage({
+      message: msg,
+      senderKey,
+      expectedSenderSignPK: eveSign.publicKey // Expecting Eve, but Alice sent it
+    }, nacl, naclUtil);
+    throw new Error("Should have rejected unexpected sender");
+  } catch (e) {
+    if (!e.message.includes("identity key mismatch")) {
+      throw new Error("Wrong error: " + e.message);
+    }
+  }
+});
+
+test("createGroup returns valid group and sender key", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const { group, senderKey } = Group.createGroup({
+    name: "Emergency Team",
+    creatorSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  if (!group.id) throw new Error("Missing group id");
+  if (group.name !== "Emergency Team") throw new Error("Name mismatch");
+  if (!group.createdAt) throw new Error("Missing createdAt");
+  if (!group.createdBy) throw new Error("Missing createdBy");
+  if (!group.members || group.members.length !== 1) throw new Error("Invalid members");
+  if (group.members[0].role !== "admin") throw new Error("Creator should be admin");
+  if (group.senderKeyVersion !== 1) throw new Error("Invalid sender key version");
+
+  if (!senderKey || senderKey.version !== 1) throw new Error("Invalid sender key");
+});
+
+test("serializeSenderKey and deserializeSenderKey roundtrip", () => {
+  const senderKey = Group.generateSenderKey(nacl, naclUtil);
+  const serialized = Group.serializeSenderKey(senderKey, naclUtil);
+
+  if (!serialized.signPK || !serialized.signSK) throw new Error("Missing sign keys");
+  if (!serialized.chainKey) throw new Error("Missing chainKey");
+  if (serialized.version !== 1) throw new Error("Invalid version");
+
+  const restored = Group.deserializeSenderKey(serialized, naclUtil);
+
+  // Verify keys match
+  for (let i = 0; i < 32; i++) {
+    if (senderKey.signKeyPair.publicKey[i] !== restored.signKeyPair.publicKey[i]) {
+      throw new Error("SignPK mismatch after roundtrip");
+    }
+  }
+  if (senderKey.chainKey !== restored.chainKey) throw new Error("ChainKey mismatch");
+});
+
+test("group message forward secrecy: ratcheted key decrypts next message", () => {
+  const aliceSign = DMesh.generateSignKeyPair(nacl);
+  const groupId = naclUtil.encodeBase64(nacl.randomBytes(16));
+
+  // Alice sends two messages with different chain key states
+  let currentSenderKey = Group.generateSenderKey(nacl, naclUtil);
+
+  const msg1 = Group.encryptGroupMessage({
+    content: "Message 1",
+    groupId,
+    senderKey: currentSenderKey,
+    senderSignSK: aliceSign.secretKey,
+    senderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  const senderKeyForMsg1 = { ...currentSenderKey }; // snapshot for decryption
+
+  // Advance chain key after sending msg1
+  currentSenderKey = {
+    ...currentSenderKey,
+    chainKey: Group.ratchetChainKey(currentSenderKey.chainKey, nacl, naclUtil)
+  };
+
+  const msg2 = Group.encryptGroupMessage({
+    content: "Message 2",
+    groupId,
+    senderKey: currentSenderKey,
+    senderSignSK: aliceSign.secretKey,
+    senderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+
+  const senderKeyForMsg2 = { ...currentSenderKey }; // snapshot for decryption
+
+  // Verify msg1 decrypts with first chain key
+  const result1 = Group.decryptGroupMessage({
+    message: msg1,
+    senderKey: senderKeyForMsg1,
+    expectedSenderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+  if (result1.content !== "Message 1") throw new Error("msg1 content mismatch");
+
+  // Verify msg2 decrypts with second chain key
+  const result2 = Group.decryptGroupMessage({
+    message: msg2,
+    senderKey: senderKeyForMsg2,
+    expectedSenderSignPK: aliceSign.publicKey
+  }, nacl, naclUtil);
+  if (result2.content !== "Message 2") throw new Error("msg2 content mismatch");
+
+  // Verify msg2 does NOT decrypt with msg1's chain key (forward secrecy)
+  try {
+    Group.decryptGroupMessage({
+      message: msg2,
+      senderKey: senderKeyForMsg1, // Wrong (old) key
+      expectedSenderSignPK: aliceSign.publicKey
+    }, nacl, naclUtil);
+    throw new Error("Should not decrypt msg2 with msg1 key");
+  } catch (e) {
+    if (!e.message.includes("decryption failed")) {
+      throw new Error("Wrong error: " + e.message);
+    }
   }
 });
 
