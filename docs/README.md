@@ -35,6 +35,13 @@ Post-merge execution roadmap (Japanese) covering:
 - Go/No-Go release gates
 
 
+### [TASK_KICKOFF_EXECUTION_TEMPLATE_JA.md](./TASK_KICKOFF_EXECUTION_TEMPLATE_JA.md)
+Task kickoff template (Japanese) covering:
+- One-sentence objective definition
+- Definition of Done and scope boundaries
+- Dependencies, risk controls, and validation plan
+- Communication checkpoints and timeline guardrails
+
 ### [PHASE_A_TO_E_EXECUTION_JA.md](./PHASE_A_TO_E_EXECUTION_JA.md)
 Execution checklist for Phase A-E (Japanese) covering:
 - Definition of Done per phase
