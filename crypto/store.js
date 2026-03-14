@@ -226,6 +226,39 @@ export async function idbGetByIndex(storeName, indexName, value) {
   });
 }
 
+
+/**
+ * Get recent values by index (descending by default)
+ * @param {string} storeName
+ * @param {string} indexName
+ * @param {{limit?: number, direction?: IDBCursorDirection}} [options]
+ * @returns {Promise<object[]>}
+ */
+export async function idbGetRecentByIndex(storeName, indexName, options = {}) {
+  const db = await openDB();
+  const limit = Math.max(1, Number(options.limit) || 20);
+  const direction = options.direction || "prev";
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const store = tx.objectStore(storeName);
+    const index = store.index(indexName);
+    const request = index.openCursor(null, direction);
+    const rows = [];
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor || rows.length >= limit) {
+        resolve(rows);
+        return;
+      }
+
+      rows.push(cursor.value);
+      cursor.continue();
+    };
+  });
+}
 /**
  * Count items in a store
  */
@@ -271,6 +304,15 @@ export async function addToOutbox(message, recipientFp, options = {}) {
  */
 export function getPendingOutbox() {
   return idbGetByIndex(STORE_OUTBOX, "status", DELIVERY_STATUS.PENDING);
+}
+
+/**
+ * Get recent outbox entries for operational UI snapshots
+ * @param {number} [limit]
+ * @returns {Promise<object[]>}
+ */
+export function getRecentOutbox(limit = 20) {
+  return idbGetRecentByIndex(STORE_OUTBOX, "createdAt", { limit, direction: "prev" });
 }
 
 /**
@@ -351,6 +393,15 @@ export async function addToInbox(decryptedResult, originalMessage) {
 export async function getInbox() {
   const messages = await idbGetAll(STORE_INBOX);
   return messages.sort((a, b) => b.receivedAt - a.receivedAt);
+}
+
+/**
+ * Get recent inbox entries for operational UI snapshots
+ * @param {number} [limit]
+ * @returns {Promise<object[]>}
+ */
+export function getRecentInbox(limit = 20) {
+  return idbGetRecentByIndex(STORE_INBOX, "receivedAt", { limit, direction: "prev" });
 }
 
 /**
@@ -456,13 +507,28 @@ export async function hasSeen(msgId, senderFp) {
  */
 export async function cleanupSeen(maxAgeMs = SEEN_RETENTION_MS) {
   const cutoff = Date.now() - maxAgeMs;
-  const all = await idbGetAll(STORE_SEEN);
+  const db = await openDB();
 
-  for (const entry of all) {
-    if (entry.seenAt < cutoff) {
-      await idbDel(STORE_SEEN, entry.seenKey);
-    }
-  }
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_SEEN, "readwrite");
+    const store = tx.objectStore(STORE_SEEN);
+    const request = store.openCursor();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+
+      const entry = cursor.value;
+      if (entry.seenAt < cutoff) {
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+  });
 }
 
 // ============================================================================
@@ -641,13 +707,28 @@ export function getPendingChunks(msgId) {
  */
 export async function cleanupOldChunks(maxAgeMs = 24 * 60 * 60 * 1000) {
   const cutoff = Date.now() - maxAgeMs;
-  const all = await idbGetAll(STORE_CHUNKS);
+  const db = await openDB();
 
-  for (const entry of all) {
-    if (entry.receivedAt < cutoff) {
-      await idbDel(STORE_CHUNKS, entry.chunkKey);
-    }
-  }
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CHUNKS, "readwrite");
+    const store = tx.objectStore(STORE_CHUNKS);
+    const request = store.openCursor();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+
+      const entry = cursor.value;
+      if (entry.receivedAt < cutoff) {
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+  });
 }
 
 // ============================================================================

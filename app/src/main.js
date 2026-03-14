@@ -19,6 +19,8 @@ import {
   idbPut,
   idbDel,
   idbGetAll,
+  getRecentOutbox,
+  getRecentInbox,
   resetDatabase,
   checkAndMarkSeen,
   cleanupSeen,
@@ -131,15 +133,13 @@ async function refreshOutboxSnapshot() {
   }
 
   try {
-    const entries = await idbGetAll(STORE_OUTBOX);
+    const entries = await getRecentOutbox(20);
     if (!entries.length) {
       outboxEl.textContent = '(none)';
       return;
     }
 
     const compact = entries
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-      .slice(0, 20)
       .map((entry) => {
         const cooldownExpiresAt = (entry.status === 'failed' && entry.lastAttempt)
           ? entry.lastAttempt + OUTBOX_RETRY_INTERVAL_MS
@@ -176,16 +176,18 @@ async function refreshInboxSnapshot() {
   }
 
   try {
-    const entries = await idbGetAll(STORE_INBOX);
+    const [entries, unreadEntries] = await Promise.all([
+      getRecentInbox(20),
+      idbGetAll(STORE_INBOX)
+    ]);
+
     if (!entries.length) {
       inboxEl.textContent = '(none)';
       return;
     }
 
-    const unreadCount = entries.filter((entry) => !entry.read).length;
+    const unreadCount = unreadEntries.filter((entry) => !entry.read).length;
     const compact = entries
-      .sort((a, b) => (b.receivedAt || b.ts || 0) - (a.receivedAt || a.ts || 0))
-      .slice(0, 20)
       .map((entry) => ({
         msgId: entry.msgId,
         senderFp: entry.senderFp || 'unknown',
