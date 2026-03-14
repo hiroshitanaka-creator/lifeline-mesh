@@ -113,14 +113,14 @@
     {
       "id": 19,
       "title": "運用文書最終化",
-      "status": "pending",
-      "deliverable": "Runbook + FAQ updates"
+      "status": "completed",
+      "deliverable": "Runbook expansion + FAQ operational guidance updates"
     },
     {
       "id": 20,
       "title": "リリース判定",
-      "status": "pending",
-      "deliverable": "Completion gates all green"
+      "status": "completed",
+      "deliverable": "docs/RELEASE_READINESS_REPORT.md + npm run validate gate pass"
     }
   ]
 }
