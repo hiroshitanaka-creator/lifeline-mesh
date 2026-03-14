@@ -18,6 +18,7 @@ import { Html5Qrcode } from "html5-qrcode";
 
 // Import crypto core
 import * as DMesh from "../crypto/core.js";
+import * as KeyBackup from "../crypto/key-backup.js";
 
 // Import BLE manager
 import { BLEManager } from "../bluetooth/ble-manager.js";
@@ -25,6 +26,7 @@ import { BLEManager } from "../bluetooth/ble-manager.js";
 // Export everything for global access
 window.nacl = nacl;
 window.DMesh = DMesh;
+window.KeyBackup = KeyBackup;
 window.BLEManager = BLEManager;
 window.Html5Qrcode = Html5Qrcode;
 

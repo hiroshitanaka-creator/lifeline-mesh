@@ -225,7 +225,7 @@ await new Promise(resolve => {
   }
 });
 
-const { nacl, DMesh, BLEManager, Html5Qrcode, QRCode } = window;
+const { nacl, DMesh, KeyBackup, BLEManager, Html5Qrcode, QRCode } = window;
 
 /* =========================
   BLE Manager
@@ -455,47 +455,59 @@ window.copyMyId = async function() {
   setStatus(true, "Public ID copied to clipboard");
 };
 
-window.exportKeys = async function() {
-  const warningMsg = "WARNING: Key backup encryption is currently WEAK (demo-grade).\n\n" +
-    "For critical use, manually store your keys securely.\n" +
-    "Upgrade to Argon2id encryption is planned.\n\n" +
-    "Continue with export?";
-  if (!confirm(warningMsg)) return;
+function decryptLegacyBackupV1(backup, password) {
+  if (!backup.keys) {
+    throw new Error('Invalid legacy backup file format');
+  }
 
-  const password = prompt("Enter password to encrypt your keys:\n(Use a STRONG password - encryption is weak)");
+  const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
+
+  const decrypt = (encrypted) => {
+    const encryptedBytes = nacl.util.decodeBase64(encrypted);
+    const decrypted = new Uint8Array(encryptedBytes.length);
+    for (let i = 0; i < encryptedBytes.length; i++) {
+      decrypted[i] = encryptedBytes[i] ^ passwordHash[i % passwordHash.length];
+    }
+    return nacl.util.encodeBase64(decrypted);
+  };
+
+  const keys = {
+    signPK: decrypt(backup.keys.signPK),
+    signSK: decrypt(backup.keys.signSK),
+    boxPK: decrypt(backup.keys.boxPK),
+    boxSK: decrypt(backup.keys.boxSK)
+  };
+
+  if (nacl.util.decodeBase64(keys.signPK).length !== 32 ||
+      nacl.util.decodeBase64(keys.signSK).length !== 64 ||
+      nacl.util.decodeBase64(keys.boxPK).length !== 32 ||
+      nacl.util.decodeBase64(keys.boxSK).length !== 32) {
+    throw new Error('Decryption failed - wrong password or corrupted legacy backup');
+  }
+
+  return keys;
+}
+
+window.exportKeys = async function() {
+  const password = prompt('Enter password to encrypt your keys:');
   if (!password) return;
 
+  const strength = KeyBackup.checkPasswordStrength(password);
+  if (strength.strength === 'weak' && !confirm(`Password strength: ${strength.message}\n\nContinue anyway?`)) {
+    return;
+  }
+
   try {
-    const signPK = await idbGet(STORE_KEYS, "my_sign_pk");
-    const signSK = await idbGet(STORE_KEYS, "my_sign_sk");
-    const boxPK = await idbGet(STORE_KEYS, "my_box_pk");
-    const boxSK = await idbGet(STORE_KEYS, "my_box_sk");
+    const signPK = await idbGet(STORE_KEYS, 'my_sign_pk');
+    const signSK = await idbGet(STORE_KEYS, 'my_sign_sk');
+    const boxPK = await idbGet(STORE_KEYS, 'my_box_pk');
+    const boxSK = await idbGet(STORE_KEYS, 'my_box_sk');
 
     if (!signPK || !signSK || !boxPK || !boxSK) {
-      return alert("No keys to export. Generate keys first.");
+      return alert('No keys to export. Generate keys first.');
     }
 
-    const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
-
-    const encrypt = (data) => {
-      const dataBytes = nacl.util.decodeBase64(data);
-      const encrypted = new Uint8Array(dataBytes.length);
-      for (let i = 0; i < dataBytes.length; i++) {
-        encrypted[i] = dataBytes[i] ^ passwordHash[i % passwordHash.length];
-      }
-      return nacl.util.encodeBase64(encrypted);
-    };
-
-    const backup = {
-      version: 1,
-      exported: new Date().toISOString(),
-      keys: {
-        signPK: encrypt(signPK),
-        signSK: encrypt(signSK),
-        boxPK: encrypt(boxPK),
-        boxSK: encrypt(boxSK)
-      }
-    };
+    const backup = await KeyBackup.encryptKeys({ signPK, signSK, boxPK, boxSK }, password, nacl, nacl.util);
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -505,14 +517,14 @@ window.exportKeys = async function() {
     a.click();
     URL.revokeObjectURL(url);
 
-    setStatus(true, "Keys exported (weak encryption - store backup securely!)");
+    setStatus(true, `Keys exported securely (${backup.kdf.toUpperCase()})`);
   } catch (e) {
-    setStatus(false, "Export failed: " + e.message);
+    setStatus(false, 'Export failed: ' + e.message);
   }
 };
 
 window.importKeys = async function() {
-  const password = prompt("Enter password to decrypt your keys:");
+  const password = prompt('Enter password to decrypt your keys:');
   if (!password) return;
 
   const input = document.createElement('input');
@@ -525,42 +537,23 @@ window.importKeys = async function() {
       const text = await file.text();
       const backup = JSON.parse(text);
 
-      if (backup.version !== 1 || !backup.keys) {
-        return alert("Invalid backup file format");
+      let keys;
+      if (backup.version === 1) {
+        alert('Legacy backup detected (weak XOR encryption). Please re-export after import.');
+        keys = decryptLegacyBackupV1(backup, password);
+      } else {
+        keys = await KeyBackup.decryptKeys(backup, password, nacl, nacl.util);
       }
 
-      const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
-
-      const decrypt = (encrypted) => {
-        const encryptedBytes = nacl.util.decodeBase64(encrypted);
-        const decrypted = new Uint8Array(encryptedBytes.length);
-        for (let i = 0; i < encryptedBytes.length; i++) {
-          decrypted[i] = encryptedBytes[i] ^ passwordHash[i % passwordHash.length];
-        }
-        return nacl.util.encodeBase64(decrypted);
-      };
-
-      const signPK = decrypt(backup.keys.signPK);
-      const signSK = decrypt(backup.keys.signSK);
-      const boxPK = decrypt(backup.keys.boxPK);
-      const boxSK = decrypt(backup.keys.boxSK);
-
-      if (nacl.util.decodeBase64(signPK).length !== 32 ||
-          nacl.util.decodeBase64(signSK).length !== 64 ||
-          nacl.util.decodeBase64(boxPK).length !== 32 ||
-          nacl.util.decodeBase64(boxSK).length !== 32) {
-        return alert("Decryption failed - wrong password or corrupted file");
-      }
-
-      await idbPut(STORE_KEYS, signPK, "my_sign_pk");
-      await idbPut(STORE_KEYS, signSK, "my_sign_sk");
-      await idbPut(STORE_KEYS, boxPK, "my_box_pk");
-      await idbPut(STORE_KEYS, boxSK, "my_box_sk");
+      await idbPut(STORE_KEYS, keys.signPK, 'my_sign_pk');
+      await idbPut(STORE_KEYS, keys.signSK, 'my_sign_sk');
+      await idbPut(STORE_KEYS, keys.boxPK, 'my_box_pk');
+      await idbPut(STORE_KEYS, keys.boxSK, 'my_box_sk');
 
       await initOrLoad();
-      setStatus(true, "Keys imported successfully");
+      setStatus(true, 'Keys imported successfully');
     } catch (e) {
-      setStatus(false, "Import failed: " + e.message);
+      setStatus(false, 'Import failed: ' + e.message);
     }
   };
 
