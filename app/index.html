@@ -95,6 +95,7 @@
       <button onclick="initOrLoad()">🔑 Generate / Load Keys</button>
       <button class="danger" onclick="resetAll()">🗑️ RESET ALL</button>
     </div>
+    <p class="small">⌨️ Shortcut: Ctrl/⌘+K to generate/load keys</p>
     <pre id="my-id">(not loaded)</pre>
     <div class="row">
       <button onclick="copyMyId()">📋 Copy My Public ID</button>
@@ -136,6 +137,7 @@
       <button onclick="encryptMsg()">🔒 Encrypt</button>
       <span class="small">Recipient: <strong id="encrypt-recipient">(select above)</strong></span>
     </div>
+    <p class="small">⌨️ Shortcut: Ctrl/⌘+E to encrypt</p>
     <pre id="encrypted"></pre>
     <div class="row" id="encrypted-actions" style="display:none">
       <button onclick="copyEncrypted()">📋 Copy Encrypted Message</button>
@@ -152,6 +154,7 @@
     <div class="row">
       <button onclick="decryptMsg()">🔓 Decrypt</button>
     </div>
+    <p class="small">⌨️ Shortcut: Ctrl/⌘+D to decrypt</p>
     <pre id="status"></pre>
     <pre id="decrypted"></pre>
   </div>
@@ -872,6 +875,49 @@ window.installPWA = async function() {
 window.dismissInstall = function() {
   document.getElementById('install-prompt').style.display = 'none';
 };
+
+/* =========================
+  Keyboard Shortcuts
+========================= */
+function shouldHandleShortcut(event) {
+  const target = event.target;
+  if (!target) return true;
+
+  const tagName = target.tagName;
+  if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+    return false;
+  }
+
+  if (target.isContentEditable) {
+    return false;
+  }
+
+  return true;
+}
+
+window.addEventListener('keydown', (event) => {
+  if (!shouldHandleShortcut(event)) return;
+
+  const isCommand = event.ctrlKey || event.metaKey;
+  if (!isCommand || event.shiftKey || event.altKey) return;
+
+  switch (event.key.toLowerCase()) {
+    case 'e':
+      event.preventDefault();
+      encryptMsg();
+      break;
+    case 'd':
+      event.preventDefault();
+      decryptMsg();
+      break;
+    case 'k':
+      event.preventDefault();
+      initOrLoad();
+      break;
+    default:
+      break;
+  }
+});
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
