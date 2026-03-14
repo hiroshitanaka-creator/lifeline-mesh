@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-03-09",
+  "updatedAt": "2026-03-14",
   "goal": "Lifeline Mesh completion roadmap (20 phases)",
   "phases": [
     {
@@ -101,8 +101,8 @@
     {
       "id": 17,
       "title": "TypeScript段階導入",
-      "status": "pending",
-      "deliverable": "Typed boundaries"
+      "status": "completed",
+      "deliverable": "Typed transport boundaries (types/transport.d.ts + crypto/transport.js JSDoc typedefs)"
     },
     {
       "id": 18,

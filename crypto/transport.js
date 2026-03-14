@@ -19,6 +19,16 @@ import {
   QR_MAX_CHUNK_SIZE
 } from "./core.js";
 
+/**
+ * @typedef {import("../types/transport.d.ts").DMeshIdMessage} DMeshIdMessage
+ * @typedef {import("../types/transport.d.ts").DMeshChunk} DMeshChunk
+ * @typedef {import("../types/transport.d.ts").DMeshMessage} DMeshMessage
+ * @typedef {import("../types/transport.d.ts").TransportPayload} TransportPayload
+ * @typedef {import("../types/transport.d.ts").TransportCapabilities} TransportCapabilities
+ * @typedef {import("../types/transport.d.ts").TransportEventCallbacks} TransportEventCallbacks
+ * @typedef {import("../types/transport.d.ts").TransportManagerSendResult} TransportManagerSendResult
+ */
+
 // ============================================================================
 // Transport Interface
 // ============================================================================
@@ -28,6 +38,9 @@ import {
  * All transports must implement these methods
  */
 export class BaseTransport {
+  /**
+   * @param {{ nacl?: unknown, naclUtil?: unknown } & Partial<TransportEventCallbacks>} [options]
+   */
   constructor(options = {}) {
     this.name = "base";
     this.options = options;
@@ -41,7 +54,7 @@ export class BaseTransport {
 
   /**
    * Get transport capabilities
-   * @returns {object}
+   * @returns {TransportCapabilities}
    */
   getCapabilities() {
     return {
@@ -57,7 +70,7 @@ export class BaseTransport {
 
   /**
    * Send a message (or chunks if needed)
-   * @param {object} _message - dmesh-msg object
+   * @param {TransportPayload} _message - dmesh message object
    * @returns {Promise<object[]>} - Array of sent items (message or chunks)
    */
   send(_message) {
@@ -91,7 +104,7 @@ export class BaseTransport {
 
   /**
    * Discover nearby peers (if supported)
-   * @returns {Promise<object[]>} - Array of discovered peers
+   * @returns {Promise<Array<Record<string, unknown>>>} - Array of discovered peers
    */
   discoverPeers() {
     return Promise.resolve([]);
@@ -162,7 +175,7 @@ export class QRTransport extends BaseTransport {
    * Generate QR code data for a message
    * Returns array of QR code data strings (chunked if needed)
    *
-   * @param {object} message - dmesh-msg object
+   * @param {TransportPayload} message - dmesh message object
    * @returns {Promise<string[]>} - Array of JSON strings for QR codes
    */
   send(message) {
@@ -186,7 +199,7 @@ export class QRTransport extends BaseTransport {
   /**
    * Process scanned QR code data
    * @param {string} data - Scanned QR code content
-   * @returns {object|null} - Complete message if available, null if waiting for chunks
+   * @returns {TransportPayload|null} - Complete message if available, null if waiting for chunks
    */
   processScanned(data) {
     let parsed;
@@ -217,6 +230,10 @@ export class QRTransport extends BaseTransport {
     return null;
   }
 
+  /**
+   * @param {DMeshChunk} chunk
+   * @returns {TransportPayload|null}
+   */
   _processChunk(chunk) {
     const { msgId, seq, total } = chunk;
 
@@ -262,7 +279,7 @@ export class QRTransport extends BaseTransport {
   /**
    * Get chunk progress for a message
    * @param {string} msgId - Message ID
-   * @returns {object|null}
+   * @returns {{ msgId: string, total: number, received: number, missing: number[] }|null}
    */
   getChunkProgress(msgId) {
     const chunks = this.receivedChunks.get(msgId);
@@ -316,7 +333,7 @@ export class ClipboardTransport extends BaseTransport {
 
   /**
    * Copy message to clipboard
-   * @param {object} message - dmesh-msg object
+   * @param {TransportPayload} message - dmesh message object
    * @returns {Promise<string[]>}
    */
   async send(message) {
@@ -345,7 +362,7 @@ export class ClipboardTransport extends BaseTransport {
 
   /**
    * Read message from clipboard
-   * @returns {Promise<object[]>}
+   * @returns {Promise<TransportPayload[]>}
    */
   async receive() {
     let text;
@@ -416,7 +433,7 @@ export class FileTransport extends BaseTransport {
 
   /**
    * Download message as file
-   * @param {object} message - dmesh-msg object
+   * @param {TransportPayload} message - dmesh message object
    * @param {string} [filename] - Optional filename
    * @returns {Promise<string[]>}
    */
@@ -451,7 +468,7 @@ export class FileTransport extends BaseTransport {
   /**
    * Read message from file
    * @param {File} file - File object
-   * @returns {Promise<object[]>}
+   * @returns {Promise<TransportPayload[]>}
    */
   receive(file) {
     if (!file) return Promise.resolve([]);
@@ -485,7 +502,7 @@ export class FileTransport extends BaseTransport {
 
   /**
    * Create a file input element for receiving files
-   * @param {function} onFileSelected - Callback when file is selected
+   * @param {(messages: TransportPayload[]) => void} onFileSelected - Callback when file is selected
    * @returns {HTMLInputElement}
    */
   createFileInput(onFileSelected) {
@@ -514,6 +531,9 @@ export class FileTransport extends BaseTransport {
  * Manages multiple transports and provides unified interface
  */
 export class TransportManager {
+  /**
+   * @param {{ nacl?: unknown, naclUtil?: unknown, autoInit?: boolean }} [options]
+   */
   constructor(options = {}) {
     this.transports = new Map();
     this.nacl = options.nacl;
@@ -563,7 +583,7 @@ export class TransportManager {
 
   /**
    * Get all available transports
-   * @returns {Promise<object[]>}
+   * @returns {Promise<Array<{name: string, capabilities: TransportCapabilities}>>}
    */
   async getAvailableTransports() {
     const results = [];
@@ -582,7 +602,7 @@ export class TransportManager {
   /**
    * Send message via specific transport
    * @param {string} transportName - Transport to use
-   * @param {object} message - Message to send
+   * @param {TransportPayload} message - Message to send
    * @returns {Promise<string[]>}
    */
   send(transportName, message) {
@@ -596,9 +616,9 @@ export class TransportManager {
   /**
    * Send through preferred transport, then fallback transports on failure.
    * @param {string} preferredTransport - Primary transport name
-   * @param {object} message - Message to send
+   * @param {TransportPayload} message - Message to send
    * @param {string[]} [fallbackOrder] - Ordered fallback transports
-   * @returns {Promise<{transport:string,result:string[]}>}
+   * @returns {Promise<TransportManagerSendResult>}
    */
   async sendWithFallback(preferredTransport, message, fallbackOrder = ["clipboard", "file"]) {
     try {
@@ -629,7 +649,7 @@ export class TransportManager {
    * Receive from specific transport
    * @param {string} transportName - Transport to use
    * @param {*} [arg] - Transport-specific argument (e.g., File for FileTransport)
-   * @returns {Promise<object[]>}
+   * @returns {Promise<TransportPayload[]>}
    */
   receive(transportName, arg) {
     const transport = this.transports.get(transportName);
