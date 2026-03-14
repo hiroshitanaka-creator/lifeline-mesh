@@ -2,7 +2,7 @@
 
 - Updated: 2026-03-14
 - Goal: Lifeline Mesh completion roadmap (20 phases)
-- Completion: 18/20 (90%)
+- Completion: 19/20 (95%)
 
 | Phase | Title | Status | Deliverable |
 |---|---|---|---|
@@ -24,9 +24,9 @@
 | 16 | Group Messaging最小実装 | ✅ completed | Group message MVP (integration tests: tests/integration/group-messaging.test.js + E2E group roundtrip) |
 | 17 | TypeScript段階導入 | ✅ completed | Typed transport boundaries (types/transport.d.ts + crypto/transport.js JSDoc typedefs) |
 | 18 | パフォーマンス改善 | ✅ completed | Worker request timeout/recovery + IndexedDB cursor-based snapshot/cleanup tuning |
-| 19 | 運用文書最終化 | ⏳ pending | Runbook + FAQ updates |
+| 19 | 運用文書最終化 | ✅ completed | Runbook expansion + FAQ operational guidance updates |
 | 20 | リリース判定 | ⏳ pending | Completion gates all green |
 
 ## Immediate Next Focus
-- Start Phase 19: 運用文書最終化
-- Expected deliverable: Runbook + FAQ updates
+- Start Phase 20: リリース判定
+- Expected deliverable: Completion gates all green

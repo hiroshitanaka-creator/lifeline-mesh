@@ -1,10 +1,20 @@
-# Operations Runbook (Phase 5)
+# Operations Runbook (Phase 19 Final)
+
+## Scope
+- This runbook covers **release operations**, **delivery incidents**, and **field fallback flow** for the current prototype.
+- Applies to browser app (`app/`), crypto modules (`crypto/`), BLE transport (`bluetooth/`), and test/CI gates.
 
 ## 1) Release flow
 1. Run: `npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run test:e2e`
 2. Run Playwright on CI environment with browser install.
 3. Confirm `docs/RELEASE_CHECKLIST.md` items are all complete.
 4. Execute Go/No-Go meeting agenda.
+
+### Release exit criteria (must-pass)
+- Lint/typecheck/unit/integration/e2e all green.
+- No unresolved high/critical security findings.
+- Migration test completed against existing IndexedDB data.
+- BLE offline queue path validated (offline enqueue → reconnect → flush).
 
 ## 2) DB migration / rollback
 - DB implementation: `crypto/store.js` (`DB_VERSION`, `onupgradeneeded`).
@@ -21,8 +31,27 @@
 2. Verify BLE retry/fallback behavior with integration test suite.
 3. If BLE unstable in environment, switch operation guidance to clipboard/file transport.
 
-## 4) Owner handoff checklist
+### Triage checklist
+1. Confirm browser capability (Web Bluetooth available or not).
+2. Confirm peer connection state and signal strength/range.
+3. Check outbox counts and failed message status.
+4. Trigger manual outbox flush and re-check delivery.
+5. Capture incident timestamp, environment, and repro steps for postmortem.
+
+## 4) Key compromise / device loss playbook
+1. Assume keys on lost/untrusted device are compromised.
+2. Instruct user/team to run `RESET ALL` on recovered device (if possible).
+3. Regenerate keys and distribute new identity fingerprints out-of-band.
+4. Mark prior fingerprints as revoked in team operations note.
+5. Validate new-contact verification before resuming sensitive communication.
+
+## 5) Owner handoff checklist
 - Release owner
 - Security reviewer
 - Ops on-call
 - Documentation reviewer
+
+## 6) Ops cadence (recommended)
+- Weekly: dependency/security review and regression smoke checks.
+- Per release: full checklist + runbook drill for one failure scenario.
+- Monthly: tabletop exercise (BLE unavailable / device loss / migration rollback).

@@ -207,6 +207,29 @@ All crypto runs **client-side in your browser**.
 
 ## Usage
 
+### How are queued messages handled when a device is offline?
+
+When a recipient is temporarily unreachable, outgoing encrypted payloads are stored in IndexedDB outbox and can be forwarded later.
+
+Recommended operator flow:
+1. Keep sending normally while disconnected (messages are queued).
+2. Reconnect to peer transport (BLE or alternative relay path).
+3. Trigger outbox flush and confirm `delivered`/`failed` status transitions.
+4. Retry failed messages after restoring connection quality.
+
+This behavior is intentionally store-and-forward so field teams can continue operation during short network interruptions.
+
+### What should operators do first during delivery degradation?
+
+Use the following quick triage order:
+1. Validate browser capability (Web Bluetooth support/state).
+2. Check device range and whether connection is actually active.
+3. Inspect outbox/failed counts.
+4. Run manual outbox flush.
+5. If BLE remains unstable, switch to clipboard/file/USB relay and continue encrypted delivery.
+
+See `docs/OPERATIONS_RUNBOOK.md` for the full incident procedure.
+
 
 ### What are the BLE constraints and supported browsers?
 
