@@ -695,6 +695,9 @@ export type ErrorCode =
 
 ### 5.2 Tests to Add
 
+Progress update:
+- [x] Added baseline BLE integration test (`tests/integration/ble.test.js`) and npm script (`npm run test:integration`) to validate chunking, packet headers, and reassembly callback flow.
+
 ```javascript
 // tests/integration/ble.test.js
 

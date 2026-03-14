@@ -21,7 +21,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:airgap": "node scripts/build-airgap.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:integration": "node tests/integration/ble.test.js"
   },
   "keywords": [
     "cryptography",
