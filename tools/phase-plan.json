@@ -107,8 +107,8 @@
     {
       "id": 18,
       "title": "パフォーマンス改善",
-      "status": "pending",
-      "deliverable": "Worker + DB tuning"
+      "status": "completed",
+      "deliverable": "Worker request timeout/recovery + IndexedDB cursor-based snapshot/cleanup tuning"
     },
     {
       "id": 19,
