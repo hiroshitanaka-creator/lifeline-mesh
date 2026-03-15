@@ -30,7 +30,8 @@ import {
   addGroupMember,
   removeGroupMember,
   saveSenderKeyState,
-  getSenderKeyState
+  getSenderKeyState,
+  removeSenderKeyState
 } from '../../crypto/store.js';
 
 export {
@@ -56,7 +57,8 @@ export {
   addGroupMember,
   removeGroupMember,
   saveSenderKeyState,
-  getSenderKeyState
+  getSenderKeyState,
+  removeSenderKeyState
 };
 
 export async function resetDatabase() {
