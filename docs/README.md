@@ -2,6 +2,15 @@
 
 User documentation, guides, and resources for Lifeline Mesh.
 
+## 🚨 最初に読むべき2ファイル（作業起点）
+
+1. **[厳格固定ルール.md](./厳格固定ルール.md)**
+   - このリポジトリでの最優先ルール（優先順位、必須検証、禁止事項）
+2. **[status.md](./status.md)**
+   - 現在のブランチ状態、検証結果、ブロッカー、次タスク
+
+以後の更新は、この2ファイルを先に確認してから着手してください。
+
 ## Documents
 
 ### [USAGE.md](./USAGE.md)
