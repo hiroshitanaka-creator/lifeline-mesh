@@ -9,6 +9,13 @@ export function setStatus(ok, msg) {
   labelEl.textContent = ok ? "✓ OK" : "✗ ERROR";
 
   statusEl.replaceChildren(labelEl, document.createTextNode(` ${String(msg)}`));
+  statusEl.textContent = "";
+
+  const label = document.createElement("span");
+  label.className = ok ? "ok" : "ng";
+  label.textContent = ok ? "✓ OK" : "✗ ERROR";
+
+  statusEl.append(label, " ", String(msg));
 }
 
 export function formatErrorMessage(prefix, error) {
