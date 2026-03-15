@@ -3,7 +3,12 @@ export function setStatus(ok, msg) {
   if (!statusEl) {
     return;
   }
-  statusEl.innerHTML = (ok ? `<span class="ok">✓ OK</span> ` : `<span class="ng">✗ ERROR</span> `) + msg;
+
+  const labelEl = document.createElement("span");
+  labelEl.className = ok ? "ok" : "ng";
+  labelEl.textContent = ok ? "✓ OK" : "✗ ERROR";
+
+  statusEl.replaceChildren(labelEl, document.createTextNode(` ${String(msg)}`));
 }
 
 export function formatErrorMessage(prefix, error) {
