@@ -4,7 +4,7 @@
 
 [![Tests](https://img.shields.io/badge/tests-37%2F37%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
+[![Security](https://img.shields.io/badge/security-local%20bundles-green)](spec/THREAT_MODEL.md)
 
 Lifeline Mesh is a browser-based, cryptographically secure messaging system designed for emergency situations where traditional infrastructure may be degraded or unavailable.
 
@@ -41,10 +41,10 @@ Every contribution matters. Let's build this together.
 
 ### Use Locally
 1. Clone this repository
-2. Open `app/index.html` in your browser
+2. Run `npm install` and `npm run dev` (or `npm run build` + `npm run preview`)
 3. Generate keys → Add contacts → Encrypt/Decrypt
 
-**No installation required** – runs entirely in your browser.
+**Runs locally in your browser** after installing npm dependencies once.
 
 ---
 
@@ -57,7 +57,7 @@ Every contribution matters. Let's build this together.
 - 🎯 **Recipient binding** prevents message redirection
 - 🛡️ **Replay protection** with 30-day nonce tracking
 - ✅ **TOFU (Trust On First Use)** with key pinning
-- 🔗 **Subresource Integrity (SRI)** for CDN scripts
+- 📦 **Local npm bundles** for runtime crypto and QR dependencies (no CDN at runtime)
 
 ### Key Management
 - 🔑 Auto-generate Ed25519 + X25519 key pairs
@@ -204,10 +204,10 @@ Automatically deployed from `main` branch via GitHub Actions.
 3. **Recommended**: Add CSP headers for extra security
 
 ### Production Checklist
-- [x] SRI added to all CDN scripts
+- [x] Runtime dependencies bundled locally (no CDN required)
 - [x] All tests passing
 - [x] Documentation complete
-- [ ] Consider self-hosting TweetNaCl (avoid CDN dependency)
+- [x] CSP defaults to self-hosted runtime assets
 - [ ] Add Content Security Policy headers
 - [ ] Set up monitoring/analytics (optional)
 
@@ -233,20 +233,27 @@ cd tools
 npm run generate-vectors
 ```
 
-### Update SRI Hashes
+### Verify offline runtime dependencies
 ```bash
-cd tools
-npm run generate-sri
-# Copy output to app/index.html
+node tests/integration/offline-runtime.test.js
 ```
 
 ### Technology Stack
 - **Languages**: JavaScript (ES6 modules)
 - **Crypto**: TweetNaCl 1.0.3
 - **Storage**: IndexedDB (browser)
-- **Build**: None required (pure HTML/JS)
+- **Build**: Vite (local dependency bundling for offline runtime)
 
 ---
+
+
+## 🔌 Offline Verification (Minimal)
+
+1. Install dependencies once while online: `npm install`
+2. Start app locally: `npm run dev`
+3. Open the app, then disconnect network (or use browser offline mode)
+4. Reload and confirm key generation + encrypt/decrypt still work
+5. Run `node tests/integration/offline-runtime.test.js` to ensure app files do not reference external runtime URLs
 
 ## 🤝 Contributing
 
@@ -287,7 +294,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - Test suite (37/37 passing)
 - Comprehensive documentation
 - Key management (export/import)
-- SRI security hardening
+- Local runtime dependency bundling (offline hardening)
 - GitHub Pages deployment
 
 ### In Progress 🚧

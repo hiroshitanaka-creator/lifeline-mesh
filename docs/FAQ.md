@@ -26,7 +26,7 @@ Lifeline Mesh is a browser-based end-to-end encrypted messaging system designed 
 ### Is this production-ready?
 
 **No.** This is a prototype/reference implementation. Before production use:
-- Add Subresource Integrity (SRI) for CDN scripts
+- Bundle runtime dependencies locally (no external CDN at runtime)
 - Consider self-hosting crypto libraries
 - Conduct security audit
 - Add key backup/export features
@@ -59,7 +59,7 @@ See [THREAT_MODEL.md](../spec/THREAT_MODEL.md) for details.
 - **TweetNaCl** (1.0.3): Audited, compact NaCl implementation
 - **TweetNaCl-util** (0.15.1): Base64/UTF-8 utilities
 
-Both loaded from unpkg.com CDN (SRI recommended for production).
+Both are bundled from npm packages and served locally at runtime (no external CDN required).
 
 ### Can messages be decrypted by relays?
 
@@ -416,14 +416,14 @@ See [PROJECT_CHARTER.md](../PROJECT_CHARTER.md) for scope.
 
 **Solution**: Use normal browser mode
 
-### "CDN script failed to load"
+### "Runtime dependency failed to load"
 
-**Cause**: Network issue, CDN down, or CSP blocking
+**Cause**: Local bundle/build output missing or corrupted
 
 **Solution**:
-- Check network connection
-- Try different network
-- Self-host TweetNaCl (download and serve locally)
+- Run `npm install`
+- Rebuild with `npm run build`
+- Confirm `app/main.js` is available and served from same origin
 
 ### UI is in Japanese, can I change language?
 
