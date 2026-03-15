@@ -1338,12 +1338,6 @@ window.decryptMsg = async function() {
       expectedSenderBoxPK = nacl.util.decodeBase64(contact.boxPK);
     }
 
-    await cleanupSeen(DMesh.REPLAY_RETENTION_MS);
-    const replayAllowed = await checkAndMarkSeen(message.msgId, senderFpB64);
-    if (!replayAllowed) {
-      throw new Error('Replay detected');
-    }
-
     // Decrypt
     const result = await decryptInWorker({
       message,
@@ -1352,6 +1346,12 @@ window.decryptMsg = async function() {
       expectedSenderSignPK,
       expectedSenderBoxPK
     });
+
+    await cleanupSeen(DMesh.REPLAY_RETENTION_MS);
+    const replayAllowed = await checkAndMarkSeen(result.msgId, senderFpB64);
+    if (!replayAllowed) {
+      throw new Error('Replay detected');
+    }
 
     document.getElementById("decrypted").textContent = result.content;
     setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
