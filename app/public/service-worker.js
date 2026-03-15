@@ -6,11 +6,7 @@ const CACHE_URLS = [
   '/lifeline-mesh/',
   '/lifeline-mesh/index.html',
   '/lifeline-mesh/manifest.json',
-  '/lifeline-mesh/../crypto/core.js',
-  'https://unpkg.com/tweetnacl@1.0.3/nacl-fast.min.js',
-  'https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js',
-  'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js',
-  'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
+  '/lifeline-mesh/../crypto/core.js'
 ];
 
 // Install event: cache critical assets
@@ -57,8 +53,7 @@ self.addEventListener('activate', (event) => {
 // Fetch event: serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
   // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin) &&
-      !event.request.url.startsWith('https://unpkg.com')) {
+  if (!event.request.url.startsWith(self.location.origin)) {
     return;
   }
 
