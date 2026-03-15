@@ -250,6 +250,9 @@ Lifeline Mesh works completely offline:
 
 5. **Decrypt offline** (no network required)
 
+Validation:
+- Run `node tests/integration/offline-runtime.test.js` to verify runtime assets do not include external URLs.
+
 ## Integration with Relay Networks
 
 Lifeline Mesh is **relay-agnostic**. Encrypted messages are JSON objects that can be transmitted through:

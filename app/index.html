@@ -5,27 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#4CAF50" />
   <meta name="description" content="End-to-end encrypted emergency messaging. Offline-first. No server required." />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" />
   <title>Lifeline Mesh - Emergency Messaging</title>
 
   <!-- PWA Manifest -->
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" />
 
-  <!-- CDN dependencies with Subresource Integrity (SRI) -->
-  <script src="https://unpkg.com/tweetnacl@1.0.3/nacl.min.js"
-          integrity="sha384-LMUiUHpaYNGZFzWFRjsADnCSqae1Mk5llcUOHOLDhCxkyF2cdsWAueTZAzV+swW/"
-          crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/tweetnacl-util@0.15.1/nacl-util.min.js"
-          integrity="sha384-qpU3wxGxaAPcz02pOLeZTv5B0rNzsh3CETsUqdHxRBP70bO0kHoBopr+f9AcGj04"
-          crossorigin="anonymous"></script>
-
-  <!-- QR Code libraries with SRI -->
-  <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"
-          integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"
-          crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"
-          integrity="sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+"
-          crossorigin="anonymous"></script>
+  <!-- Runtime dependencies are loaded from local npm bundles (no external CDN required) -->
+  <script type="module" src="./main.js"></script>
 
   <style>
     body { font-family: system-ui, sans-serif; margin: 16px; max-width: 900px; }

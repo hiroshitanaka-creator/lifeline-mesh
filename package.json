@@ -23,7 +23,8 @@
     "build:airgap": "node scripts/build-airgap.js",
     "preview": "vite preview",
     "test:integration": "node tests/integration/ble.test.js",
-    "test:unit": "npm run test"
+    "test:unit": "npm run test",
+    "test:offline-runtime": "node tests/integration/offline-runtime.test.js"
   },
   "keywords": [
     "cryptography",

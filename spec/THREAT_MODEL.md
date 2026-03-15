@@ -157,7 +157,7 @@ Enable verifiable, tamper-resistant emergency messaging in disaster scenarios wh
 ### Mitigations
 - Clear warning in UI about key storage risks
 - RESET ALL function for emergency key regeneration
-- SRI (Subresource Integrity) for CDN-loaded crypto libraries (when implemented)
+- Runtime crypto/QR dependencies bundled locally (no CDN dependency during execution)
 
 ## Assumptions
 
@@ -175,7 +175,7 @@ Enable verifiable, tamper-resistant emergency messaging in disaster scenarios wh
 ### Trust
 - First contact requires trust (TOFU model)
 - Users will verify fingerprints for high-value contacts
-- CDN delivering TweetNaCl is not compromised (or SRI will be added)
+- Local build pipeline and lockfile integrity are trusted (runtime does not fetch CDN libraries)
 
 ## Emergency Context Considerations
 
@@ -186,7 +186,7 @@ In disaster scenarios:
 - **Device loss common**: Key backup/recovery out of scope (users warned)
 
 ## Future Improvements
-- Subresource Integrity (SRI) for CDN dependencies
+- Dependency pinning + local bundling for runtime libraries
 - Key backup/export mechanism (user-controlled)
 - Group messaging with consistent key bindings
 - Hybrid post-quantum signatures (when standardized)
