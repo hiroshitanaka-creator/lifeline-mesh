@@ -42,7 +42,7 @@ let tweetnacl, tweetnaclUtil;
 try {
   tweetnacl = readFile("node_modules/tweetnacl/nacl.js");
   tweetnaclUtil = readFile("node_modules/tweetnacl-util/nacl-util.js");
-} catch (e) {
+} catch {
   console.error("❌ Dependencies not found. Run 'npm install' first.");
   process.exit(1);
 }
