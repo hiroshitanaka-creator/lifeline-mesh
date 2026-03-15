@@ -33,6 +33,7 @@ import {
   removeGroupMember,
   saveSenderKeyState,
   getSenderKeyState,
+  removeSenderKeyState,
   migrateLegacyV1IfNeeded
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
@@ -1182,6 +1183,7 @@ window.removeSelectedMemberFromGroup = async function() {
     if (!group) return alert('Group not found');
 
     await removeGroupMember(groupId, memberFp);
+    await removeSenderKeyState(groupId, memberFp);
     const members = (await getGroupMembers(groupId)).filter((fp) => fp !== memberFp);
     group.members = members;
 
@@ -1287,6 +1289,11 @@ window.decryptMsg = async function() {
     if (message.kind === 'dmesh-group-msg') {
       const group = await getGroup(message.groupId);
       if (!group) throw new Error('Unknown group');
+
+      const members = await getGroupMembers(message.groupId);
+      if (!members.includes(message.senderSignPK)) {
+        throw new Error('Sender is not a current group member');
+      }
 
       const senderState = await getSenderKeyState(message.groupId, message.senderSignPK);
       if (!senderState) throw new Error('Missing sender state for group sender');

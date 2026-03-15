@@ -803,6 +803,10 @@ export async function getSenderKeyState(groupId, senderSignPK) {
   return state?.senderKeyState || null;
 }
 
+export async function removeSenderKeyState(groupId, senderSignPK) {
+  await idbDel(STORE_SENDER_KEYS, `${groupId}:${senderSignPK}`);
+}
+
 export function getSenderKeysForGroup(groupId) {
   return idbGetByIndex(STORE_SENDER_KEYS, "groupId", groupId);
 }
