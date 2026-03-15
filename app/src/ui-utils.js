@@ -4,6 +4,11 @@ export function setStatus(ok, msg) {
     return;
   }
 
+  const labelEl = document.createElement("span");
+  labelEl.className = ok ? "ok" : "ng";
+  labelEl.textContent = ok ? "✓ OK" : "✗ ERROR";
+
+  statusEl.replaceChildren(labelEl, document.createTextNode(` ${String(msg)}`));
   statusEl.textContent = "";
 
   const label = document.createElement("span");
