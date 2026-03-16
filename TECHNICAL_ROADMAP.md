@@ -25,6 +25,7 @@ This document provides detailed technical implementation guidance for Lifeline M
 - [x] Phase 2: Incremental TypeScript migration started from boundary-heavy areas (`crypto/message-schema.ts`, `crypto/transport-io.ts`).
 - [x] Phase 3: `app/index.html` script split into `app/src` modules and wired via external entrypoint.
 - [x] Phase 4: Web Worker candidates extracted for encryption / verification / chunk reassembly (`app/src/workers/crypto-worker.js`).
+- [x] Phase 5: N-hop BLE mesh routing implemented (`bluetooth/mesh-router.js`) — RouteTable, route advertisements, unicast peer selection, loop prevention.
 
 ---
 
