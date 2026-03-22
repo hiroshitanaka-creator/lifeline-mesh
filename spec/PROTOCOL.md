@@ -511,7 +511,15 @@ function reassembleChunks(chunks) {
 
 Structured payloads for emergency scenarios:
 
-**Payload type field** (inside encrypted content):
+> **`kind` vs `type` disambiguation:**
+> - **`kind`** — outer envelope field, present in every Lifeline Mesh JSON object **before** decryption.
+>   Used for routing and dispatch (`"dmesh-msg"`, `"dmesh-group-msg"`, `"dmesh-id"`, `"dmesh-chunk"`).
+> - **`type`** — inner content field, present **inside** the decrypted plaintext for disaster payloads.
+>   Only visible after successful decryption; not used for envelope routing.
+>
+> Never compare `message.type` to `"dmesh-msg"` — the correct check is `message.kind === "dmesh-msg"`.
+
+**Payload type field** (inside encrypted content, after decryption):
 ```json
 {
   "v": 1,
@@ -624,3 +632,28 @@ Group messaging uses a SenderKey ratchet per `(groupId, senderSignPK)`.
 - Unknown `kind` MUST be ignored safely.
 - Membership changes (member add/remove) MUST force SenderKey rotation for the group.
 - `senderKeyVersion` mismatch is a hard failure and requires out-of-band state resync (e.g., re-join/reshare group state).
+
+---
+
+## Relay and Mesh Routing
+
+### MeshRouter Phase 1 (1-hop relay) — Implementation Status
+
+`bluetooth/mesh-router.js` implements Phase 1 relay logic:
+
+- **Deduplication**: each message is identified by `msgId` (or a fallback derived from sender + nonce).
+  A seen-map with TTL prevents the same message from being forwarded twice.
+- **Hop budget**: the `hops` counter is incremented on each relay; forwarding stops when `hops >= maxHops`.
+  Default `maxHops = 1` (Phase 1: at most 1 intermediate hop).
+- **Relay metadata**: `via` and `hops` fields are stamped into the message before forwarding.
+
+**What is implemented:** The `MeshRouter` class with full unit/integration test coverage (14 tests).
+
+**What is NOT yet done:**
+- `MeshRouter` is **not connected to the app UI** (`app/src/main.js` does not import it).
+  It exists as a standalone tested module only.
+- **Phase 2 (N-hop, multi-peer)** is not implemented.
+- **BLE GATT server (peripheral mode)**: `bluetooth/ble-manager.js` operates in client-only mode.
+  A device cannot currently advertise itself as a relay via Bluetooth.
+
+Do not claim MeshRouter is "runtime integrated" — it is not yet wired into the application.
