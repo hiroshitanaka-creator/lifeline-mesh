@@ -2,7 +2,7 @@ name: Deploy Pages
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
   workflow_dispatch:
 
 permissions:
@@ -54,13 +54,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install app dependencies
+        run: npm install --prefix app
+
+      - name: Build app
+        run: npm run build --prefix app
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: ./app
+          path: ./app/dist
 
       - name: Deploy to GitHub Pages
         id: deployment

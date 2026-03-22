@@ -681,11 +681,10 @@ export type ErrorCode =
 1. tsconfig.json setup (already done)
 2. Create type definition files
 3. crypto/core.js → crypto/core.ts
-4. crypto/errors.js → crypto/errors.ts
-5. Write new features in TypeScript
-6. Migrate tests to TypeScript
-7. Extract app/index.html scripts
-8. Introduce Vite build system
+4. Write new features in TypeScript
+5. Migrate tests to TypeScript
+6. Extract app/index.html scripts
+7. Introduce Vite build system
 ```
 
 ---
@@ -706,7 +705,7 @@ export type ErrorCode =
    /----------------\
   /                  \  Unit Tests (current)
  /--------------------\  - crypto/core
-/______________________\ - crypto/errors
+/______________________\
 ```
 
 ### 5.2 Tests to Add

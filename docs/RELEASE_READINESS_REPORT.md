@@ -13,8 +13,15 @@
 | Unit | `npm run test:unit` | ✅ Pass | Crypto + vectors all green |
 | Integration | `npm run test:integration` | ✅ Pass | BLE and group messaging integration green |
 | Compatibility policy | `npm run check:compat` | ✅ Pass | Policy gate passed |
-| E2E | `npm run test:e2e:playwright` | ✅ Pass (fallback) | Playwright package download blocked (403), smoke fallback passed |
-| Full validation | `npm run validate` | ✅ Pass | End-to-end validation script completed |
+| E2E (smoke) | `npm run test:e2e:smoke` | ✅ Pass | File-presence check: config + spec + required controls present |
+| E2E (Playwright) | `npm run test:e2e:playwright` | ⚠️ Not run at Phase 20 | Playwright was unavailable; real browser tests require `npm run test:e2e:install` |
+| Full validation | `npm run validate` | ✅ Pass | Uses `test:e2e:smoke`; Playwright gate is separate |
+
+> **Note (added post-Phase-20):** At the original Phase 20 gate (2026-03-14), `test:e2e:playwright`
+> was reported as "Pass (fallback)" because the runner fell back silently to smoke when Playwright
+> was unavailable. This was a dishonest gate. PR2 (`fix: make validation gates honest`) separated
+> `test:e2e:smoke` from `test:e2e:playwright` so that each has a distinct, unambiguous meaning.
+> The table above reflects the corrected semantics.
 
 ## Key Exit Criteria Check
 
@@ -22,13 +29,14 @@
 - Transport resilience and operational recovery path (clipboard/QR/BLE with queue): ✅
 - Regression detection gates in CI/test workflow: ✅
 - Operational documentation synced (runbook/FAQ): ✅
+- Real browser E2E (Playwright): ⚠️ spec exists, CI installs Playwright; was not run in local Phase 20 gate
 
 ## Evidence
 
-The release gate was executed through the top-level validation command:
-
 ```bash
 npm run validate
+# = lint + typecheck(crypto/tools) + test:unit + test:integration + check:compat + test:e2e:smoke
 ```
 
-This command completed successfully in the current environment, including E2E smoke fallback when Playwright installation was unavailable.
+All components of `validate` pass. Real Playwright tests (`test:e2e:playwright`) require a separate
+`npm run test:e2e:install` step and run in the dedicated CI `e2e_playwright` job.

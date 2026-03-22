@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-37%2F37%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-84%2F84%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -15,18 +15,17 @@ Lifeline Mesh is a browser-based, cryptographically secure messaging system desi
 
 ## 🆘 We Need Your Help
 
-This project could save lives, but it needs contributors to become real.
+This project could save lives, but it needs contributors to grow.
 
-**Most Needed Right Now:**
+**Open Contribution Areas:**
 
-| Priority | Task | Skills | Issue |
+| Priority | Task | Skills | Notes |
 |----------|------|--------|-------|
-| 🔴 Critical | **Bluetooth BLE Relay** | Web Bluetooth API, JavaScript | Help wanted |
-| 🔴 Critical | **Key Backup Security** | Cryptography, Argon2id | Help wanted |
-| 🟡 High | **UI/UX Overhaul** | Design, CSS, Accessibility | Help wanted |
-| 🟡 High | **Group Messaging** | Protocol design, Crypto | Help wanted |
+| 🟡 High | **BLE GATT Server (peripheral mode)** | Web Bluetooth API | Client-only today; acting as relay requires GATT server |
+| 🟡 High | **Multi-hop mesh routing** | Protocol design, JS | MeshRouter Phase 1 (1-hop) is done; Phase 2 (N-hop) is not |
+| 🟡 High | **UI/UX Overhaul** | Design, CSS, Accessibility | Functional but not polished |
 | 🟢 Good First | **Documentation i18n** | Any language | Good first issue |
-| 🟢 Good First | **Test Coverage** | JavaScript testing | Good first issue |
+| 🟢 Good First | **Real Playwright E2E** | Testing, browser automation | Smoke spec exists; real browser run needs CI Playwright install |
 
 **Read the full roadmap**: [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
 
@@ -40,11 +39,15 @@ Every contribution matters. Let's build this together.
 **https://hiroshitanaka-creator.github.io/lifeline-mesh/**
 
 ### Use Locally
-1. Clone this repository
-2. Open `app/index.html` in your browser
-3. Generate keys → Add contacts → Encrypt/Decrypt
+```bash
+git clone https://github.com/hiroshitanaka-creator/lifeline-mesh.git
+cd lifeline-mesh
+npm ci --prefix app
+npm run dev --prefix app   # opens http://localhost:5173
+```
+Then: Generate keys → Add contacts → Encrypt/Decrypt
 
-**No installation required** – runs entirely in your browser.
+> The app uses ES6 modules with relative imports; a dev server (Vite) is required. Directly opening `app/index.html` as a `file://` URL will not work.
 
 ---
 
@@ -61,9 +64,20 @@ Every contribution matters. Let's build this together.
 
 ### Key Management
 - 🔑 Auto-generate Ed25519 + X25519 key pairs
-- 💾 Export keys (password-protected backup)
+- 💾 Export keys (Argon2id/PBKDF2 password-protected backup)
 - 📥 Import keys (restore from file)
 - 🗑️ Reset all data (emergency key rotation)
+
+### Group Messaging
+- 👥 Create named groups with member lists
+- 🔒 Sender Keys protocol (DMESH_GROUP_V1, domain-separated)
+- 🔄 Chain key ratcheting per message (forward secrecy within session)
+
+### BLE Store-and-Forward
+- 📡 BLE client: connect to nearby devices and exchange messages
+- 📤 Outbox queuing when offline; automatic flush on reconnect
+- 📥 Inbox persistence for received messages
+- ⚠️ **GATT server (peripheral/relay mode) is not implemented** – BLE acts as client only
 
 ### User Experience
 - 📱 Offline-first (works without internet)
@@ -95,25 +109,33 @@ Every contribution matters. Let's build this together.
 
 ## 🔬 Testing
 
-All tests passing: **37/37 ✓**
+All tests passing: **84/84 ✓**
 
-### Crypto Core Tests (14/14)
+| Suite | Count | Command |
+|---|---|---|
+| Crypto core unit | 22 | `npm run test:crypto` |
+| Test vectors | 27 | `npm run test:vectors` |
+| BLE + transport integration | 18 | `npm run test:integration` (partial) |
+| Group messaging integration | 3 | `npm run test:integration` (partial) |
+| Mesh router integration | 14 | `npm run test:integration` (partial) |
+| **Total** | **84** | `npm run test:unit && npm run test:integration` |
+
 ```bash
-cd crypto
-npm install
-npm test
+# Run everything
+npm run test:unit && npm run test:integration
+
+# Crypto unit tests only
+cd crypto && npm test
+
+# Test vectors only
+cd tools && npm run validate-vectors
+
+# Smoke check (file-presence; no browser required)
+npm run test:e2e:smoke
+
+# Real Playwright E2E (requires: npm run test:e2e:install first)
+npm run test:e2e:playwright
 ```
-
-Tests: Key generation, encryption/decryption, signature verification, tampering detection, replay checks, byte utilities.
-
-### Test Vector Validation (23/23)
-```bash
-cd tools
-npm install
-npm run validate-vectors
-```
-
-Tests: Message structure, round-trip encryption, signature validation, recipient binding, tampering detection, interoperability.
 
 ---
 
@@ -121,12 +143,14 @@ Tests: Message structure, round-trip encryption, signature validation, recipient
 
 ### Repository Structure
 ```
-/app            Demo UI (browser-based, ES6 modules)
-/crypto         Core cryptographic functions (pure, testable)
+/app            Demo UI (Vite build, ES6 modules, PWA)
+/bluetooth      BLE manager + MeshRouter (Phase 1: 1-hop relay)
+/crypto         Core crypto, group messaging, transport, store
 /spec           Threat model + protocol specification
 /tools          Test vectors, validator, SRI generator
-/docs           Usage guide, FAQ
-.github/        Workflows, templates, deployment guides
+/docs           Usage guide, FAQ, phase progress
+/tests          Integration and E2E test suites
+.github/        CI/CD workflows, templates
 ```
 
 ### Crypto Stack
@@ -195,13 +219,14 @@ See [THREAT_MODEL.md](spec/THREAT_MODEL.md) for comprehensive analysis.
 ## 🚀 Deployment
 
 ### GitHub Pages (Current)
-Automatically deployed from `main` branch via GitHub Actions.
+Automatically deployed from `master` branch via `.github/workflows/pages.yml`.
+The workflow runs `npm ci --prefix app && npm run build --prefix app` and deploys `app/dist/` (Vite build output).
 
 **Live URL**: https://hiroshitanaka-creator.github.io/lifeline-mesh/
 
 ### Self-Hosting
-1. Copy `/app` directory to your web server
-2. Serve `index.html` (no build step required)
+1. Run `npm ci --prefix app && npm run build --prefix app`
+2. Serve `app/dist/` directory from your web server
 3. **Recommended**: Add CSP headers for extra security
 
 ### Production Checklist
@@ -242,10 +267,10 @@ npm run generate-sri
 ```
 
 ### Technology Stack
-- **Languages**: JavaScript (ES6 modules)
-- **Crypto**: TweetNaCl 1.0.3
-- **Storage**: IndexedDB (browser)
-- **Build**: None required (pure HTML/JS)
+- **Languages**: JavaScript (ES6 modules), TypeScript (types only)
+- **Crypto**: TweetNaCl 1.0.3 + tweetnacl-util + argon2 (key backup)
+- **Storage**: IndexedDB (browser, via crypto/store.js)
+- **Build**: Vite (app/), no build needed for crypto/tools
 
 ---
 
@@ -260,11 +285,11 @@ We welcome all contributors! Here's how to get started:
 4. Join the discussion in GitHub Discussions
 
 ### Ways to Contribute
-- **Code**: Bluetooth relay, group messaging, UI improvements
+- **Code**: BLE GATT server (peripheral), multi-hop mesh, UI polish
 - **Security**: Reviews, audits, vulnerability research
 - **Design**: UX for emergency scenarios, accessibility
 - **Docs**: Translations, tutorials, examples
-- **Testing**: Test vectors, edge cases, real-world scenarios
+- **Testing**: Real Playwright E2E, test vectors, edge cases
 - **Ideas**: Protocol improvements, use cases, partnerships
 
 ### Development Setup
@@ -281,26 +306,26 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## 📊 Status & Roadmap
 
-**Current Version**: 1.0.0 (Production-ready prototype)
+**Current Version**: 0.1.0 (v0.1.0 release gate passed; prototype quality)
 
-### Completed ✅
-- Core crypto implementation (Ed25519 + X25519)
-- Test suite (37/37 passing)
-- Comprehensive documentation
-- Key management (export/import)
-- SRI security hardening
-- GitHub Pages deployment
+### Implemented ✅
+- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 84/84 tests passing
+- Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
+- Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
+- BLE store-and-forward: outbox, inbox, retry, offline queuing
+- Group messaging MVP (Sender Keys / DMESH_GROUP_V1 protocol)
+- MeshRouter Phase 1: 1-hop relay with deduplication and hop budgets
+- Multi-job CI (lint, typecheck, unit, integration, compat, E2E)
+- GitHub Pages deployment (Vite build)
+- Comprehensive docs and threat model
 
-### In Progress 🚧
-- Relay implementations (Bluetooth BLE)
-- Key backup security upgrade (Argon2id)
-- UI/UX improvements
-
-### Planned 📋
-- Group messaging (Sender Keys protocol)
-- Mobile apps (React Native / Flutter)
-- LoRa integration
-- Post-quantum crypto
+### Not Yet Implemented ⚠️
+- BLE GATT server (peripheral/relay mode) — client-only by design for Phase 1
+- MeshRouter runtime integration in app UI — module exists and is tested standalone
+- Multi-hop mesh routing (MeshRouter Phase 2)
+- Real Playwright E2E in CI (spec exists; requires `npm run test:e2e:install`)
+- typecheck coverage for `app/src/` and `bluetooth/` (tsconfig.runtime.json surfaces gaps)
+- Mobile apps, LoRa integration, post-quantum crypto
 
 **Full Roadmap**: [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
 

@@ -511,7 +511,15 @@ function reassembleChunks(chunks) {
 
 Structured payloads for emergency scenarios:
 
-**Payload type field** (inside encrypted content):
+> **`kind` vs `type` disambiguation:**
+> - **`kind`** — outer envelope field, present in every Lifeline Mesh JSON object **before** decryption.
+>   Used for routing and dispatch (`"dmesh-msg"`, `"dmesh-group-msg"`, `"dmesh-id"`, `"dmesh-chunk"`).
+> - **`type`** — inner content field, present **inside** the decrypted plaintext for disaster payloads.
+>   Only visible after successful decryption; not used for envelope routing.
+>
+> Never compare `message.type` to `"dmesh-msg"` — the correct check is `message.kind === "dmesh-msg"`.
+
+**Payload type field** (inside encrypted content, after decryption):
 ```json
 {
   "v": 1,
@@ -624,3 +632,32 @@ Group messaging uses a SenderKey ratchet per `(groupId, senderSignPK)`.
 - Unknown `kind` MUST be ignored safely.
 - Membership changes (member add/remove) MUST force SenderKey rotation for the group.
 - `senderKeyVersion` mismatch is a hard failure and requires out-of-band state resync (e.g., re-join/reshare group state).
+
+---
+
+## Relay and Mesh Routing
+
+### MeshRouter Phase 1 (1-hop relay) — Implementation Status
+
+`bluetooth/mesh-router.js` implements Phase 1 relay logic:
+
+- **Deduplication**: each message is identified by `msgId` (or a fallback derived from sender + nonce).
+  A seen-map with TTL prevents the same message from being forwarded twice.
+- **Hop budget**: the `hops` counter is incremented on each relay; forwarding stops when `hops >= maxHops`.
+  Default `maxHops = 1` (Phase 1: at most 1 intermediate hop).
+- **Relay metadata**: `via` and `hops` fields are stamped into the message before forwarding.
+
+**What is implemented:**
+- `MeshRouter` class: deduplication, hop budget, relay metadata stamping.  14 standalone tests.
+- `BLEManager` accepts a `router` option. When set, every fully-reassembled non-duplicate message
+  is passed to `router.shouldForward(message, ingressPeerId)`.  If true, `ble.onForward(message,
+  ingressPeerId)` is called.  5 BLE+Router integration tests pass.
+- The integration is opt-in: if no `router` is set, `BLEManager` behaviour is unchanged.
+
+**What is NOT yet done:**
+- **Egress peer management**: `BLEManager` is single-peer. The caller must maintain a list of
+  connected outbound `BLEManager` instances and call `sendMessage()` in `onForward`. The app UI
+  (`app/src/main.js`) does not yet set `router` or `onForward`.
+- **Phase 2 (N-hop, multi-peer routing)** is not implemented.
+- **BLE GATT server (peripheral mode)**: `bluetooth/ble-manager.js` operates in client-only mode.
+  A device cannot currently advertise itself as a relay via Bluetooth.
