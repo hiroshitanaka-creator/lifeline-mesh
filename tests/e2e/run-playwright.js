@@ -9,12 +9,21 @@ const direct = run("playwright", ["test"]);
 if (direct.status === 0) {
   process.exit(0);
 }
+// Non-zero but not ENOENT means Playwright ran and tests failed — propagate.
+if (direct.status !== null && direct.status !== 127 && !direct.error) {
+  process.exit(direct.status);
+}
 
-const npxRun = run("npx", ["--yes", "playwright", "test"]);
+const npxRun = run("npx", ["--no", "playwright", "test"]);
 if (npxRun.status === 0) {
   process.exit(0);
 }
+if (npxRun.status !== null && npxRun.status !== 127 && !npxRun.error) {
+  process.exit(npxRun.status);
+}
 
-console.warn("[warn] Playwright unavailable. Falling back to smoke check.");
-const smoke = run("node", ["tests/e2e/smoke-check.js"]);
-process.exit(smoke.status ?? 1);
+console.error(
+  "[error] Playwright is not installed. Run `npm run test:e2e:install` first.\n" +
+  "        For file-presence smoke checks only, use `npm run test:e2e:smoke`."
+);
+process.exit(1);
