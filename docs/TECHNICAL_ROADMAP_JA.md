@@ -651,11 +651,10 @@ export type ErrorCode =
 1. tsconfig.json設定（完了済み）
 2. 型定義ファイル作成
 3. crypto/core.js → crypto/core.ts
-4. crypto/errors.js → crypto/errors.ts
-5. 新機能はTypeScriptで記述
-6. テストをTypeScriptに移行
-7. app/index.html のスクリプトを分離
-8. Viteビルドシステム導入
+4. 新機能はTypeScriptで記述
+5. テストをTypeScriptに移行
+6. app/index.html のスクリプトを分離
+7. Viteビルドシステム導入
 ```
 
 ---
@@ -676,7 +675,7 @@ export type ErrorCode =
    /----------------\
   /                  \  Unit Tests (現在)
  /--------------------\  - crypto/core
-/______________________\ - crypto/errors
+/______________________\
 ```
 
 ### 5.2 追加すべきテスト

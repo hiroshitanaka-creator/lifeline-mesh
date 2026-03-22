@@ -11,8 +11,9 @@
 > - TypeScript 8エラー → **0エラー** (issue D 解消)
 > - グループメッセージング → **MVP 実装済み** (crypto/group.js + 3統合テスト)
 > - メッシュルーティング Phase 1 → **実装済み** (bluetooth/mesh-router.js + 14統合テスト)
-> - 統合テスト/E2Eテスト → **35 統合テスト + smoke spec 追加** (issue G 解消)
-> - テスト合計: 20/20 → **84/84** 通過
+> - 統合テスト/E2Eテスト → **40 統合テスト + smoke spec 追加** (issue G 解消)
+> - テスト合計: 20/20 → **89/89** 通過
+> - `crypto/errors.js` (issue H) → **削除済み** (PR5: 未使用の孤立 abstraction として除去。error flow は plain Error + ui-utils.setStatus に統一)
 >
 > 生成日: 2026-02-07
 

@@ -70,8 +70,10 @@ Test and document which browsers support which features.
 **Difficulty**: Easy | **Skills**: JavaScript
 
 Make error messages more user-friendly (less technical jargon).
+The current error model uses plain `Error` objects displayed via `setStatus()` in `app/src/ui-utils.js`.
+A good starting point: audit the catch blocks in `app/src/main.js` and improve message clarity there.
 
-**Files**: `crypto/errors.js`, `app/index.html`
+**Files**: `app/src/main.js`, `app/src/ui-utils.js`
 
 ---
 
