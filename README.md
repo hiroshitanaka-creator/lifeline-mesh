@@ -195,13 +195,14 @@ See [THREAT_MODEL.md](spec/THREAT_MODEL.md) for comprehensive analysis.
 ## 🚀 Deployment
 
 ### GitHub Pages (Current)
-Automatically deployed from `main` branch via GitHub Actions.
+Automatically deployed from `master` branch via `.github/workflows/pages.yml`.
+The workflow runs `npm ci --prefix app && npm run build --prefix app` and deploys `app/dist/` (Vite build output).
 
 **Live URL**: https://hiroshitanaka-creator.github.io/lifeline-mesh/
 
 ### Self-Hosting
-1. Copy `/app` directory to your web server
-2. Serve `index.html` (no build step required)
+1. Run `npm ci --prefix app && npm run build --prefix app`
+2. Serve `app/dist/` directory from your web server
 3. **Recommended**: Add CSP headers for extra security
 
 ### Production Checklist
