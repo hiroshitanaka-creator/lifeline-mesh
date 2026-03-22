@@ -54,7 +54,7 @@ test("main flow: key generation -> contact add -> encrypt -> decrypt with clipbo
 
   const encryptedObj = JSON.parse((await page.locator("#encrypted").textContent()) || "{}");
   const decryptedText = (await page.locator("#decrypted").textContent()) || "";
-  expect(encryptedObj.type).toBe("dmesh-msg");
+  expect(encryptedObj.kind).toBe("dmesh-msg");
   expect(decryptedText).toBe(PLAIN_TEXT);
 });
 

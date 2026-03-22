@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main", "claude/*"]
+    branches: ["main", "master", "claude/*"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "master"]
   workflow_dispatch:
 
 concurrency:
@@ -39,8 +39,12 @@ jobs:
       - name: Run lint
         run: npm run lint
 
-      - name: Run typecheck
+      - name: Run typecheck (crypto + tools)
         run: npm run typecheck
+
+      - name: Run typecheck:runtime (app/src + bluetooth — surfaces gaps, non-blocking)
+        run: npm run typecheck:runtime
+        continue-on-error: true
 
   unit_tests:
     name: Unit tests
@@ -165,7 +169,8 @@ jobs:
     steps:
       - name: CI quality gates passed
         run: |
-          echo "lint/typecheck/unit/integration/compat/e2e all passed"
+          echo "Gates: lint + typecheck(crypto/tools) + unit + integration + compat + e2e:playwright(real browser) all passed"
+          echo "Note: typecheck:runtime(app/src+bluetooth) runs separately with continue-on-error"
 
   security:
     runs-on: ubuntu-latest
