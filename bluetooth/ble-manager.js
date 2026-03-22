@@ -40,7 +40,8 @@ export class BLEManager {
       io = BLEManager.createBrowserIO(),
       protocolConfig = {},
       store = BLEManager.createStoreAdapter(),
-      transportManager = null
+      transportManager = null,
+      router = null
     } = options;
 
     this.device = null;
@@ -54,6 +55,14 @@ export class BLEManager {
     this.onConnectionChange = null;
     this.onError = null;
     this.onTransferState = null;
+    /**
+     * Optional relay callback. Set this to handle messages that the router
+     * decides should be forwarded. Receives (message, ingressPeerId).
+     * The caller is responsible for selecting egress peers and calling
+     * sendMessage() on the appropriate outbound BLEManager instances.
+     * Not called when no router is set.
+     */
+    this.onForward = null;
 
     // Receive state by message transfer id
     this.receiveStates = new Map();
@@ -71,6 +80,15 @@ export class BLEManager {
     this.store = store;
     this.transportManager = transportManager;
     this.protocolConfig = this._buildProtocolConfig(protocolConfig);
+
+    /**
+     * Optional MeshRouter instance. When set, every fully-reassembled,
+     * non-duplicate incoming message is passed to router.shouldForward().
+     * If shouldForward returns true, this.onForward(message, ingressPeerId)
+     * is called. Phase 1: 1-hop relay; ingressPeerId is available for future
+     * Phase 2 path-tracking but is unused by shouldForward in Phase 1.
+     */
+    this.router = router;
   }
 
   static createStoreAdapter() {
@@ -495,6 +513,8 @@ export class BLEManager {
 
       await this._sendAck(state.transferId);
 
+      await this._maybeForward(message);
+
       if (this.onMessageReceived) {
         this.onMessageReceived(message, msgType);
       }
@@ -502,6 +522,32 @@ export class BLEManager {
       console.error("[BLE] Error processing incoming data:", error);
       if (this.onError) {
         this.onError(BLE_ERROR.RECEIVE_FAILED, error);
+      }
+    }
+  }
+
+  /**
+   * If a MeshRouter and onForward callback are configured, ask the router
+   * whether to relay this message and fire onForward if so.
+   *
+   * Phase 1: ingressPeerId is the BLE device ID of the connected peer (or
+   * "unknown-ingress" when unavailable). MeshRouter.shouldForward ignores it
+   * in Phase 1 (parameter is _ingressPeerId) but records it for Phase 2.
+   *
+   * @param {Object} message - Parsed, deduplicated message.
+   * @private
+   */
+  async _maybeForward(message) {
+    if (!this.router || !this.onForward) {
+      return;
+    }
+    const ingressPeerId = this.device?.id || "unknown-ingress";
+    const shouldRelay = this.router.shouldForward(message, ingressPeerId);
+    if (shouldRelay) {
+      try {
+        await this.onForward(message, ingressPeerId);
+      } catch (err) {
+        console.warn("[BLE] onForward error:", err?.message || err);
       }
     }
   }

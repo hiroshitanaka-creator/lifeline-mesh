@@ -36,7 +36,15 @@ The following work was completed after the 20-phase roadmap:
 | MeshRouter Phase 1 (1-hop relay) | ✅ completed | bluetooth/mesh-router.js + 14 integration tests (tests/integration/mesh-router.test.js) |
 | Validation gate honesty (PR2) | ✅ completed | `test:e2e:smoke` / `test:e2e:playwright` separated; smoke fallback removed from playwright script; `tsconfig.runtime.json` added |
 | Docs sync to runtime truth (PR3) | ✅ completed | README, RELEASE_READINESS_REPORT, SECURITY_AUDIT_REPORT, REPO_ANALYSIS, PHASE_PROGRESS, PROTOCOL.md updated |
+| MeshRouter BLE runtime integration (PR4) | ✅ completed | `BLEManager` accepts `router` option; `_maybeForward` called in receive path; `onForward` callback for egress; 5 new integration tests in tests/integration/ble-mesh-relay.test.js; total 89 tests passing |
 
-**MeshRouter runtime integration status**: `bluetooth/mesh-router.js` is implemented and
-fully tested as a standalone module (14 tests pass). It is **not yet imported or called** from
-`app/src/main.js`. Integration into the app UI is a future task.
+**MeshRouter runtime integration status (updated PR4):**
+- `bluetooth/mesh-router.js` is now **wired into `BLEManager._handleIncomingData`** via `_maybeForward`.
+- `BLEManager` accepts a `router` option and fires `this.onForward(message, ingressPeerId)` when
+  `router.shouldForward()` returns true.
+- **Egress peer selection** (which connected BLEManager instances to send to) remains the caller's
+  responsibility (`onForward` callback). This is intentional: BLEManager is single-peer; an
+  application-layer coordinator owns the peer list.
+- **`app/src/main.js`** does not yet set `router` or `onForward` on its BLEManager instance.
+  Wiring the app UI is a follow-up task.
+- GATT server (peripheral/relay mode) remains not implemented.

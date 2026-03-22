@@ -647,13 +647,17 @@ Group messaging uses a SenderKey ratchet per `(groupId, senderSignPK)`.
   Default `maxHops = 1` (Phase 1: at most 1 intermediate hop).
 - **Relay metadata**: `via` and `hops` fields are stamped into the message before forwarding.
 
-**What is implemented:** The `MeshRouter` class with full unit/integration test coverage (14 tests).
+**What is implemented:**
+- `MeshRouter` class: deduplication, hop budget, relay metadata stamping.  14 standalone tests.
+- `BLEManager` accepts a `router` option. When set, every fully-reassembled non-duplicate message
+  is passed to `router.shouldForward(message, ingressPeerId)`.  If true, `ble.onForward(message,
+  ingressPeerId)` is called.  5 BLE+Router integration tests pass.
+- The integration is opt-in: if no `router` is set, `BLEManager` behaviour is unchanged.
 
 **What is NOT yet done:**
-- `MeshRouter` is **not connected to the app UI** (`app/src/main.js` does not import it).
-  It exists as a standalone tested module only.
-- **Phase 2 (N-hop, multi-peer)** is not implemented.
+- **Egress peer management**: `BLEManager` is single-peer. The caller must maintain a list of
+  connected outbound `BLEManager` instances and call `sendMessage()` in `onForward`. The app UI
+  (`app/src/main.js`) does not yet set `router` or `onForward`.
+- **Phase 2 (N-hop, multi-peer routing)** is not implemented.
 - **BLE GATT server (peripheral mode)**: `bluetooth/ble-manager.js` operates in client-only mode.
   A device cannot currently advertise itself as a relay via Bluetooth.
-
-Do not claim MeshRouter is "runtime integrated" — it is not yet wired into the application.
