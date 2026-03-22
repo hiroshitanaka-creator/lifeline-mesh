@@ -1,5 +1,19 @@
 # Lifeline Mesh リポジトリ包括分析レポート
 
+> **⚠️ Dated snapshot — not current truth.**
+> このレポートは 2026-02-07 時点の状態を記録したものです。現在のコードベースとは大幅に異なります。
+> 参照目的のみで保持しています。現在の状態については README.md / docs/PHASE_PROGRESS.md を参照してください。
+>
+> 主な変化点 (2026-02-07 → 現在):
+> - `crypto/key-backup.js` (Argon2id/PBKDF2) → **UI に統合済み** (issue A 解消)
+> - `crypto/store.js` v2 → **UI に統合済み** (issue B 解消)
+> - ESLint 113エラー → **0エラー** (issue C 解消)
+> - TypeScript 8エラー → **0エラー** (issue D 解消)
+> - グループメッセージング → **MVP 実装済み** (crypto/group.js + 3統合テスト)
+> - メッシュルーティング Phase 1 → **実装済み** (bluetooth/mesh-router.js + 14統合テスト)
+> - 統合テスト/E2Eテスト → **35 統合テスト + smoke spec 追加** (issue G 解消)
+> - テスト合計: 20/20 → **84/84** 通過
+>
 > 生成日: 2026-02-07
 
 ## 1. 現状：何が実装されていて、どう動作するか
