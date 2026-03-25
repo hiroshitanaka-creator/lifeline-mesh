@@ -26,3 +26,21 @@ Protocol Version: **1.1**
 
 - 破壊的変更を含むPRは、移行手順とロールバック手順を同時に提出する。
 - Go/No-Go判定時に互換ゲート結果を必須確認とする。
+
+## Transport 抽象アダプタ仕様
+
+外部連携アダプタは `crypto/transport.js` の `BaseTransport` インターフェースに準拠する。
+
+### 必須実装
+- `send(payload)`: メッセージペイロードを送信する。`Promise<void>` を返す。
+- `capabilities`: `{ canSend, canReceive, requiresUserInteraction }` を含む静的オブジェクト。
+
+### 登録方法
+```js
+transportManager.register('custom', new MyCustomTransport());
+```
+
+### 互換要件
+- `payload` は `DMeshMessage` 型（`types/transport.d.ts` 参照）。
+- 送信失敗時は `Error` を throw する（アダプタ内でサイレント無視しない）。
+- バージョン差分のある受信データは `version` フィールドで識別し、不明版は拒否する。
