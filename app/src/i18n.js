@@ -266,7 +266,7 @@ const translations = {
   }
 };
 
-let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || 'ja';
+let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || 'en';
 
 export function getLang() {
   return currentLang;
