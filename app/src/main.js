@@ -39,6 +39,7 @@ import {
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
 import { createTransportManager } from '../../crypto/transport.js';
+import { t as tr, setLang, getLang, applyTranslations } from './i18n.js';
 
 
 /* =========================
@@ -50,10 +51,10 @@ let bleManagerFactory = () => new BLEManager();
 let transportManager = null;
 
 const DELIVERY_UI_STATUS = {
-  UNSENT: "未送信",
-  RETRYING: "再送中",
-  DELIVERED: "配信済み",
-  FAILED: "失敗"
+  UNSENT: 'unsent',
+  RETRYING: 'retrying',
+  DELIVERED: 'delivered',
+  FAILED: 'failed'
 };
 
 const BLE_CONFIG_STORAGE_KEY = "lifeline:bleProtocolConfig";
@@ -96,7 +97,14 @@ function setDeliveryStatus(status, detail = '') {
     [DELIVERY_UI_STATUS.FAILED]: 'delivery-failed'
   };
 
-  chipEl.textContent = status;
+  const textKeyMap = {
+    [DELIVERY_UI_STATUS.UNSENT]: 'delivery.status.unsent',
+    [DELIVERY_UI_STATUS.RETRYING]: 'delivery.status.retrying',
+    [DELIVERY_UI_STATUS.DELIVERED]: 'delivery.status.delivered',
+    [DELIVERY_UI_STATUS.FAILED]: 'delivery.status.failed'
+  };
+
+  chipEl.textContent = tr(textKeyMap[status] || 'delivery.status.unsent');
   chipEl.className = `delivery-chip ${classMap[status] || 'delivery-unsent'}`;
   detailEl.textContent = detail || 'No additional details';
 }
@@ -107,24 +115,22 @@ function renderFailureGuide(state, details = {}) {
     return;
   }
 
-  const base = '失敗時は「再送」→「Clipboard」→「File/QR」の順で迂回してください。';
-
   if (state === 'failed') {
-    guideEl.textContent = `送信が失敗しました（${details.error || 'unknown'}）。${base}`;
+    guideEl.textContent = tr('delivery.guide.failed', { error: details.error || 'unknown' });
     return;
   }
 
   if (state === 'fallback') {
-    guideEl.textContent = `BLE再送上限に到達したため、代替経路へ切替中です。${base}`;
+    guideEl.textContent = tr('delivery.guide.fallback');
     return;
   }
 
   if (state === 'retrying') {
-    guideEl.textContent = `再送中です（attempt ${details.attempt || '?'}）。しばらく待って再確認してください。`;
+    guideEl.textContent = tr('delivery.guide.retrying', { attempt: String(details.attempt || '?') });
     return;
   }
 
-  guideEl.textContent = '送信失敗時は、まず再送を実行し、必要であれば Clipboard / File / QR に切り替えてください。';
+  guideEl.textContent = tr('delivery.guide.default');
 }
 
 async function refreshOutboxSnapshot() {
@@ -637,46 +643,14 @@ function updateMessageDraftMetrics() {
 }
 
 function getDisasterTemplateContent(templateKey) {
-  const templates = {
-    safety: [
-      '【安否確認】',
-      '氏名: ',
-      '現在地: ',
-      '状態: 無事 / 軽傷 / 重傷',
-      '必要な支援: ',
-      '同行者: ',
-      '次の連絡予定: '
-    ].join('\n'),
-    supplies: [
-      '【物資支援依頼】',
-      '場所: ',
-      '必要物資: 水 / 食料 / 毛布 / 衛生用品 / その他',
-      '人数: ',
-      '緊急度: 高 / 中 / 低',
-      '受け渡し可能時間: ',
-      '連絡先情報: '
-    ].join('\n'),
-    evacuation: [
-      '【避難連絡】',
-      '出発地点: ',
-      '避難先: ',
-      '移動手段: 徒歩 / 車 / その他',
-      '同行者人数: ',
-      '危険情報: ',
-      '到着予定時刻: '
-    ].join('\n'),
-    medical: [
-      '【医療支援要請】',
-      '場所: ',
-      '対象者: ',
-      '症状・けが: ',
-      '意識: あり / なし',
-      '呼吸: あり / なし',
-      '必要な処置・搬送: '
-    ].join('\n')
+  const keyMap = {
+    safety: 'template.safety.content',
+    supplies: 'template.supplies.content',
+    evacuation: 'template.evacuation.content',
+    medical: 'template.medical.content'
   };
-
-  return templates[templateKey] || '';
+  const i18nKey = keyMap[templateKey];
+  return i18nKey ? tr(i18nKey) : '';
 }
 
 window.applyDisasterTemplate = function() {
@@ -684,19 +658,19 @@ window.applyDisasterTemplate = function() {
   const contentEl = document.getElementById('content');
   const key = selector?.value || '';
   if (!key) {
-    setStatus(false, 'テンプレートを選択してください');
+    setStatus(false, tr('status.templateSelect'));
     return;
   }
 
   const template = getDisasterTemplateContent(key);
   if (!template) {
-    setStatus(false, 'テンプレートの読み込みに失敗しました');
+    setStatus(false, tr('status.templateLoadFail'));
     return;
   }
 
   const current = contentEl.value?.trim();
   if (current) {
-    const shouldOverwrite = confirm('既存のメッセージを上書きしますか？');
+    const shouldOverwrite = confirm(tr('status.templateOverwrite'));
     if (!shouldOverwrite) {
       return;
     }
@@ -705,7 +679,7 @@ window.applyDisasterTemplate = function() {
   contentEl.value = template;
   updateMessageDraftMetrics();
   contentEl.focus();
-  setStatus(true, 'テンプレートを適用しました。必要項目を入力してください。');
+  setStatus(true, tr('status.templateApplied'));
 };
 
 function getLocalSignPKB64(my) {
@@ -779,9 +753,9 @@ window.initOrLoad = async function() {
 };
 
 window.copyMyId = async function() {
-  const t = document.getElementById("my-id").textContent;
-  if (!t || t === "(not loaded)") return alert("Generate keys first");
-  await navigator.clipboard.writeText(t);
+  const idText = document.getElementById("my-id").textContent;
+  if (!idText || !idText.trim().startsWith('{')) return alert("Generate keys first");
+  await navigator.clipboard.writeText(idText);
   setStatus(true, "Public ID copied to clipboard");
 };
 
@@ -904,10 +878,10 @@ window.resetAll = async function() {
 
   await resetDatabase();
 
-  document.getElementById("my-id").textContent = "(not loaded)";
-  document.getElementById("contacts-view").textContent = "(none)";
-  document.getElementById("recipient-select").innerHTML = `<option value="">Select Recipient</option>`;
-  document.getElementById("group-select").innerHTML = `<option value="">Select Group</option>`;
+  document.getElementById("my-id").textContent = tr('keys.notLoaded');
+  document.getElementById("contacts-view").textContent = tr('contacts.none');
+  document.getElementById("recipient-select").innerHTML = `<option value="">${tr('contacts.recipient.placeholder')}</option>`;
+  document.getElementById("group-select").innerHTML = `<option value="">${tr('encrypt.group.select')}</option>`;
   document.getElementById("encrypted").textContent = "";
   document.getElementById("decrypted").textContent = "";
   setStatus(true, "All data deleted");
@@ -1375,7 +1349,7 @@ window.decryptMsg = async function() {
 ========================= */
 window.showQRCode = async function() {
   const idText = document.getElementById("my-id").textContent;
-  if (!idText || idText === "(not loaded)") {
+  if (!idText || !idText.trim().startsWith('{')) {
     return alert("Generate keys first");
   }
 
@@ -1523,6 +1497,12 @@ window.__lifelineTest = {
 ========================= */
 (async () => {
   try {
+    // Initialize i18n and language toggle
+    setLang(getLang());
+    document.getElementById('lang-toggle')?.addEventListener('click', () => {
+      setLang(getLang() === 'ja' ? 'en' : 'ja');
+    });
+
     bindUIActions();
     const migrationResult = await migrateLegacyV1IfNeeded();
     initBLE();  // Initialize Bluetooth
