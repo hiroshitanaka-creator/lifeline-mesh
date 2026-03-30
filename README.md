@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-84%2F84%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-116%2F116%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -22,7 +22,7 @@ This project could save lives, but it needs contributors to grow.
 | Priority | Task | Skills | Notes |
 |----------|------|--------|-------|
 | 🟡 High | **BLE GATT Server (peripheral mode)** | Web Bluetooth API | Client-only today; acting as relay requires GATT server |
-| 🟡 High | **Multi-hop mesh routing** | Protocol design, JS | MeshRouter Phase 1 (1-hop) is done; Phase 2 (N-hop) is not |
+| 🟡 High | **Multi-hop mesh routing UI integration** | Protocol design, JS | MeshRouter Phase 2 (N-hop) library is done; UI/app integration is not |
 | 🟡 High | **UI/UX Overhaul** | Design, CSS, Accessibility | Functional but not polished |
 | 🟢 Good First | **Documentation i18n** | Any language | Good first issue |
 | 🟢 Good First | **Real Playwright E2E** | Testing, browser automation | Smoke spec exists; real browser run needs CI Playwright install |
@@ -109,16 +109,18 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ## 🔬 Testing
 
-All tests passing: **84/84 ✓**
+All tests passing: **116/116 ✓**
 
 | Suite | Count | Command |
 |---|---|---|
 | Crypto core unit | 22 | `npm run test:crypto` |
 | Test vectors | 27 | `npm run test:vectors` |
 | BLE + transport integration | 18 | `npm run test:integration` (partial) |
+| BLE mesh relay integration | 5 | `npm run test:integration` (partial) |
 | Group messaging integration | 3 | `npm run test:integration` (partial) |
-| Mesh router integration | 14 | `npm run test:integration` (partial) |
-| **Total** | **84** | `npm run test:unit && npm run test:integration` |
+| Mesh router integration (Phase 1) | 14 | `npm run test:integration` (partial) |
+| Mesh router integration (Phase 2) | 27 | `npm run test:integration` (partial) |
+| **Total** | **116** | `npm run test:unit && npm run test:integration` |
 
 ```bash
 # Run everything
@@ -309,12 +311,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 **Current Version**: 0.1.0 (v0.1.0 release gate passed; prototype quality)
 
 ### Implemented ✅
-- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 84/84 tests passing
+- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 116/116 tests passing
 - Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
 - Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
 - BLE store-and-forward: outbox, inbox, retry, offline queuing
 - Group messaging MVP (Sender Keys / DMESH_GROUP_V1 protocol)
 - MeshRouter Phase 1: 1-hop relay with deduplication and hop budgets
+- MeshRouter Phase 2: N-hop proactive routing via route advertisements (opt-in, `enableRouting: true`)
 - Multi-job CI (lint, typecheck, unit, integration, compat, E2E)
 - GitHub Pages deployment (Vite build)
 - Comprehensive docs and threat model
@@ -322,7 +325,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 ### Not Yet Implemented ⚠️
 - BLE GATT server (peripheral/relay mode) — client-only by design for Phase 1
 - MeshRouter runtime integration in app UI — module exists and is tested standalone
-- Multi-hop mesh routing (MeshRouter Phase 2)
+- MeshRouter Phase 2 runtime integration in app UI — module exists, tested standalone, not yet wired into the app
 - Real Playwright E2E in CI (spec exists; requires `npm run test:e2e:install`)
 - typecheck coverage for `app/src/` and `bluetooth/` (tsconfig.runtime.json surfaces gaps)
 - Mobile apps, LoRa integration, post-quantum crypto
