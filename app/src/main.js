@@ -4,7 +4,7 @@
 import * as DMesh from '../../crypto/core.js';
 import * as GroupMesh from '../../crypto/group.js';
 import { BLEManager } from '../../bluetooth/ble-manager.js';
-import { MeshRouter } from '../../bluetooth/mesh-router.js';
+import { createRuntimeMeshWiring } from './runtime-mesh.js';
 import { encryptKeys, decryptKeys, checkPasswordStrength } from '../../crypto/key-backup.js';
 import nacl from 'tweetnacl';
 import * as naclUtil from 'tweetnacl-util';
@@ -40,7 +40,6 @@ import {
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
 import { createTransportManager } from '../../crypto/transport.js';
-import { createRuntimeMeshWiring } from './runtime-mesh.js';
 
 
 /* =========================
@@ -50,7 +49,7 @@ let bleManager = null;
 let lastEncryptedMessage = null;
 let bleManagerFactory = () => new BLEManager();
 let transportManager = null;
-let runtimeMeshWiring = null;
+let runtimeMesh = null;
 
 const DELIVERY_UI_STATUS = {
   UNSENT: "未送信",
@@ -274,36 +273,25 @@ function renderBleTransportState(state, details = {}) {
   refreshInboxSnapshot();
 }
 
-function renderMeshRelayRuntimeState() {
+function renderMeshRelayState() {
   const stateEl = document.getElementById('mesh-relay-state');
-  if (!stateEl || !runtimeMeshWiring) {
+  if (!stateEl || !runtimeMesh) {
     return;
   }
 
-  const relayState = runtimeMeshWiring.relayState;
+  const state = runtimeMesh.relayState;
   stateEl.textContent = JSON.stringify({
-    localPeerId: relayState.localPeerId,
-    connectedPeers: relayState.connectedPeerIds,
-    connectedPeerNames: relayState.connectedPeerNames,
-    seenTransfers: relayState.seenTransfers,
-    forwardedCount: relayState.forwardedCount,
-    droppedNoEgressCount: relayState.droppedNoEgressCount,
-    lastRelayEvent: relayState.lastRelayEvent,
-    lastForwardedMsgId: relayState.lastForwardedMsgId,
-    lastIngressPeerId: relayState.lastIngressPeerId,
-    lastRelayAt: relayState.lastRelayAt
+    localPeerId: state.localPeerId,
+    connectedPeerId: state.connectedPeerId,
+    connectedPeerName: state.connectedPeerName,
+    seenTransfers: state.seenTransfers,
+    relayForwardedCount: state.relayForwardedCount,
+    relayNoEgressCount: state.relayNoEgressCount,
+    lastRelayEvent: state.lastRelayEvent,
+    lastForwardedMsgId: state.lastForwardedMsgId,
+    lastIngressPeerId: state.lastIngressPeerId,
+    lastRelayAt: state.lastRelayAt
   }, null, 2);
-}
-
-function initRuntimeMesh() {
-  runtimeMeshWiring = createRuntimeMeshWiring({
-    BLEManagerCtor: BLEManager,
-    MeshRouterCtor: MeshRouter,
-    transportManager,
-    onStateChange: () => renderMeshRelayRuntimeState()
-  });
-  bleManagerFactory = (overrides = {}) => runtimeMeshWiring.createBleManager(overrides);
-  renderMeshRelayRuntimeState();
 }
 
 function initBLE() {
@@ -313,7 +301,10 @@ function initBLE() {
     return;
   }
 
-  bleManager = bleManagerFactory();
+  bleManager = bleManagerFactory({
+    transportManager,
+    router: runtimeMesh?.router || null
+  });
 
   const savedBleConfig = loadSavedBleProtocolConfig();
   if (savedBleConfig) {
@@ -333,7 +324,7 @@ function initBLE() {
       deviceEl.textContent = '(none)';
     }
 
-    runtimeMeshWiring?.registerConnection(bleManager, connected, device);
+    runtimeMesh?.onConnectionChange(connected, device);
   };
 
   bleManager.onMessageReceived = (message) => {
@@ -349,12 +340,16 @@ function initBLE() {
     renderBleTransportState(state, details);
   };
 
+  bleManager.onForward = async (message, ingressPeerId) => {
+    await runtimeMesh?.onForward(message, ingressPeerId);
+  };
+
   bleManager.onError = (code, error) => {
     setStatus(false, formatErrorMessage(`Bluetooth error (${code})`, error));
     console.error('BLE Error:', code, error);
   };
 
-  renderMeshRelayRuntimeState();
+  renderMeshRelayState();
 }
 
 function initTransportLayer() {
@@ -366,6 +361,13 @@ function initTransportLayer() {
   transportManager.onError = (error, transportName) => {
     setStatus(false, `Transport error (${transportName}): ${error.message}`);
   };
+}
+
+function initRuntimeMesh() {
+  runtimeMesh = createRuntimeMeshWiring({
+    onStateChange: () => renderMeshRelayState()
+  });
+  renderMeshRelayState();
 }
 
 function getEncryptedMessageFromUI() {
@@ -806,7 +808,7 @@ window.initOrLoad = async function() {
     });
 
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
-    runtimeMeshWiring?.updateLocalPeerId(myId.fp);
+    runtimeMesh?.updateLocalPeerId(myId.fp);
     await refreshContacts();
     await refreshGroups();
     await refreshOutboxSnapshot();
@@ -1540,17 +1542,14 @@ if ('serviceWorker' in navigator) {
 
 window.__lifelineTest = {
   BLEManager,
-  MeshRouter,
   setBleManager(manager) {
     bleManager = manager;
   },
   setBleManagerFactory(factory) {
     bleManagerFactory = factory;
   },
-  setRuntimeMeshWiring(wiring) {
-    runtimeMeshWiring = wiring;
-    bleManagerFactory = (overrides = {}) => runtimeMeshWiring.createBleManager(overrides);
-    renderMeshRelayRuntimeState();
+  getRuntimeMeshState() {
+    return runtimeMesh?.relayState || null;
   },
   resetBle() {
     bleManager = null;
