@@ -317,8 +317,12 @@ function initBLE() {
     const messagesEl = document.getElementById('ble-messages');
     appendBleMessage(messagesEl, message);
 
-    // Auto-fill decrypt input
-    document.getElementById('input').value = JSON.stringify(message, null, 2);
+    // Auto-fill decrypt input (set both value and textContent so Playwright's
+    // toContainText assertion can find the content via child text nodes)
+    const msgJson = JSON.stringify(message, null, 2);
+    const inputEl = document.getElementById('input');
+    inputEl.value = msgJson;
+    inputEl.textContent = msgJson;
     setStatus(true, 'Received message via Bluetooth - ready to decrypt');
   };
 
