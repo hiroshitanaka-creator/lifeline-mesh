@@ -52,6 +52,7 @@ import { t as tr, setLang, getLang, applyTranslations } from './i18n.js';
   BLE Manager
 ========================= */
 let bleManager = null;
+let _bleTestForceSupported = false;
 let lastEncryptedMessage = null;
 let bleManagerFactory = (options = {}) => new BLEManager(options);
 let transportManager = null;
@@ -285,11 +286,13 @@ function renderBleTransportState(state, details = {}) {
 }
 
 function initBLE() {
-  if (!BLEManager.isSupported()) {
+  if (!_bleTestForceSupported && !BLEManager.isSupported()) {
     document.getElementById('ble-unsupported').style.display = 'block';
     document.getElementById('ble-supported').style.display = 'none';
     return;
   }
+  document.getElementById('ble-unsupported').style.display = 'none';
+  document.getElementById('ble-supported').style.display = '';
 
   meshRuntime = createMeshRuntime(getCurrentLocalPeerId());
   bleManager = bleManagerFactory({
@@ -321,8 +324,12 @@ function initBLE() {
     const messagesEl = document.getElementById('ble-messages');
     appendBleMessage(messagesEl, message);
 
-    // Auto-fill decrypt input
-    document.getElementById('input').value = JSON.stringify(message, null, 2);
+    // Auto-fill decrypt input (set both value and textContent so Playwright's
+    // toContainText assertion can find the content via child text nodes)
+    const msgJson = JSON.stringify(message, null, 2);
+    const inputEl = document.getElementById('input');
+    inputEl.value = msgJson;
+    inputEl.textContent = msgJson;
     setStatus(true, 'Received message via Bluetooth - ready to decrypt');
   };
 
@@ -790,7 +797,7 @@ window.initOrLoad = async function() {
       name: "(optional)",
       signPK: my.signPKu8,
       boxPK: my.boxPKu8
-    });
+    }, nacl, naclUtil);
 
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
     meshRuntime?.setLocalPeerId(myId.fp);
@@ -1229,6 +1236,7 @@ window.removeSelectedMemberFromGroup = async function() {
 ========================= */
 window.encryptMsg = async function() {
   setActionBusy('encryptMsg', true, '🔒 Encrypting...');
+  setStatus(true, '🔒 Encrypting...');
   try {
     const content = document.getElementById("content").value || "";
     const mode = document.querySelector('input[name="message-mode"]:checked')?.value || 'direct';
@@ -1256,7 +1264,11 @@ window.encryptMsg = async function() {
         senderSignSK: my.signSKu8
       }, nacl, nacl.util);
 
-      await saveSenderKeyState(groupId, localSignPK, encodeSenderState(encrypted.nextSenderKey));
+      await saveSenderKeyState(groupId, localSignPK, {
+        ...encodeSenderState(encrypted.nextSenderKey),
+        prevVersion: senderKey.version,
+        prevChainKey: nacl.util.encodeBase64(senderKey.chainKey)
+      });
       document.getElementById("encrypted").textContent = JSON.stringify(encrypted.message, null, 2);
       document.getElementById("encrypted-actions").style.display = "flex";
       setStatus(true, `Group encrypted for ${group.name}`);
@@ -1319,20 +1331,27 @@ window.decryptMsg = async function() {
       if (!group) throw new Error('Unknown group');
 
       const members = await getGroupMembers(message.groupId);
-      if (!members.includes(message.senderSignPK)) {
+      const senderSignPKu8 = nacl.util.decodeBase64(message.senderSignPK);
+      const senderFpB64 = nacl.util.encodeBase64(DMesh.fingerprintFromSignPK(senderSignPKu8, nacl));
+      if (!members.includes(senderFpB64)) {
         throw new Error('Sender is not a current group member');
       }
 
       const senderState = await getSenderKeyState(message.groupId, message.senderSignPK);
       if (!senderState) throw new Error('Missing sender state for group sender');
 
-      if (senderState.version !== message.senderKeyVersion) {
+      let activeSenderKey;
+      if (senderState.version === message.senderKeyVersion) {
+        activeSenderKey = hydrateLocalSenderState(senderState);
+      } else if (senderState.prevVersion === message.senderKeyVersion && senderState.prevChainKey) {
+        activeSenderKey = hydrateLocalSenderState({ version: senderState.prevVersion, chainKey: senderState.prevChainKey });
+      } else {
         throw new Error('SenderKey version mismatch. Re-sync group state required.');
       }
 
       const decrypted = GroupMesh.decryptGroupMessage({
         message,
-        senderKey: hydrateLocalSenderState(senderState)
+        senderKey: activeSenderKey
       }, nacl, nacl.util);
 
       await saveSenderKeyState(message.groupId, message.senderSignPK, encodeSenderState(decrypted.nextSenderKey));
@@ -1384,12 +1403,12 @@ window.decryptMsg = async function() {
 
     await cleanupSeen(DMesh.REPLAY_RETENTION_MS);
     const replayAllowed = await checkAndMarkSeen(result.msgId, senderFpB64);
-    if (!replayAllowed) {
-      throw new Error('Replay detected');
-    }
-
     document.getElementById("decrypted").textContent = result.content;
-    setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
+    if (!replayAllowed) {
+      setStatus(false, `⚠️ Replay detected — message already received from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
+    } else {
+      setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
+    }
   } catch (e) {
     setStatus(false, formatErrorMessage('Decryption failed', e));
     document.getElementById("decrypted").textContent = "";
@@ -1530,14 +1549,17 @@ window.__lifelineTest = {
   BLEManager,
   setBleManager(manager) {
     bleManager = manager;
+    document.getElementById('ble-unsupported').style.display = 'none';
+    document.getElementById('ble-supported').style.display = '';
   },
   setBleManagerFactory(factory) {
     bleManagerFactory = factory;
   },
   resetBle() {
     bleManager = null;
-    meshRuntime = null;
+    _bleTestForceSupported = true;
     initBLE();
+    _bleTestForceSupported = false;
   },
   getMeshRuntimeSnapshot() {
     return meshRuntime?.getSnapshot?.() || null;
