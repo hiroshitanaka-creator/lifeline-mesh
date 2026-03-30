@@ -26,42 +26,33 @@ test("runtime mesh: connection updates neighbor state", () => {
   assert(snapshot.neighborCount === 0, "neighbor removed on disconnect");
 });
 
-test("runtime mesh: relay callback forwards when egress differs from ingress", async () => {
+test("runtime mesh: relay callback is observability-only in single-link runtime", async () => {
   const runtime = createMeshRuntime("node-b");
   runtime.onConnectionChange(true, { id: "peer-c" });
 
-  const forwarded = [];
   const result = await runtime.onForward({
     message: { msgId: "relay-1", rcpt: "peer-c" },
-    ingressPeerId: "peer-a",
-    sendRelay: (message) => {
-      forwarded.push(message.msgId);
-    }
+    ingressPeerId: "peer-a"
   });
 
   const snapshot = runtime.getSnapshot();
-  assert(result.action === "relayed", "relay action recorded");
-  assert(forwarded.length === 1, "message forwarded once");
-  assert(snapshot.relayed === 1, "relayed counter increments");
+  assert(result.action === "skipped", "single-link runtime skips relay");
+  assert(result.reason === "single-link-no-egress", "skip reason captures no distinct egress link");
+  assert(snapshot.skipped === 1, "skipped counter increments");
 });
 
 test("runtime mesh: relay callback skips ingress-only links", async () => {
   const runtime = createMeshRuntime("node-b");
   runtime.onConnectionChange(true, { id: "peer-a" });
 
-  let sendCount = 0;
   const result = await runtime.onForward({
     message: { msgId: "relay-2" },
-    ingressPeerId: "peer-a",
-    sendRelay: () => {
-      sendCount += 1;
-    }
+    ingressPeerId: "peer-a"
   });
 
   const snapshot = runtime.getSnapshot();
   assert(result.action === "skipped", "skip action recorded");
   assert(result.reason === "ingress-only-link", "skip reason identifies ingress-only path");
-  assert(sendCount === 0, "no relay send is attempted");
   assert(snapshot.skipped === 1, "skipped counter increments");
 });
 

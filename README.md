@@ -315,7 +315,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
 - Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
 - BLE store-and-forward: outbox, inbox, retry, offline queuing
-- App runtime mesh wiring: BLEManager now injects MeshRouter and exposes relay/route/peer runtime state in UI
+- App runtime mesh observability: BLEManager now injects MeshRouter and exposes relay/route/peer runtime state in UI
 - Group messaging MVP (Sender Keys / DMESH_GROUP_V1 protocol)
 - MeshRouter Phase 1: 1-hop relay with deduplication and hop budgets
 - MeshRouter Phase 2: N-hop proactive routing via route advertisements (opt-in, `enableRouting: true`)

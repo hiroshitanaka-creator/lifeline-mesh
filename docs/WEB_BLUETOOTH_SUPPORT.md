@@ -42,9 +42,9 @@ Web Bluetooth in Lifeline Mesh additionally requires:
 - Unsupported browsers show a warning in the Bluetooth section.
 - Messaging still works with non-BLE fallback transports.
 
-## Manual 3-Device Relay Drill (A → B → C)
+## Manual 3-Device Single-Link Runtime Drill (A → B → C)
 
-Use this drill to validate runtime relay wiring and UI state visibility in real hardware conditions.
+Use this drill to validate router wiring and runtime state visibility in real hardware conditions.
 
 1. **Prepare three devices**:
    - Device A, B, C open Lifeline Mesh over HTTPS (or localhost).
@@ -56,12 +56,12 @@ Use this drill to validate runtime relay wiring and UI state visibility in real 
 3. **Send A → B**:
    - On A, encrypt a message and send via Bluetooth to B.
    - On B, verify message appears in **Received Messages via Bluetooth** and `seenMessages` increments in the mesh runtime panel.
-4. **Relay B → C**:
-   - While B is connected to C, trigger relay by sending/receiving a forwardable payload.
-   - Confirm on B that `relayAttempts` increments and either:
-     - `relayed` increments when egress differs from ingress, or
-     - `skipped` increments with `reason: ingress-only-link` when only ingress link exists.
-   - Confirm C receives the relayed payload and can decrypt it.
+4. **Forward-decision observability on B**:
+   - While B is connected to C, receive a forwardable payload on B.
+   - Confirm on B that `relayAttempts` increments and `skipped` increments with one of:
+     - `ingress-only-link` (same active link as ingress), or
+     - `single-link-no-egress` (single-link runtime has no distinct egress peer).
+   - This confirms router decision plumbing is active even though this runtime does not perform multi-link relay.
 5. **Validate direct paths still work**:
    - Send a normal direct BLE message B → C from the existing send button.
    - Confirm outbox/inbox snapshots still update and decrypt path remains unchanged.

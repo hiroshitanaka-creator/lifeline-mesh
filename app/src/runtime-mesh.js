@@ -6,7 +6,6 @@ export function createMeshRuntime(localPeerId = 'unknown') {
     localPeerId,
     connectedPeerId: null,
     relayAttempts: 0,
-    relayed: 0,
     skipped: 0,
     lastRelay: null
   };
@@ -32,7 +31,7 @@ export function createMeshRuntime(localPeerId = 'unknown') {
         router.addNeighbor(state.connectedPeerId);
       }
     },
-    async onForward({ message, ingressPeerId, sendRelay }) {
+    async onForward({ message, ingressPeerId }) {
       state.relayAttempts += 1;
 
       if (!state.connectedPeerId) {
@@ -47,25 +46,16 @@ export function createMeshRuntime(localPeerId = 'unknown') {
         return state.lastRelay;
       }
 
-      if (state.connectedPeerId === ingressPeerId) {
-        state.skipped += 1;
-        state.lastRelay = {
-          action: 'skipped',
-          reason: 'ingress-only-link',
-          ingressPeerId,
-          msgId: message?.msgId || null,
-          at: Date.now()
-        };
-        return state.lastRelay;
-      }
-
-      await sendRelay(message);
-      state.relayed += 1;
+      // App runtime currently has a single active BLE link, and BLEManager
+      // derives ingressPeerId from that same active device id.
+      // Observability only: no distinct egress link exists in this runtime.
+      state.skipped += 1;
       state.lastRelay = {
-        action: 'relayed',
-        reason: 'egress-send',
+        action: 'skipped',
+        reason: state.connectedPeerId === ingressPeerId
+          ? 'ingress-only-link'
+          : 'single-link-no-egress',
         ingressPeerId,
-        egressPeerId: state.connectedPeerId,
         msgId: message?.msgId || null,
         at: Date.now()
       };
@@ -76,7 +66,6 @@ export function createMeshRuntime(localPeerId = 'unknown') {
         localPeerId: state.localPeerId,
         connectedPeerId: state.connectedPeerId,
         relayAttempts: state.relayAttempts,
-        relayed: state.relayed,
         skipped: state.skipped,
         lastRelay: state.lastRelay,
         seenMessages: router.seenCount,

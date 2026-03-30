@@ -343,13 +343,12 @@ function initBLE() {
 
     const relayResult = await meshRuntime.onForward({
       message,
-      ingressPeerId,
-      sendRelay: async (forwardMsg) => bleManager.sendMessage(forwardMsg, { recipientFp: forwardMsg.rcpt || 'relay' })
+      ingressPeerId
     });
 
     renderMeshRuntimeState();
-    if (relayResult.action === 'relayed') {
-      setStatus(true, `Relayed message ${relayResult.msgId || '(no-msg-id)'} to ${relayResult.egressPeerId}`);
+    if (relayResult.action === 'skipped') {
+      setStatus(true, `Router considered forwarding for ${relayResult.msgId || '(no-msg-id)'}, skipped (${relayResult.reason})`);
     }
   };
 
