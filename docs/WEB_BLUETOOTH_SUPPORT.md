@@ -58,9 +58,7 @@ Use this drill to validate router wiring and runtime state visibility in real ha
    - On B, verify message appears in **Received Messages via Bluetooth** and `seenMessages` increments in the mesh runtime panel.
 4. **Forward-decision observability on B**:
    - While B is connected to C, receive a forwardable payload on B.
-   - Confirm on B that `relayAttempts` increments and `skipped` increments with one of:
-     - `ingress-only-link` (same active link as ingress), or
-     - `single-link-no-egress` (single-link runtime has no distinct egress peer).
+   - Confirm on B that `relayAttempts` increments and `skipped` increments with `reason: ingress-only-link`.
    - This confirms router decision plumbing is active even though this runtime does not perform multi-link relay.
 5. **Validate direct paths still work**:
    - Send a normal direct BLE message B → C from the existing send button.

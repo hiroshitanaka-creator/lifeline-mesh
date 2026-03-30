@@ -325,6 +325,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ### Not Yet Implemented ⚠️
 - BLE GATT server (peripheral/relay mode) — client-only by design for Phase 1
+- Multi-link app runtime relay execution — current app runtime is single-link and exposes router observability only
 - MeshRouter Phase 2 runtime integration in app UI — module exists, tested standalone, not yet wired into the app
 - Real Playwright E2E in CI (spec exists; requires `npm run test:e2e:install`)
 - typecheck coverage for `app/src/` and `bluetooth/` (tsconfig.runtime.json surfaces gaps)

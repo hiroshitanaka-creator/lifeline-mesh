@@ -26,18 +26,18 @@ test("runtime mesh: connection updates neighbor state", () => {
   assert(snapshot.neighborCount === 0, "neighbor removed on disconnect");
 });
 
-test("runtime mesh: relay callback is observability-only in single-link runtime", async () => {
+test("runtime mesh: relay callback is ingress-only in single-link runtime", async () => {
   const runtime = createMeshRuntime("node-b");
   runtime.onConnectionChange(true, { id: "peer-c" });
 
   const result = await runtime.onForward({
     message: { msgId: "relay-1", rcpt: "peer-c" },
-    ingressPeerId: "peer-a"
+    ingressPeerId: "peer-c"
   });
 
   const snapshot = runtime.getSnapshot();
   assert(result.action === "skipped", "single-link runtime skips relay");
-  assert(result.reason === "single-link-no-egress", "skip reason captures no distinct egress link");
+  assert(result.reason === "ingress-only-link", "skip reason captures single-link ingress reality");
   assert(snapshot.skipped === 1, "skipped counter increments");
 });
 

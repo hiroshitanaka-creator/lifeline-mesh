@@ -46,15 +46,13 @@ export function createMeshRuntime(localPeerId = 'unknown') {
         return state.lastRelay;
       }
 
-      // App runtime currently has a single active BLE link, and BLEManager
-      // derives ingressPeerId from that same active device id.
-      // Observability only: no distinct egress link exists in this runtime.
+      // App runtime currently has a single active BLE link.
+      // BLEManager derives ingressPeerId from that same active device id,
+      // so forwarding is always skipped as ingress-only in this topology.
       state.skipped += 1;
       state.lastRelay = {
         action: 'skipped',
-        reason: state.connectedPeerId === ingressPeerId
-          ? 'ingress-only-link'
-          : 'single-link-no-egress',
+        reason: 'ingress-only-link',
         ingressPeerId,
         msgId: message?.msgId || null,
         at: Date.now()
