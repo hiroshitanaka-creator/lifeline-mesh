@@ -52,6 +52,28 @@ If BLE scanning or sending fails:
 4. Disconnect and rescan from the app UI.
 5. Use Clipboard / File / QR fallback if BLE remains unavailable.
 
+## Manual 3-Device Relay Drill (A → B → C)
+
+Use this drill after building the app to validate runtime relay wiring and UI state.
+
+1. **Prepare identities**
+   - On devices **A**, **B**, and **C**, open Lifeline Mesh, run **Generate / Load Keys**, and exchange contacts.
+2. **Establish first BLE hop (A ↔ B)**
+   - On **B**, open Bluetooth Relay section and connect to **A**.
+   - Confirm **B** shows a connected peer and Mesh Relay state panel is populated.
+3. **Send A → B**
+   - On **A**, encrypt a direct message for **C** and send over BLE to **B**.
+   - On **B**, confirm inbound message appears in BLE received list and relay state updates (`seenTransfers`, `lastRelayEvent`).
+4. **Establish second BLE hop (B ↔ C)**
+   - Connect **B** to **C** (or attach a second relay-capable link for C as your platform allows).
+   - Confirm **B** relay state shows both peer paths available for forwarding.
+5. **Validate relay B → C**
+   - Re-send from **A** (or replay from outbox on **B**) and verify **C** receives/decrypts.
+   - On **B**, verify `forwardedCount` increments and `lastRelayEvent` becomes `forwarded`.
+6. **Negative-path check**
+   - Disconnect **C** and send A → B again.
+   - Confirm **B** relay state records `no-egress-peer` and increments `droppedNoEgressCount`.
+
 ## Maintenance Guidance
 
 Browser BLE behavior changes over time. Revalidate periodically:
@@ -59,4 +81,3 @@ Browser BLE behavior changes over time. Revalidate periodically:
 - Major Chrome / Edge release cycles.
 - New platform versions (Windows/macOS/Android).
 - Hardware-specific BLE regressions reported by users.
-
