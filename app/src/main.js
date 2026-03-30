@@ -4,6 +4,7 @@
 import * as DMesh from '../../crypto/core.js';
 import * as GroupMesh from '../../crypto/group.js';
 import { BLEManager } from '../../bluetooth/ble-manager.js';
+import { createRuntimeMeshWiring } from './runtime-mesh.js';
 import { encryptKeys, decryptKeys, checkPasswordStrength } from '../../crypto/key-backup.js';
 import nacl from 'tweetnacl';
 import * as naclUtil from 'tweetnacl-util';
@@ -46,8 +47,9 @@ import { createTransportManager } from '../../crypto/transport.js';
 ========================= */
 let bleManager = null;
 let lastEncryptedMessage = null;
-let bleManagerFactory = () => new BLEManager();
+let bleManagerFactory = (options = {}) => new BLEManager(options);
 let transportManager = null;
+let runtimeMesh = null;
 
 const DELIVERY_UI_STATUS = {
   UNSENT: "未送信",
@@ -271,6 +273,27 @@ function renderBleTransportState(state, details = {}) {
   refreshInboxSnapshot();
 }
 
+function renderMeshRelayState() {
+  const stateEl = document.getElementById('mesh-relay-state');
+  if (!stateEl || !runtimeMesh) {
+    return;
+  }
+
+  const state = runtimeMesh.relayState;
+  stateEl.textContent = JSON.stringify({
+    localPeerId: state.localPeerId,
+    connectedPeerId: state.connectedPeerId,
+    connectedPeerName: state.connectedPeerName,
+    seenTransfers: state.seenTransfers,
+    relayForwardedCount: state.relayForwardedCount,
+    relayNoEgressCount: state.relayNoEgressCount,
+    lastRelayEvent: state.lastRelayEvent,
+    lastForwardedMsgId: state.lastForwardedMsgId,
+    lastIngressPeerId: state.lastIngressPeerId,
+    lastRelayAt: state.lastRelayAt
+  }, null, 2);
+}
+
 function initBLE() {
   if (!BLEManager.isSupported()) {
     document.getElementById('ble-unsupported').style.display = 'block';
@@ -278,7 +301,10 @@ function initBLE() {
     return;
   }
 
-  bleManager = bleManagerFactory();
+  bleManager = bleManagerFactory({
+    transportManager,
+    router: runtimeMesh?.router || null
+  });
 
   const savedBleConfig = loadSavedBleProtocolConfig();
   if (savedBleConfig) {
@@ -297,6 +323,8 @@ function initBLE() {
       renderBleTransportState('disconnected');
       deviceEl.textContent = '(none)';
     }
+
+    runtimeMesh?.onConnectionChange(connected, device);
   };
 
   bleManager.onMessageReceived = (message) => {
@@ -312,10 +340,16 @@ function initBLE() {
     renderBleTransportState(state, details);
   };
 
+  bleManager.onForward = async (message, ingressPeerId) => {
+    await runtimeMesh?.onForward(message, ingressPeerId);
+  };
+
   bleManager.onError = (code, error) => {
     setStatus(false, formatErrorMessage(`Bluetooth error (${code})`, error));
     console.error('BLE Error:', code, error);
   };
+
+  renderMeshRelayState();
 }
 
 function initTransportLayer() {
@@ -327,6 +361,13 @@ function initTransportLayer() {
   transportManager.onError = (error, transportName) => {
     setStatus(false, `Transport error (${transportName}): ${error.message}`);
   };
+}
+
+function initRuntimeMesh() {
+  runtimeMesh = createRuntimeMeshWiring({
+    onStateChange: () => renderMeshRelayState()
+  });
+  renderMeshRelayState();
 }
 
 function getEncryptedMessageFromUI() {
@@ -767,6 +808,7 @@ window.initOrLoad = async function() {
     });
 
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
+    runtimeMesh?.updateLocalPeerId(myId.fp);
     await refreshContacts();
     await refreshGroups();
     await refreshOutboxSnapshot();
@@ -1506,6 +1548,9 @@ window.__lifelineTest = {
   setBleManagerFactory(factory) {
     bleManagerFactory = factory;
   },
+  getRuntimeMeshState() {
+    return runtimeMesh?.relayState || null;
+  },
   resetBle() {
     bleManager = null;
     initBLE();
@@ -1525,8 +1570,9 @@ window.__lifelineTest = {
   try {
     bindUIActions();
     const migrationResult = await migrateLegacyV1IfNeeded();
-    initBLE();  // Initialize Bluetooth
     initTransportLayer();
+    initRuntimeMesh();
+    initBLE();  // Initialize Bluetooth
     await initOrLoad();
     await refreshGroups();
     setMessageMode('direct');

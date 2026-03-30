@@ -52,6 +52,21 @@ If BLE scanning or sending fails:
 4. Disconnect and rescan from the app UI.
 5. Use Clipboard / File / QR fallback if BLE remains unavailable.
 
+## Manual 3-Device Drill (A → B → C)
+
+Use this drill to validate current relay wiring behavior in the app runtime.
+
+> Current runtime note: the app uses a single active BLE link at a time. When B only has the ingress link, relay state should show `no-egress-peer`.
+
+1. On **A**, **B**, and **C**, open the app and run **Generate / Load Keys**.
+2. Exchange contacts so A can encrypt to C.
+3. Connect **B** to **A** via BLE and send A → B (recipient C).
+4. On **B**, check **Mesh Relay Runtime State**:
+   - `seenTransfers` increments.
+   - `lastRelayEvent` becomes `no-egress-peer` if no second link exists.
+5. Disconnect B from A, connect **B** to **C**, then repeat the message flow with manual transfer as needed.
+6. Confirm C can decrypt and B state updates per connection changes.
+
 ## Maintenance Guidance
 
 Browser BLE behavior changes over time. Revalidate periodically:
@@ -59,4 +74,3 @@ Browser BLE behavior changes over time. Revalidate periodically:
 - Major Chrome / Edge release cycles.
 - New platform versions (Windows/macOS/Android).
 - Hardware-specific BLE regressions reported by users.
-
