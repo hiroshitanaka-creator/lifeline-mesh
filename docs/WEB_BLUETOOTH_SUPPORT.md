@@ -42,6 +42,28 @@ Web Bluetooth in Lifeline Mesh additionally requires:
 - Unsupported browsers show a warning in the Bluetooth section.
 - Messaging still works with non-BLE fallback transports.
 
+## Manual 3-Device Single-Link Runtime Drill (A → B → C)
+
+Use this drill to validate router wiring and runtime state visibility in real hardware conditions.
+
+1. **Prepare three devices**:
+   - Device A, B, C open Lifeline Mesh over HTTPS (or localhost).
+   - On each device, run **Generate / Load Keys**.
+2. **Build a linear topology**:
+   - Connect B to A via Bluetooth and verify B shows `connectedPeerId` for A in **Mesh Relay / Route Runtime**.
+   - Disconnect, then connect B to C and verify the same state updates for C.
+   - (Because Web Bluetooth is client-only in this phase, you validate links sequentially.)
+3. **Send A → B**:
+   - On A, encrypt a message and send via Bluetooth to B.
+   - On B, verify message appears in **Received Messages via Bluetooth** and `seenMessages` increments in the mesh runtime panel.
+4. **Forward-decision observability on B**:
+   - While B is connected to C, receive a forwardable payload on B.
+   - Confirm on B that `relayAttempts` increments and `skipped` increments with `reason: ingress-only-link`.
+   - This confirms router decision plumbing is active even though this runtime does not perform multi-link relay.
+5. **Validate direct paths still work**:
+   - Send a normal direct BLE message B → C from the existing send button.
+   - Confirm outbox/inbox snapshots still update and decrypt path remains unchanged.
+
 ## Troubleshooting Checklist
 
 If BLE scanning or sending fails:
@@ -59,4 +81,3 @@ Browser BLE behavior changes over time. Revalidate periodically:
 - Major Chrome / Edge release cycles.
 - New platform versions (Windows/macOS/Android).
 - Hardware-specific BLE regressions reported by users.
-

@@ -315,6 +315,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
 - Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
 - BLE store-and-forward: outbox, inbox, retry, offline queuing
+- App runtime mesh observability: BLEManager now injects MeshRouter and exposes relay/route/peer runtime state in UI
 - Group messaging MVP (Sender Keys / DMESH_GROUP_V1 protocol)
 - MeshRouter Phase 1: 1-hop relay with deduplication and hop budgets
 - MeshRouter Phase 2: N-hop proactive routing via route advertisements (opt-in, `enableRouting: true`)
@@ -324,7 +325,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ### Not Yet Implemented ⚠️
 - BLE GATT server (peripheral/relay mode) — client-only by design for Phase 1
-- MeshRouter runtime integration in app UI — module exists and is tested standalone
+- Multi-link app runtime relay execution — current app runtime is single-link and exposes router observability only
 - MeshRouter Phase 2 runtime integration in app UI — module exists, tested standalone, not yet wired into the app
 - Real Playwright E2E in CI (spec exists; requires `npm run test:e2e:install`)
 - typecheck coverage for `app/src/` and `bluetooth/` (tsconfig.runtime.json surfaces gaps)

@@ -44,6 +44,7 @@ import {
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
 import { createTransportManager } from '../../crypto/transport.js';
+import { createMeshRuntime } from './runtime-mesh.js';
 import { t as tr, setLang, getLang, applyTranslations } from './i18n.js';
 
 
@@ -53,8 +54,9 @@ import { t as tr, setLang, getLang, applyTranslations } from './i18n.js';
 let bleManager = null;
 let _bleTestForceSupported = false;
 let lastEncryptedMessage = null;
-let bleManagerFactory = () => new BLEManager();
+let bleManagerFactory = (options = {}) => new BLEManager(options);
 let transportManager = null;
+let meshRuntime = null;
 
 const DELIVERY_UI_STATUS = {
   UNSENT: 'unsent',
@@ -292,7 +294,11 @@ function initBLE() {
   document.getElementById('ble-unsupported').style.display = 'none';
   document.getElementById('ble-supported').style.display = '';
 
-  bleManager = bleManagerFactory();
+  meshRuntime = createMeshRuntime(getCurrentLocalPeerId());
+  bleManager = bleManagerFactory({
+    transportManager,
+    router: meshRuntime.router
+  });
 
   const savedBleConfig = loadSavedBleProtocolConfig();
   if (savedBleConfig) {
@@ -301,8 +307,8 @@ function initBLE() {
   renderBleProtocolConfig(bleManager.getProtocolConfig());
 
   bleManager.onConnectionChange = (connected, device) => {
-    const statusEl = document.getElementById('ble-status');
     const deviceEl = document.getElementById('ble-device-name');
+    meshRuntime?.onConnectionChange(connected, device);
 
     if (connected) {
       renderBleTransportState('connected');
@@ -311,6 +317,7 @@ function initBLE() {
       renderBleTransportState('disconnected');
       deviceEl.textContent = '(none)';
     }
+    renderMeshRuntimeState();
   };
 
   bleManager.onMessageReceived = (message) => {
@@ -328,12 +335,31 @@ function initBLE() {
 
   bleManager.onTransferState = ({ state, ...details }) => {
     renderBleTransportState(state, details);
+    renderMeshRuntimeState();
   };
 
   bleManager.onError = (code, error) => {
     setStatus(false, formatErrorMessage(`Bluetooth error (${code})`, error));
     console.error('BLE Error:', code, error);
   };
+
+  bleManager.onForward = async (message, ingressPeerId) => {
+    if (!meshRuntime) {
+      return;
+    }
+
+    const relayResult = await meshRuntime.onForward({
+      message,
+      ingressPeerId
+    });
+
+    renderMeshRuntimeState();
+    if (relayResult.action === 'skipped') {
+      setStatus(true, `Router considered forwarding for ${relayResult.msgId || '(no-msg-id)'}, skipped (${relayResult.reason})`);
+    }
+  };
+
+  renderMeshRuntimeState();
 }
 
 function initTransportLayer() {
@@ -345,6 +371,27 @@ function initTransportLayer() {
   transportManager.onError = (error, transportName) => {
     setStatus(false, `Transport error (${transportName}): ${error.message}`);
   };
+}
+
+function getCurrentLocalPeerId() {
+  try {
+    const raw = document.getElementById('my-id')?.textContent;
+    if (!raw || raw.startsWith('(')) {
+      return 'unknown';
+    }
+    const parsed = JSON.parse(raw);
+    return parsed.fp || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function renderMeshRuntimeState() {
+  const stateEl = document.getElementById('mesh-runtime-view');
+  if (!stateEl || !meshRuntime) {
+    return;
+  }
+  stateEl.textContent = JSON.stringify(meshRuntime.getSnapshot(), null, 2);
 }
 
 function getEncryptedMessageFromUI() {
@@ -753,6 +800,8 @@ window.initOrLoad = async function() {
     }, nacl, naclUtil);
 
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
+    meshRuntime?.setLocalPeerId(myId.fp);
+    renderMeshRuntimeState();
     await refreshContacts();
     await refreshGroups();
     await refreshOutboxSnapshot();
@@ -1512,6 +1561,9 @@ window.__lifelineTest = {
     initBLE();
     _bleTestForceSupported = false;
   },
+  getMeshRuntimeSnapshot() {
+    return meshRuntime?.getSnapshot?.() || null;
+  },
   simulateBleReceive(message) {
     if (!bleManager?.onMessageReceived) {
       throw new Error('BLE manager not initialized');
@@ -1545,8 +1597,8 @@ function updateKdfStatus() {
     bindUIActions();
     updateKdfStatus();
     const migrationResult = await migrateLegacyV1IfNeeded();
-    initBLE();  // Initialize Bluetooth
     initTransportLayer();
+    initBLE();  // Initialize Bluetooth
     await initOrLoad();
     await refreshGroups();
     setMessageMode('direct');
