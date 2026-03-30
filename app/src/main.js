@@ -4,8 +4,13 @@
 import * as DMesh from '../../crypto/core.js';
 import * as GroupMesh from '../../crypto/group.js';
 import { BLEManager } from '../../bluetooth/ble-manager.js';
-import { encryptKeys, decryptKeys, checkPasswordStrength } from '../../crypto/key-backup.js';
+import { encryptKeys, decryptKeys, checkPasswordStrength, isArgon2Available } from '../../crypto/key-backup.js';
 import nacl from 'tweetnacl';
+
+// Bundle argon2-browser (WASM embedded) so Argon2id KDF is available offline.
+// This sets window.argon2, which key-backup.js detects via isArgon2Available().
+import argon2 from 'argon2-browser/dist/argon2-bundled.min.js';
+window.argon2 = argon2;
 import * as naclUtil from 'tweetnacl-util';
 import QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -1493,6 +1498,16 @@ window.__lifelineTest = {
 };
 
 /* =========================
+  KDF Status
+========================= */
+function updateKdfStatus() {
+  const el = document.getElementById('kdf-status');
+  if (!el) return;
+  const key = isArgon2Available() ? 'keys.kdf.argon2id' : 'keys.kdf.pbkdf2';
+  el.innerHTML = tr(key);
+}
+
+/* =========================
   Auto-init
 ========================= */
 (async () => {
@@ -1501,9 +1516,11 @@ window.__lifelineTest = {
     setLang(getLang());
     document.getElementById('lang-toggle')?.addEventListener('click', () => {
       setLang(getLang() === 'ja' ? 'en' : 'ja');
+      updateKdfStatus();
     });
 
     bindUIActions();
+    updateKdfStatus();
     const migrationResult = await migrateLegacyV1IfNeeded();
     initBLE();  // Initialize Bluetooth
     initTransportLayer();

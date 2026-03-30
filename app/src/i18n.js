@@ -28,6 +28,8 @@ const translations = {
     'keys.mgmt.export': '<strong>Export:</strong> Download your secret keys as encrypted JSON (password-protected)',
     'keys.mgmt.import': '<strong>Import:</strong> Restore keys from backup file',
     'keys.mgmt.warning': '<strong>⚠️ Warning:</strong> Keep exported keys secure. Anyone with your secret keys can impersonate you.',
+    'keys.kdf.argon2id': '🔐 Key export uses <strong>Argon2id</strong> (memory-hard, recommended)',
+    'keys.kdf.pbkdf2': '⚠️ Key export uses <strong>PBKDF2</strong> fallback (Argon2id unavailable)',
 
     /* --- Section 2: Contacts --- */
     'contacts.heading': '2) Contacts',
@@ -156,6 +158,8 @@ const translations = {
     'keys.mgmt.export': '<strong>エクスポート:</strong> 秘密鍵をパスワード保護されたJSONでダウンロード',
     'keys.mgmt.import': '<strong>インポート:</strong> バックアップファイルから鍵を復元',
     'keys.mgmt.warning': '<strong>⚠️ 注意:</strong> エクスポートした鍵は安全に保管してください。秘密鍵があれば誰でもあなたになりすますことができます。',
+    'keys.kdf.argon2id': '🔐 鍵のエクスポートには <strong>Argon2id</strong>（メモリハード・推奨）を使用',
+    'keys.kdf.pbkdf2': '⚠️ 鍵のエクスポートには <strong>PBKDF2</strong> フォールバックを使用（Argon2id 利用不可）',
 
     /* --- Section 2: Contacts --- */
     'contacts.heading': '2) 連絡先',

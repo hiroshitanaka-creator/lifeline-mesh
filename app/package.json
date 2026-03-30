@@ -12,6 +12,7 @@
     "vite-plugin-singlefile": "^2.0.0"
   },
   "dependencies": {
+    "argon2-browser": "^1.18.0",
     "html5-qrcode": "^2.3.8",
     "qrcode": "^1.5.4",
     "tweetnacl": "^1.0.3",
