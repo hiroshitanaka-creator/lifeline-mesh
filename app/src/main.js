@@ -47,7 +47,7 @@ import { createTransportManager } from '../../crypto/transport.js';
 ========================= */
 let bleManager = null;
 let lastEncryptedMessage = null;
-let bleManagerFactory = () => new BLEManager();
+let bleManagerFactory = (options = {}) => new BLEManager(options);
 let transportManager = null;
 let runtimeMesh = null;
 
