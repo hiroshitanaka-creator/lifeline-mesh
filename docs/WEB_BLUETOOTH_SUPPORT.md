@@ -42,6 +42,30 @@ Web Bluetooth in Lifeline Mesh additionally requires:
 - Unsupported browsers show a warning in the Bluetooth section.
 - Messaging still works with non-BLE fallback transports.
 
+## Manual 3-Device Relay Drill (A → B → C)
+
+Use this drill to validate runtime relay wiring and UI state visibility in real hardware conditions.
+
+1. **Prepare three devices**:
+   - Device A, B, C open Lifeline Mesh over HTTPS (or localhost).
+   - On each device, run **Generate / Load Keys**.
+2. **Build a linear topology**:
+   - Connect B to A via Bluetooth and verify B shows `connectedPeerId` for A in **Mesh Relay / Route Runtime**.
+   - Disconnect, then connect B to C and verify the same state updates for C.
+   - (Because Web Bluetooth is client-only in this phase, you validate links sequentially.)
+3. **Send A → B**:
+   - On A, encrypt a message and send via Bluetooth to B.
+   - On B, verify message appears in **Received Messages via Bluetooth** and `seenMessages` increments in the mesh runtime panel.
+4. **Relay B → C**:
+   - While B is connected to C, trigger relay by sending/receiving a forwardable payload.
+   - Confirm on B that `relayAttempts` increments and either:
+     - `relayed` increments when egress differs from ingress, or
+     - `skipped` increments with `reason: ingress-only-link` when only ingress link exists.
+   - Confirm C receives the relayed payload and can decrypt it.
+5. **Validate direct paths still work**:
+   - Send a normal direct BLE message B → C from the existing send button.
+   - Confirm outbox/inbox snapshots still update and decrypt path remains unchanged.
+
 ## Troubleshooting Checklist
 
 If BLE scanning or sending fails:
@@ -59,4 +83,3 @@ Browser BLE behavior changes over time. Revalidate periodically:
 - Major Chrome / Edge release cycles.
 - New platform versions (Windows/macOS/Android).
 - Hardware-specific BLE regressions reported by users.
-
