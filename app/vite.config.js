@@ -8,4 +8,9 @@ export default defineConfig({
     outDir: 'dist',
     assetsInlineLimit: Infinity,
   },
+  server: {
+    fs: {
+      allow: ['..'],
+    },
+  },
 });
