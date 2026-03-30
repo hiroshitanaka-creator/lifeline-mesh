@@ -28,7 +28,8 @@
 
 import {
   MeshRouter,
-  ROUTE_ADV_KIND
+  ROUTE_ADV_KIND,
+  ROUTING_DEFAULTS
 } from "../../bluetooth/mesh-router.js";
 
 let passed = 0;
@@ -169,8 +170,8 @@ test("processRouteAdv: installs route to adv originator via ingressPeerId", () =
 test("processRouteAdv: installs routes for destinations carried in the adv", () => {
   const router = makeRouter("A");
   const adv = makeAdv("B", 1, [
-    { dst: "C", hops: 0 }, // C is a direct neighbor of B → A sees C at 1 hop
-    { dst: "D", hops: 1 } // D is 1 hop from B → A sees D at 2 hops
+    { dst: "C", hops: 0 },  // C is a direct neighbor of B → A sees C at 1 hop
+    { dst: "D", hops: 1 }   // D is 1 hop from B → A sees D at 2 hops
   ]);
 
   router.processRouteAdv(adv, "B");
