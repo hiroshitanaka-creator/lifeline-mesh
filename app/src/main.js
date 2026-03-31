@@ -1716,7 +1716,7 @@ function updateKdfStatus() {
     await initOrLoad();
     await refreshGroups();
     setMessageMode('direct');
-    const savedMode = localStorage.getItem(APP_MODE_STORAGE_KEY) || 'emergency';
+    const savedMode = localStorage.getItem(APP_MODE_STORAGE_KEY) || 'advanced';
     setAppMode(savedMode);
     await refreshOutboxSnapshot();
     await refreshInboxSnapshot();
