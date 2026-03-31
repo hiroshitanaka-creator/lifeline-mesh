@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-116%2F116%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-162%2F162%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -21,11 +21,10 @@ This project could save lives, but it needs contributors to grow.
 
 | Priority | Task | Skills | Notes |
 |----------|------|--------|-------|
-| 🟡 High | **BLE GATT Server (peripheral mode)** | Web Bluetooth API | Client-only today; acting as relay requires GATT server |
-| 🟡 High | **Multi-hop mesh routing UI integration** | Protocol design, JS | MeshRouter Phase 2 (N-hop) library is done; UI/app integration is not |
+| 🟡 High | **BLE GATT Server — native backend** | Capacitor / noble / Web Bluetooth API | `IGATTBackend` interface is defined; a native adapter (Capacitor, noble) needs to plug in |
 | 🟡 High | **UI/UX Overhaul** | Design, CSS, Accessibility | Functional but not polished |
 | 🟢 Good First | **Documentation i18n** | Any language | Good first issue |
-| 🟢 Good First | **Real Playwright E2E** | Testing, browser automation | Smoke spec exists; real browser run needs CI Playwright install |
+| 🟢 Good First | **Playwright E2E expansion** | Testing, browser automation | Real-browser harness exists; coverage can be widened |
 
 **Read the full roadmap**: [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
 
@@ -73,16 +72,22 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - 🔒 Sender Keys protocol (DMESH_GROUP_V1, domain-separated)
 - 🔄 Chain key ratcheting per message (forward secrecy within session)
 
-### BLE Store-and-Forward
-- 📡 BLE client: connect to nearby devices and exchange messages
-- 📤 Outbox queuing when offline; automatic flush on reconnect
+### BLE Mesh Networking
+- 📡 **Multi-link runtime**: multiple concurrent BLE connections with real store-and-forward relay
+- 🔀 **N-hop routing**: MeshRouter Phase 2 proactive route advertisements (auto-enabled at ≥2 links)
+- 📤 Outbox queuing (priority / TTL / per-link targeting) with automatic flush on reconnect
 - 📥 Inbox persistence for received messages
-- ⚠️ **GATT server (peripheral/relay mode) is not implemented** – BLE acts as client only
+- 🔌 **GATT server layer** (`bluetooth/gatt-server.js`): pluggable `IGATTBackend` interface ready for native adapters (Capacitor, noble)
+
+### Operator Panel
+- 📊 Live mesh state dashboard: active links, route table, relay counters, route-advertisement activity
+- 🟢 Color-coded link health (green ≥2 links, yellow = 1, red = 0)
+- 🛡️ XSS-safe rendering; polling interval configurable
 
 ### User Experience
 - 📱 Offline-first (works without internet)
 - 🆘 Emergency Mode (simplified, form-based disaster messaging)
-- 📋 Copy/paste encrypted messages
+- 📋 Copy/paste encrypted messages; keyboard shortcuts (Ctrl+K/E/D)
 - 📚 Embedded documentation
 - 🌐 No server required
 - 🚀 Relay-agnostic (send via any channel: QR, Bluetooth, USB, radio, etc.)
@@ -111,18 +116,21 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ## 🔬 Testing
 
-All tests passing: **116/116 ✓**
+All tests passing: **162/162 ✓**
 
 | Suite | Count | Command |
 |---|---|---|
 | Crypto core unit | 22 | `npm run test:crypto` |
 | Test vectors | 27 | `npm run test:vectors` |
-| BLE + transport integration | 18 | `npm run test:integration` (partial) |
-| BLE mesh relay integration | 5 | `npm run test:integration` (partial) |
-| Group messaging integration | 3 | `npm run test:integration` (partial) |
-| Mesh router integration (Phase 1) | 14 | `npm run test:integration` (partial) |
-| Mesh router integration (Phase 2) | 27 | `npm run test:integration` (partial) |
-| **Total** | **116** | `npm run test:unit && npm run test:integration` |
+| BLE + transport integration | 18 | `npm run test:integration` |
+| Group messaging integration | 3 | `npm run test:integration` |
+| Mesh router Phase 1 integration | 14 | `npm run test:integration` |
+| BLE mesh relay integration | 5 | `npm run test:integration` |
+| Mesh router Phase 2 integration | 27 | `npm run test:integration` |
+| App runtime mesh integration | 10 | `npm run test:integration` |
+| GATT server integration | 17 | `npm run test:integration` |
+| Operator panel unit | 19 | `npm run test:integration` |
+| **Total** | **162** | `npm run test:unit && npm run test:integration` |
 
 ```bash
 # Run everything
@@ -155,12 +163,19 @@ CI note:
 ### Repository Structure
 ```
 /app            Demo UI (Vite build, ES6 modules, PWA)
-/bluetooth      BLE manager + MeshRouter (Phase 1: 1-hop relay)
-/crypto         Core crypto, group messaging, transport, store
+  src/
+    runtime-mesh.js   Multi-link mesh runtime (addLink/removeLink, route adv)
+    operator-panel.js Live operator dashboard (polling, XSS-safe renderer)
+/bluetooth      BLE manager + MeshRouter + GATT server layer
+  ble-manager.js      BLE central/client with store-and-forward
+  mesh-router.js      Phase 1 (1-hop dedup) + Phase 2 (N-hop route adv)
+  gatt-server.js      GATT peripheral layer with pluggable IGATTBackend
+/crypto         Core crypto, group messaging, transport, store (schema v4)
 /spec           Threat model + protocol specification
 /tools          Test vectors, validator, SRI generator
 /docs           Usage guide, FAQ, phase progress
 /tests          Integration and E2E test suites
+/types          TypeScript declaration files (.d.ts)
 .github/        CI/CD workflows, templates
 ```
 
@@ -183,6 +198,16 @@ Alice                  Relay Network              Bob
   |                          |                 7. Read
 ```
 
+### Multi-link Relay Topology
+```
+[Alice] ──BLE-link-A──► [Relay node]  ──BLE-link-B──► [Bob]
+                              │
+                         runtime-mesh.js
+                         MeshRouter (Phase 1+2)
+                         route adv broadcast (30 s interval)
+```
+The relay node maintains a `Map<peerId, BLEManager>`. Incoming messages on link-A are forwarded to all other links (egress loop). Route advertisements propagate the topology automatically when ≥2 links are active.
+
 ---
 
 ## 🔒 Security
@@ -200,7 +225,7 @@ Alice                  Relay Network              Bob
 ❌ **Post-quantum security**: Vulnerable to quantum computers
 ❌ **Perfect forward secrecy**: Long-term signing keys used
 ❌ **BLE availability**: Web Bluetooth is effectively Chromium-only and requires a secure context (`https://` or `http://localhost`)
-❌ **BLE topology**: Current runtime is BLE client mode only (no GATT peripheral/server relay mode)
+❌ **BLE peripheral mode**: `bluetooth/gatt-server.js` defines the `IGATTBackend` interface but a native backend (Capacitor, noble) is not yet provided
 ❌ **Offline bootstrap**: First load must happen in a served origin; `file://` is unsupported. After first load, cached app assets can be used offline
 ⚠️ **Fallback path**: Clipboard/File/QR relay is the compatibility baseline when BLE is unavailable
 
@@ -247,7 +272,7 @@ The workflow runs `npm install --prefix app && npm run build --prefix app` and d
 
 ### Production Checklist
 - [x] SRI added to all CDN scripts
-- [x] All tests passing
+- [x] All tests passing (162/162)
 - [x] Documentation complete
 - [ ] Consider self-hosting TweetNaCl (avoid CDN dependency)
 - [x] Add Content Security Policy headers
@@ -259,7 +284,7 @@ The workflow runs `npm install --prefix app && npm run build --prefix app` and d
 
 ### Run Tests
 ```bash
-# All tests (crypto + vectors)
+# All tests (crypto + vectors + integration)
 npm test
 
 # Crypto only
@@ -267,6 +292,9 @@ cd crypto && npm test
 
 # Test vectors
 cd tools && npm run validate-vectors
+
+# Integration suites
+npm run test:integration
 ```
 
 ### Generate Test Vectors
@@ -283,9 +311,9 @@ npm run generate-sri
 ```
 
 ### Technology Stack
-- **Languages**: JavaScript (ES6 modules), TypeScript (types only)
+- **Languages**: JavaScript (ES6 modules), TypeScript (declaration files in `types/`)
 - **Crypto**: TweetNaCl 1.0.3 + tweetnacl-util + argon2 (key backup)
-- **Storage**: IndexedDB (browser, via crypto/store.js)
+- **Storage**: IndexedDB schema v4 (priority, TTL, linkId fields) via `crypto/store.js`
 - **Build**: Vite (app/), no build needed for crypto/tools
 
 ---
@@ -301,11 +329,11 @@ We welcome all contributors! Here's how to get started:
 4. Join the discussion in GitHub Discussions
 
 ### Ways to Contribute
-- **Code**: BLE GATT server (peripheral), multi-hop mesh, UI polish
+- **Code**: Native GATT backend (Capacitor/noble), UI polish, LoRa/radio transport
 - **Security**: Reviews, audits, vulnerability research
 - **Design**: UX for emergency scenarios, accessibility
 - **Docs**: Translations, tutorials, examples
-- **Testing**: Real Playwright E2E, test vectors, edge cases
+- **Testing**: E2E coverage expansion, test vectors, edge cases
 - **Ideas**: Protocol improvements, use cases, partnerships
 
 ### Development Setup
@@ -325,25 +353,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 **Current Version**: 0.1.0 (v0.1.0 release gate passed; prototype quality)
 
 ### Implemented ✅
-- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 116/116 tests passing
+- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 162/162 tests passing
 - Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
 - Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
-- BLE store-and-forward: outbox, inbox, retry, offline queuing
-- App runtime mesh observability: BLEManager now injects MeshRouter and exposes relay/route/peer runtime state in UI
+- **Multi-link BLE runtime**: concurrent links via `Map<peerId, BLEManager>`, egress relay loop, route-adv broadcast
+- **MeshRouter Phase 1 + Phase 2**: 1-hop relay with dedup; N-hop proactive routing with route advertisements (auto-enabled at ≥2 links)
+- **GATT server layer**: `bluetooth/gatt-server.js` with pluggable `IGATTBackend` + `MockGATTBackend` for unit testing
+- **Operator Panel**: live mesh monitoring UI (`app/src/operator-panel.js`), mounted in app with 2 s polling
+- **Outbox schema v4**: `priority` / `ttl` / `linkId` fields, IDB migration, `getOutboxForLink()` / `getOutboxByMinPriority()` / `purgeExpiredOutbox()`
+- **TypeScript declarations**: `types/runtime-mesh.d.ts`, `types/operator-panel.d.ts`, `types/gatt-server.d.ts`
 - Group messaging MVP (Sender Keys / DMESH_GROUP_V1 protocol)
-- MeshRouter Phase 1: 1-hop relay with deduplication and hop budgets
-- MeshRouter Phase 2: N-hop proactive routing via route advertisements (opt-in, `enableRouting: true`)
-- Multi-job CI (lint, typecheck, unit, integration, compat, E2E)
+- Multi-job CI (lint, typecheck, unit, integration, compat, security, E2E)
 - GitHub Pages deployment (Vite build)
 - Comprehensive docs and threat model
 
 ### Not Yet Implemented ⚠️
-- BLE GATT server (peripheral/relay mode) — client-only by design for Phase 1
-- Multi-link app runtime relay execution — current app runtime is single-link and exposes router observability only
-- MeshRouter Phase 2 runtime integration in app UI — module exists, tested standalone, not yet wired into the app
-- Real Playwright E2E in CI (spec exists; requires `npm run test:e2e:install`)
-- typecheck coverage for `app/src/` and `bluetooth/` (tsconfig.runtime.json surfaces gaps)
+- **GATT server native backend**: `IGATTBackend` interface is ready; a Capacitor or noble adapter is needed for real peripheral/relay mode
 - Mobile apps, LoRa integration, post-quantum crypto
+- Full TypeScript strict-mode coverage for `app/src/` and `bluetooth/`
 
 **Full Roadmap**: [DEEP_DIVE_ANALYSIS.md](DEEP_DIVE_ANALYSIS.md) | [TECHNICAL_ROADMAP.md](TECHNICAL_ROADMAP.md)
 
@@ -393,6 +420,8 @@ A **mesh** network ensures that if one connection breaks, others remain.
 
 **Lifeline Mesh** is built to stay connected when everything else goes dark.
 
+---
+
 ## Contributing / Contributions
 
 Thanks for your interest in contributing!
@@ -401,8 +430,8 @@ Thanks for your interest in contributing!
 - Please keep changes **small and focused** (one topic per PR).
 - Please avoid touching **security**, **workflows**, or **CI configuration** unless explicitly discussed first.
 - Please describe:
-  1) **Why** the change is needed  
-  2) **How** you tested it  
+  1) **Why** the change is needed
+  2) **How** you tested it
   3) Any **risks / edge cases**
 
 ### Maintainer review policy
