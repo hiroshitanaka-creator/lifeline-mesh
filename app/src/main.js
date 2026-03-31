@@ -53,6 +53,7 @@ import { t as tr, setLang, getLang, applyTranslations } from './i18n.js';
   BLE Manager
 ========================= */
 let bleManager = null;
+const bleManagers = new Map(); // deviceId → BLEManager (all active connections)
 let _bleTestForceSupported = false;
 let lastEncryptedMessage = null;
 let bleManagerFactory = (options = {}) => new BLEManager(options);
@@ -294,34 +295,25 @@ function renderBleTransportState(state, details = {}) {
   refreshInboxSnapshot();
 }
 
-function initBLE() {
-  if (!_bleTestForceSupported && !BLEManager.isSupported()) {
-    document.getElementById('ble-unsupported').style.display = 'block';
-    document.getElementById('ble-supported').style.display = 'none';
-    return;
-  }
-  document.getElementById('ble-unsupported').style.display = 'none';
-  document.getElementById('ble-supported').style.display = '';
-
-  meshRuntime = createMeshRuntime(getCurrentLocalPeerId());
-  bleManager = bleManagerFactory({
-    transportManager,
-    router: meshRuntime.router
-  });
-
-  const savedBleConfig = loadSavedBleProtocolConfig();
-  if (savedBleConfig) {
-    bleManager.updateProtocolConfig(savedBleConfig);
-  }
-  renderBleProtocolConfig(bleManager.getProtocolConfig());
-
-  bleManager.onConnectionChange = (connected, device) => {
+/**
+ * Attach all BLE event callbacks to a BLEManager instance.
+ * Extracted so that each new connection (multi-link) can reuse the same wiring.
+ * Registers/unregisters the manager with meshRuntime.addLink/removeLink directly,
+ * avoiding the legacy onConnectionChange path that always resolves to a no-op stub.
+ *
+ * @param {BLEManager} manager
+ * @returns {BLEManager} the same manager (for chaining)
+ */
+function _attachBleCallbacks(manager) {
+  manager.onConnectionChange = (connected, device) => {
     const deviceEl = document.getElementById('ble-device-name');
-    const peerId = device?.id || null;
-    if (connected && peerId && meshRuntime) {
-      meshRuntime.addLink(peerId, bleManager);
-    } else if (!connected && meshRuntime) {
-      meshRuntime.removeLink(peerId || meshRuntime.state.connectedPeerId);
+
+    if (connected && device?.id) {
+      bleManagers.set(device.id, manager);
+      meshRuntime?.addLink(device.id, manager);
+    } else if (!connected && device?.id) {
+      bleManagers.delete(device.id);
+      meshRuntime?.removeLink(device.id);
     }
 
     if (connected) {
@@ -329,12 +321,12 @@ function initBLE() {
       deviceEl.textContent = device.name || device.id || 'Unknown device';
     } else {
       renderBleTransportState('disconnected');
-      deviceEl.textContent = '(none)';
+      deviceEl.textContent = bleManagers.size > 0 ? '(multi-link active)' : '(none)';
     }
     renderMeshRuntimeState();
   };
 
-  bleManager.onMessageReceived = (message) => {
+  manager.onMessageReceived = async (message) => {
     const messagesEl = document.getElementById('ble-messages');
     appendBleMessage(messagesEl, message);
 
@@ -344,20 +336,30 @@ function initBLE() {
     const inputEl = document.getElementById('input');
     inputEl.value = msgJson;
     inputEl.textContent = msgJson;
-    setStatus(true, 'Received message via Bluetooth - ready to decrypt');
+    setStatus(true, tr('status.bleReceived'));
+
+    // Auto-decrypt encrypted messages (dmesh-msg / dmesh-group-msg only).
+    // Route advertisements and other protocol messages are skipped.
+    if (message.kind === 'dmesh-msg' || message.kind === 'dmesh-group-msg') {
+      try {
+        await window.decryptMsg();
+      } catch (e) {
+        console.warn('[BLE] Auto-decrypt failed (may not be for this node):', e.message);
+      }
+    }
   };
 
-  bleManager.onTransferState = ({ state, ...details }) => {
+  manager.onTransferState = ({ state, ...details }) => {
     renderBleTransportState(state, details);
     renderMeshRuntimeState();
   };
 
-  bleManager.onError = (code, error) => {
+  manager.onError = (code, error) => {
     setStatus(false, formatErrorMessage(`Bluetooth error (${code})`, error));
     console.error('BLE Error:', code, error);
   };
 
-  bleManager.onForward = async (message, ingressPeerId) => {
+  manager.onForward = async (message, ingressPeerId) => {
     if (!meshRuntime) {
       return;
     }
@@ -372,6 +374,31 @@ function initBLE() {
       setStatus(true, `Router considered forwarding for ${relayResult.msgId || '(no-msg-id)'}, skipped (${relayResult.reason})`);
     }
   };
+
+  return manager;
+}
+
+function initBLE() {
+  if (!_bleTestForceSupported && !BLEManager.isSupported()) {
+    document.getElementById('ble-unsupported').style.display = 'block';
+    document.getElementById('ble-supported').style.display = 'none';
+    return;
+  }
+  document.getElementById('ble-unsupported').style.display = 'none';
+  document.getElementById('ble-supported').style.display = '';
+
+  bleManagers.clear();
+  meshRuntime = createMeshRuntime(getCurrentLocalPeerId());
+  bleManager = _attachBleCallbacks(bleManagerFactory({
+    transportManager,
+    router: meshRuntime.router
+  }));
+
+  const savedBleConfig = loadSavedBleProtocolConfig();
+  if (savedBleConfig) {
+    bleManager.updateProtocolConfig(savedBleConfig);
+  }
+  renderBleProtocolConfig(bleManager.getProtocolConfig());
 
   renderMeshRuntimeState();
 }
@@ -512,18 +539,33 @@ window.resetBleConfig = function() {
 };
 
 window.bleScan = async function() {
-  if (!bleManager) {
+  if (!meshRuntime) {
     setStatus(false, 'Bluetooth not supported');
     return;
+  }
+
+  // Create a fresh BLEManager for each new connection to support multi-link.
+  // Multiple simultaneous peers each get their own manager instance,
+  // all registered with meshRuntime.addLink() via _attachBleCallbacks.
+  const manager = _attachBleCallbacks(bleManagerFactory({
+    transportManager,
+    router: meshRuntime.router
+  }));
+  const savedBleConfig = loadSavedBleProtocolConfig();
+  if (savedBleConfig) {
+    manager.updateProtocolConfig(savedBleConfig);
   }
 
   try {
     renderBleTransportState('queued');
     setStatus(true, 'Scanning for devices...');
-    await bleManager.scan();
+    await manager.scan();
     renderBleTransportState('sending');
     setStatus(true, 'Connecting...');
-    await bleManager.connect();
+    await manager.connect();
+    bleManager = manager;
+    renderBleProtocolConfig(bleManager.getProtocolConfig());
+    updateMessageDraftMetrics();
     setStatus(true, 'Connected via Bluetooth!');
   } catch (e) {
     setStatus(false, formatErrorMessage('Bluetooth', e));
