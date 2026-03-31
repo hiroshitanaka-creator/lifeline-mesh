@@ -57,6 +57,7 @@ let lastEncryptedMessage = null;
 let bleManagerFactory = (options = {}) => new BLEManager(options);
 let transportManager = null;
 let meshRuntime = null;
+let pendingTemplateText = '';
 
 const DELIVERY_UI_STATUS = {
   UNSENT: 'unsent',
@@ -66,6 +67,7 @@ const DELIVERY_UI_STATUS = {
 };
 
 const BLE_CONFIG_STORAGE_KEY = "lifeline:bleProtocolConfig";
+const APP_MODE_STORAGE_KEY = "lifeline:appMode";
 const MAX_MESSAGE_BYTES = 150 * 1024;
 const MAX_BLE_CHUNKS = 255;
 const DEFAULT_BLE_CHUNK_SIZE = 140;
@@ -609,7 +611,10 @@ function bindUIActions() {
     closeQRScanner: () => window.closeQRScanner(),
     installPWA: () => window.installPWA(),
     dismissInstall: () => window.dismissInstall(),
-    applyDisasterTemplate: () => window.applyDisasterTemplate()
+    applyDisasterTemplate: () => window.applyDisasterTemplate(),
+    applyEmergencyTemplate: () => window.applyEmergencyTemplate(),
+    confirmEmergencyTemplateOverwrite: () => window.confirmEmergencyTemplateOverwrite(),
+    cancelEmergencyTemplateOverwrite: () => window.cancelEmergencyTemplateOverwrite()
   };
 
   document.querySelectorAll('[data-action]').forEach((element) => {
@@ -629,10 +634,32 @@ function bindUIActions() {
       window.setMessageMode(element.value);
     });
   });
+  document.querySelectorAll('input[name="app-mode"]').forEach((element) => {
+    element.addEventListener('change', () => {
+      window.setAppMode(element.value);
+    });
+  });
 
   document.getElementById('content')?.addEventListener('input', () => {
     updateMessageDraftMetrics();
   });
+}
+
+function setTemplateOverwritePromptVisible(visible) {
+  const promptEl = document.getElementById('template-overwrite-confirm');
+  if (promptEl) {
+    promptEl.style.display = visible ? 'block' : 'none';
+  }
+}
+
+function getDisasterTemplateMap() {
+  return {
+    safety: 'template.safety.content',
+    supplies: 'template.supplies.content',
+    evacuation: 'template.evacuation.content',
+    medical: 'template.medical.content',
+    shelter: 'template.shelter.content'
+  };
 }
 
 
@@ -702,43 +729,107 @@ function updateMessageDraftMetrics() {
 }
 
 function getDisasterTemplateContent(templateKey) {
-  const keyMap = {
-    safety: 'template.safety.content',
-    supplies: 'template.supplies.content',
-    evacuation: 'template.evacuation.content',
-    medical: 'template.medical.content'
-  };
+  const keyMap = getDisasterTemplateMap();
   const i18nKey = keyMap[templateKey];
   return i18nKey ? tr(i18nKey) : '';
 }
 
-window.applyDisasterTemplate = function() {
-  const selector = document.getElementById('disaster-template');
-  const contentEl = document.getElementById('content');
-  const key = selector?.value || '';
-  if (!key) {
-    setStatus(false, tr('status.templateSelect'));
-    return;
+function getEmergencyTemplateText(templateKey, fields = {}) {
+  const base = getDisasterTemplateContent(templateKey);
+  if (!base) {
+    return '';
   }
+  const name = (fields.name || '').trim();
+  const location = (fields.location || '').trim();
+  const status = (fields.status || '').trim();
+  const people = (fields.people || '').trim();
+  const details = (fields.details || '').trim();
+  const lines = [base];
+  if (name) lines.push(`Name/Team: ${name}`);
+  if (location) lines.push(`Location: ${location}`);
+  if (status) lines.push(`Status/Need: ${status}`);
+  if (people) lines.push(`People count: ${people}`);
+  if (details) lines.push(`Details: ${details}`);
+  return lines.join('\n');
+}
 
-  const template = getDisasterTemplateContent(key);
-  if (!template) {
+function applyTemplateToContent(templateText) {
+  const contentEl = document.getElementById('content');
+  if (!templateText) {
     setStatus(false, tr('status.templateLoadFail'));
     return;
   }
 
   const current = contentEl.value?.trim();
   if (current) {
-    const shouldOverwrite = confirm(tr('status.templateOverwrite'));
-    if (!shouldOverwrite) {
-      return;
-    }
+    pendingTemplateText = templateText;
+    setTemplateOverwritePromptVisible(true);
+    return;
   }
 
-  contentEl.value = template;
+  contentEl.value = templateText;
   updateMessageDraftMetrics();
   contentEl.focus();
+  pendingTemplateText = '';
+  setTemplateOverwritePromptVisible(false);
   setStatus(true, tr('status.templateApplied'));
+}
+
+window.confirmEmergencyTemplateOverwrite = function() {
+  if (!pendingTemplateText) {
+    return;
+  }
+  const contentEl = document.getElementById('content');
+  contentEl.value = pendingTemplateText;
+  updateMessageDraftMetrics();
+  contentEl.focus();
+  pendingTemplateText = '';
+  setTemplateOverwritePromptVisible(false);
+  setStatus(true, tr('status.templateApplied'));
+};
+
+window.cancelEmergencyTemplateOverwrite = function() {
+  pendingTemplateText = '';
+  setTemplateOverwritePromptVisible(false);
+  setStatus(true, tr('status.templateCancel'));
+};
+
+window.applyDisasterTemplate = function() {
+  const selector = document.getElementById('disaster-template');
+  const key = selector?.value || '';
+  if (!key) {
+    setStatus(false, tr('status.templateSelect'));
+    return;
+  }
+  applyTemplateToContent(getDisasterTemplateContent(key));
+};
+
+window.applyEmergencyTemplate = function() {
+  const key = document.getElementById('emergency-template')?.value || 'safety';
+  const templateText = getEmergencyTemplateText(key, {
+    name: document.getElementById('emergency-name')?.value || '',
+    location: document.getElementById('emergency-location')?.value || '',
+    status: document.getElementById('emergency-status')?.value || '',
+    people: document.getElementById('emergency-people')?.value || '',
+    details: document.getElementById('emergency-details')?.value || ''
+  });
+  applyTemplateToContent(templateText);
+};
+
+window.setAppMode = function(mode) {
+  const activeMode = mode === 'advanced' ? 'advanced' : 'emergency';
+  document.querySelectorAll('input[name="app-mode"]').forEach((el) => {
+    el.checked = el.value === activeMode;
+  });
+  const advancedEl = document.getElementById('advanced-mode-sections');
+  const emergencyEl = document.getElementById('emergency-mode-section');
+  if (advancedEl) {
+    advancedEl.style.display = activeMode === 'advanced' ? 'block' : 'none';
+  }
+  if (emergencyEl) {
+    emergencyEl.style.display = activeMode === 'emergency' ? 'block' : 'none';
+  }
+  localStorage.setItem(APP_MODE_STORAGE_KEY, activeMode);
 };
 
 function getLocalSignPKB64(my) {
@@ -1602,6 +1693,8 @@ function updateKdfStatus() {
     await initOrLoad();
     await refreshGroups();
     setMessageMode('direct');
+    const savedMode = localStorage.getItem(APP_MODE_STORAGE_KEY) || 'emergency';
+    setAppMode(savedMode);
     await refreshOutboxSnapshot();
     await refreshInboxSnapshot();
     updateMessageDraftMetrics();

@@ -66,6 +66,26 @@ When someone shares their Public ID with you:
 - Public bulletin board
 - Radio transmission (if using text encoding)
 
+## Emergency Mode (Simplified)
+
+Emergency Mode is designed for stressed conditions and reduces the path to a small set of form inputs.
+
+1. In **Mode**, choose **Emergency Mode (Simplified)**.
+2. In **Emergency Quick Message**, select a structured template:
+   - Safety check
+   - Supply request
+   - Evacuation notice
+   - Medical assistance
+   - Shelter status
+3. Fill the form fields (name/team, location, status/need, people count, details).
+4. Click **Create Emergency Message** to populate the main message content.
+5. Select recipient and click **Encrypt**.
+
+Notes:
+- If message content already exists, the app shows an in-app overwrite panel (no browser confirm dialog).
+- Mode selection is saved locally, so the app reopens in the last used mode.
+- **Advanced Mode** remains available for full contact/group/BLE workflows.
+
 ### 6. Receive and Decrypt Messages
 
 When you receive an encrypted message:

@@ -81,6 +81,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ### User Experience
 - 📱 Offline-first (works without internet)
+- 🆘 Emergency Mode (simplified, form-based disaster messaging)
 - 📋 Copy/paste encrypted messages
 - 📚 Embedded documentation
 - 🌐 No server required

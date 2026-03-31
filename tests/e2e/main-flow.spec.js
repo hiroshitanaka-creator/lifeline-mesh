@@ -229,3 +229,30 @@ test("e2e: group create -> encrypt -> decrypt roundtrip", async ({ page }) => {
   await page.getByRole("button", { name: "🔓 Decrypt" }).click();
   await expect(page.locator("#decrypted")).toHaveText("GROUP_ROUNDTRIP_MESSAGE");
 });
+
+test("emergency mode: simplified template flow + mode persistence", async ({ page }) => {
+  await boot(page);
+  const myIdentity = await getMyIdentity(page);
+  await addContact(page, myIdentity);
+  await selectFirstContact(page);
+
+  await page.getByLabel("Emergency Mode (Simplified)").check();
+  await expect(page.locator("#emergency-mode-section")).toBeVisible();
+  await expect(page.locator("#advanced-mode-sections")).toBeHidden();
+
+  await page.locator("#emergency-template").selectOption("shelter");
+  await page.locator("#emergency-name").fill("Shelter Team A");
+  await page.locator("#emergency-location").fill("District 4");
+  await page.locator("#emergency-status").fill("Operational");
+  await page.locator("#emergency-people").fill("120");
+  await page.locator("#emergency-details").fill("Need water refill in 6 hours.");
+  await page.getByRole("button", { name: "🆘 Create Emergency Message" }).click();
+
+  await expect(page.locator("#content")).toContainText("Shelter Team A");
+  await expect(page.locator("#content")).toContainText("District 4");
+  await expect(page.locator("#content")).toContainText("Need water refill in 6 hours.");
+
+  await page.reload();
+  await expect(page.getByLabel("Emergency Mode (Simplified)")).toBeChecked();
+  await expect(page.locator("#emergency-mode-section")).toBeVisible();
+});
