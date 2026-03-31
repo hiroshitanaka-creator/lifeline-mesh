@@ -51,6 +51,10 @@
     /* Install prompt */
     #install-prompt { background: #4CAF50; color: white; padding: 12px; text-align: center; display: none; position: sticky; top: 0; z-index: 100; }
     #install-prompt button { background: white; color: #4CAF50; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px; }
+    .mode-toggle { background: #f3f4f6; border-radius: 8px; padding: 12px; border: 1px solid #ddd; }
+    .mode-toggle .row label { flex: 1; min-width: 240px; }
+    .emergency-card { border: 1px solid #f59e0b; background: #fffbeb; border-radius: 8px; padding: 12px; margin: 10px 0; }
+    .confirm-inline { border: 1px solid #f59e0b; background: #fff7ed; border-radius: 8px; padding: 10px; margin: 10px 0; }
 
     /* Dark Mode Support */
     @media (prefers-color-scheme: dark) {
@@ -72,6 +76,9 @@
       a:visited { color: #a78bfa; }
       #install-prompt { background: #065f46; }
       #install-prompt button { background: #10b981; color: #fff; }
+      .mode-toggle { background: #16213e; border-color: #334155; }
+      .emergency-card { background: #3a2e0f; border-color: #f59e0b; }
+      .confirm-inline { background: #3a2e0f; border-color: #f59e0b; }
       h1, h2, h3 { color: #f0f0f0; }
       #lang-toggle { color: #eee; border-color: #666; }
       #lang-toggle:hover { background: #1a4a7a; }
@@ -93,6 +100,49 @@
     End-to-end encrypted emergency messaging • Offline-first • No server required<br>
     ✅ Ed25519 signatures • ✅ X25519 encryption • ✅ Ephemeral keys • ✅ Replay protection • ✅ TOFU
   </p>
+
+  <div class="section mode-toggle">
+    <h2 data-i18n="mode.heading">Mode</h2>
+    <p class="small" data-i18n="mode.description">Emergency Mode gives a fast, form-based path. Advanced Mode keeps full controls.</p>
+    <div class="row">
+      <label><input type="radio" name="app-mode" value="emergency" /> <span data-i18n="mode.emergency">Emergency Mode (Simplified)</span></label>
+      <label><input type="radio" name="app-mode" value="advanced" checked /> <span data-i18n="mode.advanced">Advanced Mode</span></label>
+    </div>
+  </div>
+
+  <div id="emergency-mode-section" class="section" style="display:none;">
+    <h2 data-i18n="emergency.heading">Emergency Quick Message</h2>
+    <p class="small" data-i18n="emergency.help">Fill this form and send to your selected recipient. This writes the final text into Message content automatically.</p>
+    <div class="emergency-card">
+      <label for="emergency-template" class="small" data-i18n="emergency.template.label">Message type</label>
+      <select id="emergency-template">
+        <option value="safety" data-i18n="encrypt.template.safety">Safety Check</option>
+        <option value="supplies" data-i18n="encrypt.template.supplies">Supply Request</option>
+        <option value="evacuation" data-i18n="encrypt.template.evacuation">Evacuation Notice</option>
+        <option value="medical" data-i18n="encrypt.template.medical">Medical Assistance</option>
+        <option value="shelter" data-i18n="encrypt.template.shelter">Shelter Status</option>
+      </select>
+      <div class="row">
+        <label class="small"><span data-i18n="emergency.field.name">Name / Team</span><input id="emergency-name" /></label>
+        <label class="small"><span data-i18n="emergency.field.location">Location</span><input id="emergency-location" /></label>
+      </div>
+      <label class="small"><span data-i18n="emergency.field.status">Status / Need</span><input id="emergency-status" /></label>
+      <label class="small"><span data-i18n="emergency.field.people">People count</span><input id="emergency-people" type="number" min="0" /></label>
+      <label class="small"><span data-i18n="emergency.field.details">Details</span><textarea id="emergency-details" data-i18n-placeholder="emergency.field.details.placeholder" placeholder="Short practical details"></textarea></label>
+      <div id="template-overwrite-confirm" class="confirm-inline" style="display:none;">
+        <p class="small" data-i18n="status.templateOverwriteInline">Overwrite existing message text with this emergency template?</p>
+        <div class="row">
+          <button data-action="confirmEmergencyTemplateOverwrite" data-i18n="common.overwrite">Overwrite</button>
+          <button data-action="cancelEmergencyTemplateOverwrite" data-i18n="common.cancel">Cancel</button>
+        </div>
+      </div>
+      <div class="row">
+        <button data-action="applyEmergencyTemplate" data-i18n="emergency.apply">🆘 Create Emergency Message</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="advanced-mode-sections">
 
   <div class="section">
     <h2 data-i18n="keys.heading">1) Your Keys</h2>
@@ -179,6 +229,7 @@
         <option value="supplies" data-i18n="encrypt.template.supplies">Supply Request</option>
         <option value="evacuation" data-i18n="encrypt.template.evacuation">Evacuation Notice</option>
         <option value="medical" data-i18n="encrypt.template.medical">Medical Assistance</option>
+        <option value="shelter" data-i18n="encrypt.template.shelter">Shelter Status</option>
       </select>
       <button data-action="applyDisasterTemplate" data-i18n="encrypt.template.apply">🧩 Apply Template</button>
     </div>
@@ -280,6 +331,7 @@
       <summary data-i18n="delivery.inbox.summary">Inbox Snapshot</summary>
       <pre id="inbox-view">(none)</pre>
     </details>
+  </div>
   </div>
 
   <div class="section">

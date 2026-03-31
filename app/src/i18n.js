@@ -8,6 +8,22 @@ const translations = {
   en: {
     /* --- Page meta --- */
     'page.subtitle': 'End-to-end encrypted emergency messaging • Offline-first • No server required',
+    'mode.heading': 'Mode',
+    'mode.description': 'Emergency Mode gives a fast, form-based path. Advanced Mode keeps full controls.',
+    'mode.emergency': 'Emergency Mode (Simplified)',
+    'mode.advanced': 'Advanced Mode',
+    'emergency.heading': 'Emergency Quick Message',
+    'emergency.help': 'Fill this form and send to your selected recipient. This writes the final text into Message content automatically.',
+    'emergency.template.label': 'Message type',
+    'emergency.field.name': 'Name / Team',
+    'emergency.field.location': 'Location',
+    'emergency.field.status': 'Status / Need',
+    'emergency.field.people': 'People count',
+    'emergency.field.details': 'Details',
+    'emergency.field.details.placeholder': 'Short practical details',
+    'emergency.apply': '🆘 Create Emergency Message',
+    'common.overwrite': 'Overwrite',
+    'common.cancel': 'Cancel',
 
     /* --- Install prompt --- */
     'install.prompt': '📱 Install Lifeline Mesh as an app for offline access',
@@ -63,6 +79,7 @@ const translations = {
     'encrypt.template.supplies': 'Supply Request',
     'encrypt.template.evacuation': 'Evacuation Notice',
     'encrypt.template.medical': 'Medical Assistance',
+    'encrypt.template.shelter': 'Shelter Status',
     'encrypt.template.apply': '🧩 Apply Template',
     'encrypt.btn': '🔒 Encrypt',
     'encrypt.copy': '📋 Copy Encrypted Message',
@@ -126,18 +143,37 @@ const translations = {
     'status.templateSelect': 'Please select a template',
     'status.templateLoadFail': 'Failed to load template',
     'status.templateOverwrite': 'Overwrite existing message?',
+    'status.templateOverwriteInline': 'Overwrite existing message text with this emergency template?',
     'status.templateApplied': 'Template applied. Fill in the required fields.',
+    'status.templateCancel': 'Template apply cancelled.',
 
     /* --- Disaster templates (message content) --- */
     'template.safety.content': '[Safety Check]\nName: \nLocation: \nCondition: Safe / Minor injury / Serious injury\nAssistance needed: \nCompanions: \nNext contact: ',
     'template.supplies.content': '[Supply Request]\nLocation: \nNeeded supplies: Water / Food / Blankets / Hygiene / Other\nNumber of people: \nUrgency: High / Medium / Low\nPickup time: \nContact info: ',
     'template.evacuation.content': '[Evacuation Notice]\nDeparture point: \nDestination: \nTransport: On foot / Car / Other\nNumber of companions: \nHazard info: \nEstimated arrival: ',
     'template.medical.content': '[Medical Assistance]\nLocation: \nPerson: \nSymptoms / Injury: \nConscious: Yes / No\nBreathing: Yes / No\nTreatment / Transport needed: ',
+    'template.shelter.content': '[Shelter Status]\nShelter name: \nLocation: \nCapacity: \nCurrent occupancy: \nAvailable supplies: \nUrgent needs: \nNotes: ',
   },
 
   ja: {
     /* --- Page meta --- */
     'page.subtitle': 'エンドツーエンド暗号化緊急メッセージ • オフライン対応 • サーバー不要',
+    'mode.heading': 'モード',
+    'mode.description': '緊急モードはフォーム中心の簡易経路です。高度モードでは全機能を利用できます。',
+    'mode.emergency': '緊急モード（かんたん）',
+    'mode.advanced': '高度モード',
+    'emergency.heading': '緊急メッセージ（簡易）',
+    'emergency.help': 'フォーム入力でメッセージを作成し、内容欄へ自動反映します。',
+    'emergency.template.label': 'メッセージ種別',
+    'emergency.field.name': '氏名 / チーム名',
+    'emergency.field.location': '現在地',
+    'emergency.field.status': '状態 / 要求',
+    'emergency.field.people': '人数',
+    'emergency.field.details': '詳細',
+    'emergency.field.details.placeholder': '実務的な短い詳細',
+    'emergency.apply': '🆘 緊急メッセージ作成',
+    'common.overwrite': '上書き',
+    'common.cancel': 'キャンセル',
 
     /* --- Install prompt --- */
     'install.prompt': '📱 Lifeline Mesh をアプリとしてインストールしてオフラインでも使えるようにする',
@@ -193,6 +229,7 @@ const translations = {
     'encrypt.template.supplies': '物資支援依頼',
     'encrypt.template.evacuation': '避難連絡',
     'encrypt.template.medical': '医療支援要請',
+    'encrypt.template.shelter': '避難所ステータス',
     'encrypt.template.apply': '🧩 テンプレート適用',
     'encrypt.btn': '🔒 暗号化',
     'encrypt.copy': '📋 暗号化メッセージをコピー',
@@ -256,13 +293,16 @@ const translations = {
     'status.templateSelect': 'テンプレートを選択してください',
     'status.templateLoadFail': 'テンプレートの読み込みに失敗しました',
     'status.templateOverwrite': '既存のメッセージを上書きしますか？',
+    'status.templateOverwriteInline': '既存のメッセージ内容をこのテンプレートで上書きしますか？',
     'status.templateApplied': 'テンプレートを適用しました。必要項目を入力してください。',
+    'status.templateCancel': 'テンプレート適用をキャンセルしました。',
 
     /* --- Disaster templates (message content) --- */
     'template.safety.content': '【安否確認】\n氏名: \n現在地: \n状態: 無事 / 軽傷 / 重傷\n必要な支援: \n同行者: \n次の連絡予定: ',
     'template.supplies.content': '【物資支援依頼】\n場所: \n必要物資: 水 / 食料 / 毛布 / 衛生用品 / その他\n人数: \n緊急度: 高 / 中 / 低\n受け渡し可能時間: \n連絡先情報: ',
     'template.evacuation.content': '【避難連絡】\n出発地点: \n避難先: \n移動手段: 徒歩 / 車 / その他\n同行者人数: \n危険情報: \n到着予定時刻: ',
     'template.medical.content': '【医療支援要請】\n場所: \n対象者: \n症状・けが: \n意識: あり / なし\n呼吸: あり / なし\n必要な処置・搬送: ',
+    'template.shelter.content': '【避難所ステータス】\n避難所名: \n場所: \n収容可能人数: \n現在の人数: \n利用可能物資: \n緊急に必要な物資: \n備考: ',
   }
 };
 
