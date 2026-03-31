@@ -165,7 +165,7 @@ export function openDB() {
       if (oldVersion < 4) {
         // Add v4 outbox indexes if outbox store already exists (upgrade path).
         if (db.objectStoreNames.contains(STORE_OUTBOX)) {
-          const tx = event.target.transaction;
+          const tx = /** @type {IDBOpenDBRequest} */ (event.target).transaction;
           const outboxStore = tx.objectStore(STORE_OUTBOX);
           if (!outboxStore.indexNames.contains("priority")) {
             outboxStore.createIndex("priority", "priority", { unique: false });

@@ -147,7 +147,7 @@
   <div class="section">
     <h2 data-i18n="keys.heading">1) Your Keys</h2>
     <div class="row">
-      <button data-action="initOrLoad" data-i18n="keys.generateLoad">🔑 Generate / Load Keys</button>
+      <button data-action="initOrLoad" data-i18n="keys.generateLoad" title="Ctrl+K">🔑 Generate / Load Keys</button>
       <button class="danger" data-action="resetAll" data-i18n="keys.resetAll">🗑️ RESET ALL</button>
     </div>
     <pre id="my-id" role="status" aria-live="polite">(not loaded)</pre>
@@ -238,11 +238,11 @@
     <progress id="message-size-progress" max="153600" value="0" style="width: 100%; height: 10px;"></progress>
     <pre id="chunk-estimate" class="small" style="margin-top: 6px;">Estimated BLE chunks: 0 / 255</pre>
     <div class="row">
-      <button data-action="encryptMsg" data-i18n="encrypt.btn">🔒 Encrypt</button>
+      <button data-action="encryptMsg" data-i18n="encrypt.btn" title="Ctrl+E">🔒 Encrypt</button>
     </div>
     <pre id="encrypted" role="status" aria-live="polite"></pre>
     <div class="row" id="encrypted-actions" style="display:none">
-      <button data-action="copyEncrypted" data-i18n="encrypt.copy">📋 Copy Encrypted Message</button>
+      <button data-action="copyEncrypted" data-i18n="encrypt.copy" title="Ctrl+Shift+C">📋 Copy Encrypted Message</button>
       <button data-action="exportEncryptedFile" data-i18n="encrypt.exportFile">💾 Export Encrypted File</button>
     </div>
   </div>
@@ -256,7 +256,7 @@
       <span data-i18n="decrypt.tofu">TOFU (Trust On First Use - auto-accept unknown senders)</span>
     </label>
     <div class="row">
-      <button data-action="decryptMsg" data-i18n="decrypt.btn">🔓 Decrypt</button>
+      <button data-action="decryptMsg" data-i18n="decrypt.btn" title="Ctrl+D">🔓 Decrypt</button>
     </div>
     <pre id="status" role="status" aria-live="polite"></pre>
     <pre id="decrypted" role="status" aria-live="polite"></pre>
@@ -311,6 +311,13 @@
   </div>
 
 
+
+  <div class="section" id="operator-panel-section">
+    <details>
+      <summary data-i18n="operator.heading">📡 Mesh Operator Panel</summary>
+      <div id="operator-panel" style="margin-top:8px;"></div>
+    </details>
+  </div>
 
   <div class="section" id="delivery-section">
     <h2 data-i18n="delivery.heading">6) Delivery Operations</h2>

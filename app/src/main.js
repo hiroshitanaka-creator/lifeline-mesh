@@ -45,6 +45,7 @@ import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
 import { createTransportManager } from '../../crypto/transport.js';
 import { createMeshRuntime } from './runtime-mesh.js';
+import { mountOperatorPanel } from './operator-panel.js';
 import { t as tr, setLang, getLang, applyTranslations } from './i18n.js';
 
 
@@ -58,6 +59,8 @@ let bleManagerFactory = (options = {}) => new BLEManager(options);
 let transportManager = null;
 let meshRuntime = null;
 let pendingTemplateText = '';
+let _cachedOutboxStats = { pending: 0, failed: 0 };
+let _operatorPanel = null;
 
 const DELIVERY_UI_STATUS = {
   UNSENT: 'unsent',
@@ -181,6 +184,10 @@ async function refreshOutboxSnapshot() {
       });
 
     outboxEl.textContent = JSON.stringify(compact, null, 2);
+    _cachedOutboxStats = {
+      pending: compact.filter(e => e.status === 'pending').length,
+      failed: compact.filter(e => e.status === 'failed').length
+    };
   } catch (error) {
     outboxEl.textContent = `outbox read failed: ${error.message}`;
   }
@@ -1067,17 +1074,24 @@ document.addEventListener("keydown", (event) => {
     window.initOrLoad();
   }
 
-  // Escape → Close any open modal
+  // Ctrl + Shift + C → Copy encrypted message to clipboard
+  if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "c") {
+    event.preventDefault();
+    window.copyEncrypted();
+  }
+
+  // Escape → Close open modal, or clear status message
   if (event.key === "Escape") {
     const qrModal = document.getElementById("qr-modal");
     const scannerModal = document.getElementById("qr-scanner-modal");
 
     if (qrModal.style.display === "block") {
       window.closeQRModal();
-    }
-
-    if (scannerModal.style.display === "block") {
+    } else if (scannerModal.style.display === "block") {
       window.closeQRScanner();
+    } else {
+      const statusEl = document.getElementById("status");
+      if (statusEl) statusEl.textContent = "";
     }
   }
 });
@@ -1690,6 +1704,15 @@ function updateKdfStatus() {
     const migrationResult = await migrateLegacyV1IfNeeded();
     initTransportLayer();
     initBLE();  // Initialize Bluetooth
+
+    const opPanelEl = document.getElementById('operator-panel');
+    if (opPanelEl) {
+      _operatorPanel = mountOperatorPanel(opPanelEl, {
+        getSnapshot: () => meshRuntime?.getSnapshot() ?? {},
+        getOutboxStats: () => _cachedOutboxStats
+      });
+    }
+
     await initOrLoad();
     await refreshGroups();
     setMessageMode('direct');

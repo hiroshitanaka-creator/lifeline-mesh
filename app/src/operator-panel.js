@@ -178,7 +178,7 @@ function formatMs(ms) {
  * @param {object} [outboxStats] - { pending, failed } counts
  * @returns {string} HTML string
  */
-function renderPanel(snapshot, outboxStats = {}) {
+export function renderPanel(snapshot, outboxStats = {}) {
   const {
     localPeerId = "unknown",
     linkCount = 0,

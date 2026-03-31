@@ -111,6 +111,9 @@ const translations = {
     'ble.applyConfig': '⚙️ Apply BLE Config',
     'ble.resetConfig': '↺ Reset Defaults',
 
+    /* --- Operator Panel --- */
+    'operator.heading': '📡 Mesh Operator Panel',
+
     /* --- Section 6: Delivery --- */
     'delivery.heading': '6) Delivery Operations',
     'delivery.queueStatus': 'Queue Status:',
@@ -260,6 +263,9 @@ const translations = {
     'ble.reassemblyTimeout': '再結合タイムアウト (ms)',
     'ble.applyConfig': '⚙️ BLE設定を適用',
     'ble.resetConfig': '↺ デフォルトに戻す',
+
+    /* --- Operator Panel --- */
+    'operator.heading': '📡 メッシュ オペレーターパネル',
 
     /* --- Section 6: Delivery --- */
     'delivery.heading': '6) 配信操作',
