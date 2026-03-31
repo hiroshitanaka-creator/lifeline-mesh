@@ -372,8 +372,8 @@ const messages = await fetch('https://relay.example.com/messages/for/MY_FINGERPR
 ## Browser Compatibility
 
 Core app requirements (encrypt/decrypt, contacts, storage):
-- Modern browser with Web Crypto + IndexedDB + ES modules
-- Recommended: current Chrome/Edge/Firefox/Safari stable releases
+- Browser with Web Crypto, IndexedDB, and ES module support enabled
+- JavaScript and storage permissions enabled for the app origin
 
 Requires:
 - Web Crypto API (for secure random numbers)

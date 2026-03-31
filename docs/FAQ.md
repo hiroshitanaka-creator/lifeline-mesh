@@ -261,12 +261,12 @@ Operational note: keep devices within short range and avoid moving during large 
 
 ### Can I use this without Internet?
 
-**Yes!** Lifeline Mesh works completely offline:
-1. Load the app once from a served origin (`https://` deploy or `http://localhost` dev server)
-2. Continue using cached app assets offline
-3. Generate keys, encrypt/decrypt locally
+Lifeline Mesh supports offline operation **after an initial load from a served origin**:
+1. Open the app from `https://` deployment or `http://localhost` dev server at least once.
+2. Continue with cached app assets while offline.
+3. Generate keys, encrypt, and decrypt locally.
 
-**Note**: `file://` opening of `app/index.html` is not a supported runtime path. You still need a way to transfer encrypted messages (USB, Bluetooth, QR code, etc.).
+**Important**: `file://` opening of `app/index.html` and a never-loaded standalone local HTML copy are not supported runtime paths. You still need a way to transfer encrypted messages (USB, Bluetooth, QR code, etc.).
 
 ### How do I send messages without Internet?
 

@@ -227,8 +227,8 @@ See [WEB_BLUETOOTH_SUPPORT.md](docs/WEB_BLUETOOTH_SUPPORT.md) for current browse
 ## 🚀 Deployment
 
 ### GitHub Pages (Current)
-Automatically deployed from `main` branch via `.github/workflows/pages.yml`.
-The workflow runs `npm ci --prefix app && npm run build --prefix app` and deploys `app/dist/` (Vite build output).
+Automatically deployed from `master` branch via `.github/workflows/pages.yml`.
+The workflow runs `npm install --prefix app && npm run build --prefix app` and deploys `app/dist/` (Vite build output).
 
 **Live URL**: https://hiroshitanaka-creator.github.io/lifeline-mesh/
 
