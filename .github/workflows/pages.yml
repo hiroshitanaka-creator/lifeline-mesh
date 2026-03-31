@@ -2,7 +2,7 @@ name: Deploy Pages
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 concurrency:
@@ -59,7 +59,7 @@ jobs:
           node-version: 20
 
       - name: Install app dependencies
-        run: npm install --prefix app
+        run: npm ci --prefix app
 
       - name: Build app
         run: npm run build --prefix app

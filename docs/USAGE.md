@@ -6,9 +6,17 @@ Complete guide for using Lifeline Mesh for emergency messaging.
 
 ### 1. Access the Demo
 
-Open `/app/index.html` in your web browser (Chrome, Firefox, Safari, or Edge).
+Use one of these supported access paths:
 
-**No installation required** - it runs entirely in your browser.
+1. **Hosted**: open the GitHub Pages site over `https://`.
+2. **Local development**:
+   ```bash
+   npm ci --prefix app
+   npm run dev --prefix app
+   ```
+   Then open `http://localhost:5173`.
+
+**Do not open `app/index.html` via `file://`**. The app relies on module loading and secure-context APIs.
 
 ### 2. Generate Your Keys
 
@@ -256,7 +264,7 @@ Alice                          Relay Network                    Bob
 
 ## Offline Usage
 
-Lifeline Mesh works completely offline:
+Lifeline Mesh supports offline operation after the app has been loaded from a served origin (`https://` or `http://localhost`).
 
 ## Storage Migration (lifelineMesh → lifelineMeshV2)
 
@@ -305,8 +313,10 @@ If the startup migration fails or `lifelineMeshV2` appears incomplete, use this 
 
 ### Offline operation steps
 
-1. **Open `/app/index.html` locally** (save HTML file to device)
-2. **Generate keys offline** (uses browser's crypto API)
+1. **Load the app once from a secure context**:
+   - GitHub Pages (`https://...`) or
+   - local Vite dev server (`http://localhost:5173`)
+2. **Generate keys offline** (uses browser crypto APIs and IndexedDB)
 3. **Encrypt messages offline**
 4. **Transfer encrypted messages** via any method:
    - QR codes
@@ -316,6 +326,10 @@ If the startup migration fails or `lifelineMeshV2` appears incomplete, use this 
    - Radio (encode as text/hex)
 
 5. **Decrypt offline** (no network required)
+
+Notes:
+- `file://` execution is unsupported.
+- BLE additionally requires a secure context and browser support; when unavailable, use Clipboard/File/QR fallback transports.
 
 ## Integration with Relay Networks
 
@@ -357,15 +371,16 @@ const messages = await fetch('https://relay.example.com/messages/for/MY_FINGERPR
 
 ## Browser Compatibility
 
-Tested on:
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
+Core app requirements (encrypt/decrypt, contacts, storage):
+- Modern browser with Web Crypto + IndexedDB + ES modules
+- Recommended: current Chrome/Edge/Firefox/Safari stable releases
 
 Requires:
 - Web Crypto API (for secure random numbers)
 - IndexedDB (for key storage)
 - ES6+ JavaScript
+
+Bluetooth-specific support differs by browser/platform. See [WEB_BLUETOOTH_SUPPORT.md](./WEB_BLUETOOTH_SUPPORT.md) for the current matrix and caveats.
 
 ## Next Steps
 

@@ -47,7 +47,7 @@ npm run dev --prefix app   # opens http://localhost:5173
 ```
 Then: Generate keys → Add contacts → Encrypt/Decrypt
 
-> The app uses ES6 modules with relative imports; a dev server (Vite) is required. Directly opening `app/index.html` as a `file://` URL will not work.
+> The app uses ES modules and secure-browser APIs. Use `http://localhost` (Vite) for local development; do not open `app/index.html` as `file://`.
 
 ---
 
@@ -191,8 +191,13 @@ Alice                  Relay Network              Bob
 ❌ **Traffic analysis resistance**: Message patterns observable
 ❌ **Post-quantum security**: Vulnerable to quantum computers
 ❌ **Perfect forward secrecy**: Long-term signing keys used
+❌ **BLE availability**: Web Bluetooth is effectively Chromium-only and requires a secure context (`https://` or `http://localhost`)
+❌ **BLE topology**: Current runtime is BLE client mode only (no GATT peripheral/server relay mode)
+❌ **Offline bootstrap**: First load must happen in a served origin; `file://` is unsupported. After first load, cached app assets can be used offline
+⚠️ **Fallback path**: Clipboard/File/QR relay is the compatibility baseline when BLE is unavailable
 
 See [THREAT_MODEL.md](spec/THREAT_MODEL.md) for comprehensive analysis.
+See [WEB_BLUETOOTH_SUPPORT.md](docs/WEB_BLUETOOTH_SUPPORT.md) for current browser/platform BLE caveats.
 
 ---
 
@@ -222,7 +227,7 @@ See [THREAT_MODEL.md](spec/THREAT_MODEL.md) for comprehensive analysis.
 ## 🚀 Deployment
 
 ### GitHub Pages (Current)
-Automatically deployed from `master` branch via `.github/workflows/pages.yml`.
+Automatically deployed from `main` branch via `.github/workflows/pages.yml`.
 The workflow runs `npm ci --prefix app && npm run build --prefix app` and deploys `app/dist/` (Vite build output).
 
 **Live URL**: https://hiroshitanaka-creator.github.io/lifeline-mesh/
