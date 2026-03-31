@@ -27,7 +27,8 @@
     "check:phase": "node tools/phase-gate-check.js",
     "test:e2e:install": "npx playwright install --with-deps chromium",
     "check:compat": "node tools/check-compat-policy.js",
-    "check:security-audit": "node tools/security-audit-check.js"
+    "check:security-audit": "node tools/security-audit-check.js",
+    "test:e2e:real-browser": "npm run test:e2e:install && npm run test:e2e:playwright"
   },
   "keywords": [
     "cryptography",

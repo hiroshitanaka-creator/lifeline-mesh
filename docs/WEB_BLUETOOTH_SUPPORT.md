@@ -4,6 +4,9 @@ _Last updated: 2026-03-08_
 
 This document summarizes practical support for the **Web Bluetooth API** used by Lifeline Mesh.
 
+For contributor hardware verification steps, use the dedicated runbook:
+- [`docs/BLE_MANUAL_VALIDATION_RUNBOOK.md`](./BLE_MANUAL_VALIDATION_RUNBOOK.md)
+
 ## Quick Summary
 
 - ✅ **Best supported**: Chromium-based desktop browsers (Chrome / Edge) on Windows, macOS, ChromeOS, and some Linux environments.

@@ -95,6 +95,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - **[Usage Guide](docs/USAGE.md)** - Quick start, security practices, troubleshooting
 - **[FAQ](docs/FAQ.md)** - 30+ questions about security, features, and usage
 - **[Web Bluetooth Support](docs/WEB_BLUETOOTH_SUPPORT.md)** - Browser/platform compatibility and fallback guidance
+- **[BLE Manual Validation Runbook](docs/BLE_MANUAL_VALIDATION_RUNBOOK.md)** - Hardware test matrix and repeatable contributor checks
 
 ### For Developers
 - **[Protocol Specification](spec/PROTOCOL.md)** - Detailed technical specification
@@ -138,7 +139,14 @@ npm run test:e2e:smoke
 
 # Real Playwright E2E (requires: npm run test:e2e:install first)
 npm run test:e2e:playwright
+
+# Full real-browser path (install + Playwright run)
+npm run test:e2e:real-browser
 ```
+
+CI note:
+- Fast PR gate runs `test:e2e:smoke`.
+- Real browser Playwright runs in `.github/workflows/e2e-real-browser.yml` (nightly, manual dispatch, and pushes to main/master).
 
 ---
 
