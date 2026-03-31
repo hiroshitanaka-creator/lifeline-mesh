@@ -243,10 +243,10 @@ See `docs/OPERATIONS_RUNBOOK.md` for the full incident procedure.
 **Browser support (practical)**:
 - Chrome / Edge desktop: supported.
 - Chrome / Edge Android: supported.
-- Safari: limited/experimental Web Bluetooth support.
+- Safari: not supported for production Web Bluetooth use.
 - Firefox: not supported (no Web Bluetooth API).
 
-When BLE is unavailable, use other relay methods (QR, clipboard, file/USB) and keep encrypted messages in outbox for later forwarding.
+When BLE is unavailable, use other relay methods (QR, clipboard, file/USB) and keep encrypted messages in outbox for later forwarding. See [WEB_BLUETOOTH_SUPPORT.md](./WEB_BLUETOOTH_SUPPORT.md) for the current matrix.
 
 ### What is the recommended BLE operation procedure in the field?
 
@@ -261,12 +261,12 @@ Operational note: keep devices within short range and avoid moving during large 
 
 ### Can I use this without Internet?
 
-**Yes!** Lifeline Mesh works completely offline:
-1. Save `/app/index.html` to your device
-2. Open in browser (no network needed)
-3. Generate keys, encrypt/decrypt locally
+Lifeline Mesh supports offline operation **after an initial load from a served origin**:
+1. Open the app from `https://` deployment or `http://localhost` dev server at least once.
+2. Continue with cached app assets while offline.
+3. Generate keys, encrypt, and decrypt locally.
 
-**Note**: You still need a way to transfer encrypted messages (USB, Bluetooth, QR code, etc.).
+**Important**: `file://` opening of `app/index.html` and a never-loaded standalone local HTML copy are not supported runtime paths. You still need a way to transfer encrypted messages (USB, Bluetooth, QR code, etc.).
 
 ### How do I send messages without Internet?
 

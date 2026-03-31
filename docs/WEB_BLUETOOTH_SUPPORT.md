@@ -9,6 +9,7 @@ This document summarizes practical support for the **Web Bluetooth API** used by
 - ✅ **Best supported**: Chromium-based desktop browsers (Chrome / Edge) on Windows, macOS, ChromeOS, and some Linux environments.
 - ⚠️ **Limited / partial**: Android Chrome support varies by device and BLE stack behavior.
 - ❌ **Not supported**: Safari (iOS/iPadOS/macOS) and Firefox.
+- ℹ️ **Important**: BLE is optional in Lifeline Mesh. Clipboard/File/QR relay remains the baseline fallback path.
 
 > If Bluetooth is unavailable, Lifeline Mesh can still relay encrypted payloads via Clipboard, File, and QR workflows.
 
@@ -35,6 +36,8 @@ Web Bluetooth in Lifeline Mesh additionally requires:
 2. **User gesture** for `navigator.bluetooth.requestDevice(...)`.
 3. Bluetooth adapter enabled and OS-level permissions granted.
 4. Nearby BLE devices advertising expected service UUIDs.
+
+Without these requirements, BLE UI actions will not work even if encryption/decryption works normally.
 
 ## App Behavior in Lifeline Mesh
 
