@@ -15,7 +15,7 @@
 // ============================================================================
 
 export const DB_NAME = "lifelineMeshV2";
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 // Store names
 export const STORE_KEYS = "keys";
@@ -46,6 +46,19 @@ export const DELIVERY_STATUS = {
   DELIVERED: "delivered",
   FAILED: "failed"
 };
+
+// Outbox message priority levels (v4 schema)
+export const OUTBOX_PRIORITY = {
+  NORMAL: 0,
+  HIGH: 1,
+  URGENT: 2
+};
+
+/** Current outbox schema version. */
+export const OUTBOX_SCHEMA_VERSION = 4;
+
+/** Default TTL for outbox entries: 7 days in ms. */
+export const OUTBOX_DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ============================================================================
 // Database Initialization
@@ -94,6 +107,9 @@ export function openDB() {
         outboxStore.createIndex("recipientFp", "recipientFp", { unique: false });
         outboxStore.createIndex("createdAt", "createdAt", { unique: false });
         outboxStore.createIndex("status", "status", { unique: false });
+        outboxStore.createIndex("priority", "priority", { unique: false });
+        outboxStore.createIndex("ttl", "ttl", { unique: false });
+        outboxStore.createIndex("linkId", "linkId", { unique: false });
       }
 
       // Inbox store (received messages)
@@ -144,6 +160,24 @@ export function openDB() {
         }
 
         console.log("Migrating database from v2 to v3 (group stores)");
+      }
+
+      if (oldVersion < 4) {
+        // Add v4 outbox indexes if outbox store already exists (upgrade path).
+        if (db.objectStoreNames.contains(STORE_OUTBOX)) {
+          const tx = event.target.transaction;
+          const outboxStore = tx.objectStore(STORE_OUTBOX);
+          if (!outboxStore.indexNames.contains("priority")) {
+            outboxStore.createIndex("priority", "priority", { unique: false });
+          }
+          if (!outboxStore.indexNames.contains("ttl")) {
+            outboxStore.createIndex("ttl", "ttl", { unique: false });
+          }
+          if (!outboxStore.indexNames.contains("linkId")) {
+            outboxStore.createIndex("linkId", "linkId", { unique: false });
+          }
+        }
+        console.log("Migrating database from v3 to v4 (outbox priority/ttl/linkId indexes)");
       }
     };
   });
@@ -282,17 +316,26 @@ export async function idbCount(storeName) {
  * @param {object} message - Encrypted message object (dmesh-msg)
  * @param {string} recipientFp - Recipient's fingerprint (base64)
  * @param {object} [options] - Additional options
+ * @param {number} [options.priority] - OUTBOX_PRIORITY value (default: NORMAL)
+ * @param {number} [options.ttl] - Absolute expiry timestamp in ms (default: now + 7 days)
+ * @param {string} [options.linkId] - BLE link/peer ID this message is targeted at
  * @returns {Promise<void>}
  */
 export async function addToOutbox(message, recipientFp, options = {}) {
+  const now = Date.now();
   const outboxEntry = {
     msgId: message.msgId,
     recipientFp,
     message,
-    createdAt: Date.now(),
+    createdAt: now,
     status: DELIVERY_STATUS.PENDING,
     attempts: 0,
     lastAttempt: null,
+    // v4 fields
+    schemaVersion: OUTBOX_SCHEMA_VERSION,
+    priority: options.priority ?? OUTBOX_PRIORITY.NORMAL,
+    ttl: options.ttl ?? (now + OUTBOX_DEFAULT_TTL_MS),
+    linkId: options.linkId ?? null,
     ...options
   };
   await idbPut(STORE_OUTBOX, outboxEntry);
@@ -322,6 +365,42 @@ export function getRecentOutbox(limit = 20) {
  */
 export function getOutboxForRecipient(recipientFp) {
   return idbGetByIndex(STORE_OUTBOX, "recipientFp", recipientFp);
+}
+
+/**
+ * Get outbox messages for a specific BLE link (v4 schema)
+ * @param {string} linkId - BLE peer/link ID
+ * @returns {Promise<object[]>}
+ */
+export function getOutboxForLink(linkId) {
+  return idbGetByIndex(STORE_OUTBOX, "linkId", linkId);
+}
+
+/**
+ * Get outbox entries at or above a given priority level (v4 schema)
+ * @param {number} minPriority - Minimum OUTBOX_PRIORITY value (inclusive)
+ * @returns {Promise<object[]>}
+ */
+export async function getOutboxByMinPriority(minPriority) {
+  const all = await idbGetAll(STORE_OUTBOX);
+  return all.filter(e => (e.priority ?? OUTBOX_PRIORITY.NORMAL) >= minPriority);
+}
+
+/**
+ * Remove outbox entries whose TTL has expired (v4 schema)
+ * @param {number} [now] - Current timestamp (default: Date.now())
+ * @returns {Promise<number>} Number of entries removed
+ */
+export async function purgeExpiredOutbox(now = Date.now()) {
+  const all = await idbGetAll(STORE_OUTBOX);
+  let removed = 0;
+  for (const entry of all) {
+    if (entry.ttl !== null && entry.ttl !== undefined && entry.ttl < now) {
+      await idbDel(STORE_OUTBOX, entry.msgId);
+      removed++;
+    }
+  }
+  return removed;
 }
 
 /**
@@ -821,6 +900,10 @@ export function getSenderKeysForGroup(groupId) {
 export async function runMaintenance() {
   await cleanupSeen();
   await cleanupOldChunks();
+  const purged = await purgeExpiredOutbox();
+  if (purged > 0) {
+    console.log(`Database maintenance: purged ${purged} expired outbox entries`);
+  }
   console.log("Database maintenance completed");
 }
 
