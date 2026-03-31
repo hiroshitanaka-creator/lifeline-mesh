@@ -41,6 +41,22 @@ test("runtime mesh: relay callback is ingress-only in single-link runtime", asyn
   assert(snapshot.skipped === 1, "skipped counter increments");
 });
 
+test("runtime mesh: relay callback marks no-connected-peer before any BLE link", async () => {
+  const runtime = createMeshRuntime("node-cold-start");
+
+  const result = await runtime.onForward({
+    message: { msgId: "relay-cold-start" },
+    ingressPeerId: "peer-any"
+  });
+
+  const snapshot = runtime.getSnapshot();
+  assert(result.action === "skipped", "relay should be skipped before connection");
+  assert(result.reason === "no-connected-peer", "reason reflects startup/offline condition");
+  assert(snapshot.relayAttempts === 1, "relay attempts counter increments");
+  assert(snapshot.skipped === 1, "skipped counter increments");
+  assert(snapshot.lastRelay?.msgId === "relay-cold-start", "last relay stores msg id");
+});
+
 test("runtime mesh: relay callback skips ingress-only links", async () => {
   const runtime = createMeshRuntime("node-b");
   runtime.onConnectionChange(true, { id: "peer-a" });

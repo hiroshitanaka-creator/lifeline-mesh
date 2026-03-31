@@ -1,0 +1,54 @@
+name: E2E Real Browser
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+
+concurrency:
+  group: e2e-real-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  playwright_real_browser:
+    name: Playwright real browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix crypto
+          npm ci --prefix tools
+          npm ci --prefix app
+
+      - name: Install Playwright browser
+        run: npm run test:e2e:install
+
+      - name: Run Playwright E2E
+        run: npm run test:e2e:playwright
+
+      - name: Upload Playwright traces/reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore

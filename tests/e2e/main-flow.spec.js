@@ -209,6 +209,59 @@ test("delivery ops: manual outbox flush action follows connected/offline state",
   expect(flushCalls).toBe(1);
 });
 
+test("delivery ops: queued outbox entry survives reload and flushes after reconnect", async ({ page }) => {
+  await boot(page);
+
+  const queuedMsgId = `reload-queue-${Date.now()}`;
+  await page.evaluate(() => {
+    window.__mockBleManager = {
+      isConnected: false,
+      sendMessage() {
+        return null;
+      },
+      flushOutbox() {
+        window.__reloadFlushCalls = (window.__reloadFlushCalls || 0) + 1;
+      }
+    };
+    window.__reloadFlushCalls = 0;
+    window.__lifelineTest.setBleManager(window.__mockBleManager);
+  });
+
+  await page.locator("#encrypted").evaluate((el, msgId) => {
+    el.textContent = JSON.stringify({
+      kind: "dmesh-msg",
+      msgId,
+      payload: "queued-before-reload"
+    });
+  }, queuedMsgId);
+
+  await page.getByRole("button", { name: "📤 Send Last Encrypted via Bluetooth" }).click();
+  await expect(page.locator("#status")).toContainText("queued in Outbox");
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "🌐 Lifeline Mesh" })).toBeVisible();
+  await expect(page.locator("#outbox-view")).toContainText(queuedMsgId);
+
+  await page.evaluate(() => {
+    window.__mockBleManager = {
+      isConnected: true,
+      sendMessage() {
+        return null;
+      },
+      flushOutbox() {
+        window.__reloadFlushCalls = (window.__reloadFlushCalls || 0) + 1;
+      }
+    };
+    window.__reloadFlushCalls = 0;
+    window.__lifelineTest.setBleManager(window.__mockBleManager);
+  });
+
+  await page.getByRole("button", { name: "🔁 Flush queued messages now" }).click();
+  await expect(page.locator("#status")).toContainText("Outbox flush completed");
+  const flushCalls = await page.evaluate(() => window.__reloadFlushCalls);
+  expect(flushCalls).toBe(1);
+});
+
 test("e2e: group create -> encrypt -> decrypt roundtrip", async ({ page }) => {
   await boot(page);
   const myIdentity = await getMyIdentity(page);

@@ -121,8 +121,8 @@ jobs:
       - name: Check compatibility policy gate
         run: npm run check:compat
 
-  e2e_playwright:
-    name: E2E Playwright
+  e2e_smoke:
+    name: E2E smoke (fast gate)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -137,25 +137,10 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-          npm ci --prefix crypto
-          npm ci --prefix tools
           npm ci --prefix app
 
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-
-      - name: Run Playwright E2E
-        run: npm run test:e2e:playwright
-
-      - name: Upload Playwright traces/reports on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-artifacts
-          path: |
-            test-results
-            playwright-report
-          if-no-files-found: ignore
+      - name: Run smoke E2E check
+        run: npm run test:e2e:smoke
 
   validate_gate:
     name: Validate gate summary
@@ -165,11 +150,12 @@ jobs:
       - unit_tests
       - integration_tests
       - compat_gate
-      - e2e_playwright
+      - e2e_smoke
     steps:
       - name: CI quality gates passed
         run: |
-          echo "Gates: lint + typecheck(crypto/tools) + unit + integration + compat + e2e:playwright(real browser) all passed"
+          echo "Gates: lint + typecheck(crypto/tools) + unit + integration + compat + e2e:smoke passed"
+          echo "Real-browser Playwright runs in separate workflow (nightly/manual/main push)"
           echo "Note: typecheck:runtime(app/src+bluetooth) runs separately with continue-on-error"
 
   security:
@@ -195,7 +181,6 @@ jobs:
           npm audit --audit-level=high || true
           npm audit --prefix crypto --audit-level=high || true
           npm audit --prefix tools --audit-level=high || true
-
 
       - name: Run security audit preparation checks
         run: npm run check:security-audit
