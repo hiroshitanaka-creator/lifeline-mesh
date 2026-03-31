@@ -488,9 +488,10 @@ export class BLEManager {
       const jsonStr = new TextDecoder().decode(completeData);
       const message = JSON.parse(jsonStr);
 
-      const seenKey = `${message.msgId || state.transferId}:${message.sndr || "unknown"}`;
+      const senderFp = message.sndr || this.device?.id || "unknown";
+      const seenKey = `${message.msgId || state.transferId}:${senderFp}`;
       const shouldStore = this.store.checkAndMarkSeen
-        ? await this.store.checkAndMarkSeen(message.msgId || state.transferId, message.sndr || "unknown")
+        ? await this.store.checkAndMarkSeen(message.msgId || state.transferId, senderFp)
         : true;
 
       if (!shouldStore) {
@@ -502,7 +503,7 @@ export class BLEManager {
       await this.store.addToInbox(
         {
           msgId: message.msgId || state.transferId,
-          senderFp: message.sndr || "unknown",
+          senderFp,
           content: message,
           type: message.kind || "ble",
           payload: message,
