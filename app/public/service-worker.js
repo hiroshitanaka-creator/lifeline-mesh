@@ -5,8 +5,7 @@ const CACHE_NAME = 'lifeline-mesh-v1.0.0';
 const CACHE_URLS = [
   '/lifeline-mesh/',
   '/lifeline-mesh/index.html',
-  '/lifeline-mesh/manifest.json',
-  '/lifeline-mesh/../crypto/core.js'
+  '/lifeline-mesh/manifest.json'
 ];
 
 // Install event: cache critical assets

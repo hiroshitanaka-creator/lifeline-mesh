@@ -317,7 +317,12 @@ function initBLE() {
 
   bleManager.onConnectionChange = (connected, device) => {
     const deviceEl = document.getElementById('ble-device-name');
-    meshRuntime?.onConnectionChange(connected, device);
+    const peerId = device?.id || null;
+    if (connected && peerId && meshRuntime) {
+      meshRuntime.addLink(peerId, bleManager);
+    } else if (!connected && meshRuntime) {
+      meshRuntime.removeLink(peerId || meshRuntime.state.connectedPeerId);
+    }
 
     if (connected) {
       renderBleTransportState('connected');
