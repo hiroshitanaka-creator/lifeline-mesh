@@ -143,6 +143,7 @@ const translations = {
     'modal.scanner.hint': 'Point camera at QR code to add contact',
 
     /* --- Status messages (JS) --- */
+    'status.bleReceived': 'Received message via Bluetooth — decrypting...',
     'status.templateSelect': 'Please select a template',
     'status.templateLoadFail': 'Failed to load template',
     'status.templateOverwrite': 'Overwrite existing message?',
@@ -296,6 +297,7 @@ const translations = {
     'modal.scanner.hint': 'カメラをQRコードに向けて連絡先を追加してください',
 
     /* --- Status messages (JS) --- */
+    'status.bleReceived': 'Bluetoothでメッセージを受信しました — 復号中...',
     'status.templateSelect': 'テンプレートを選択してください',
     'status.templateLoadFail': 'テンプレートの読み込みに失敗しました',
     'status.templateOverwrite': '既存のメッセージを上書きしますか？',
