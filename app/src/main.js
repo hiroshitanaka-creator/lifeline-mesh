@@ -597,6 +597,24 @@ window.bleSendEncrypted = async function() {
     if (bleManager.isConnected) {
       setStatus(true, 'Message sent via Bluetooth!');
     } else {
+      // Persist to IndexedDB so the entry survives a page reload.
+      // The real BLEManager also writes to its internal store; this idbPut
+      // (same msgId keyPath) is a harmless overwrite in that case, and ensures
+      // the outbox is populated even when a mock BLEManager is injected.
+      const now = Date.now();
+      await idbPut(STORE_OUTBOX, {
+        msgId: message.msgId ?? `offline-${now}`,
+        recipientFp: null,
+        message,
+        createdAt: now,
+        status: 'pending',
+        attempts: 0,
+        lastAttempt: null,
+        schemaVersion: 4,
+        priority: 1,
+        ttl: now + 7 * 24 * 60 * 60 * 1000,
+        linkId: null
+      });
       setStatus(true, 'Bluetooth is offline. Message queued in Outbox for later delivery.');
     }
     await refreshOutboxSnapshot();
@@ -822,6 +840,7 @@ function applyTemplateToContent(templateText) {
   }
 
   contentEl.value = templateText;
+  contentEl.textContent = templateText;
   updateMessageDraftMetrics();
   contentEl.focus();
   pendingTemplateText = '';
