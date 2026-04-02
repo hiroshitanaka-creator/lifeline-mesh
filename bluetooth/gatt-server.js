@@ -24,7 +24,7 @@
  *   • Accept incoming connections from central clients.
  *   • Receive chunked messages written to MESSAGE_TX characteristic.
  *   • Reassemble chunks and emit complete messages.
- *   • Send outbound messages to connected centrals via MESSAGE_RX notify.
+ *   • Send outbound messages to the connected central via MESSAGE_RX notify.
  *   • Fire onMessageReceived / onClientConnected / onClientDisconnected callbacks.
  */
 
@@ -87,17 +87,11 @@ export class GATTServer {
     this._localName = options.localName ?? "LifelineMesh";
     this._advertising = false;
 
-    /**
-     * clientId → per-client reassembly state map.
-     * @type {Map<string, Map<string, object>>}
-     */
+    /** @type {Map<string, object>} transferId -> reassembly state for active client */
     this._receiveStates = new Map();
 
-    /**
-     * Set of currently connected client IDs.
-     * @type {Set<string>}
-     */
-    this._clients = new Set();
+    /** @type {string|null} Currently connected central client ID (single-client model). */
+    this._clientId = null;
 
     this._protocolConfig = this._buildProtocolConfig(options.protocolConfig ?? {});
 
@@ -133,14 +127,14 @@ export class GATTServer {
     return this._advertising;
   }
 
-  /** @returns {number} Number of connected central clients. */
+  /** @returns {number} Number of connected central clients (0 or 1). */
   get clientCount() {
-    return this._clients.size;
+    return this._clientId ? 1 : 0;
   }
 
-  /** @returns {string[]} Connected client IDs snapshot. */
+  /** @returns {string[]} Connected client IDs snapshot (single-client model). */
   get connectedClients() {
-    return Array.from(this._clients);
+    return this._clientId ? [this._clientId] : [];
   }
 
   /**
@@ -162,7 +156,7 @@ export class GATTServer {
   }
 
   /**
-   * Stop advertising and disconnect all clients.
+   * Stop advertising and disconnect the active client.
    * @returns {Promise<void>}
    */
   async stopAdvertising() {
@@ -175,7 +169,7 @@ export class GATTServer {
 
     await this._backend.stopAdvertising();
     this._advertising = false;
-    this._clients.clear();
+    this._clientId = null;
     this._receiveStates.clear();
     console.log("[GATTServer] Advertising stopped");
   }
@@ -192,7 +186,7 @@ export class GATTServer {
     if (!this._backend) {
       throw new Error(GATT_SERVER_ERROR.BACKEND_NOT_SET);
     }
-    if (!this._clients.has(clientId)) {
+    if (!this._clientId || this._clientId !== clientId) {
       throw new Error(GATT_SERVER_ERROR.CLIENT_NOT_FOUND);
     }
 
@@ -216,22 +210,13 @@ export class GATTServer {
   }
 
   /**
-   * Broadcast a message to all connected central clients.
+   * Broadcast a message to the connected central client (if any).
    * @param {object} message
    * @returns {Promise<void>}
    */
   async broadcast(message) {
-    const errors = [];
-    for (const clientId of this._clients) {
-      try {
-        await this.sendMessage(message, clientId);
-      } catch (err) {
-        errors.push({ clientId, err });
-      }
-    }
-    if (errors.length > 0) {
-      console.warn("[GATTServer] Broadcast partial failure:", errors.length, "client(s) failed");
-    }
+    if (!this._clientId) return;
+    await this.sendMessage(message, this._clientId);
   }
 
   /**
@@ -244,7 +229,7 @@ export class GATTServer {
     if (!this._backend) {
       throw new Error(GATT_SERVER_ERROR.BACKEND_NOT_SET);
     }
-    if (!this._clients.has(clientId)) {
+    if (!this._clientId || this._clientId !== clientId) {
       throw new Error(GATT_SERVER_ERROR.CLIENT_NOT_FOUND);
     }
 
@@ -261,8 +246,8 @@ export class GATTServer {
     return {
       advertising: this._advertising,
       localName: this._localName,
-      clientCount: this._clients.size,
-      clients: Array.from(this._clients)
+      clientCount: this.clientCount,
+      clients: this.connectedClients
     };
   }
 
@@ -276,8 +261,18 @@ export class GATTServer {
     };
 
     this._backend.onClientConnected = (clientId) => {
-      this._clients.add(clientId);
-      this._receiveStates.set(clientId, new Map());
+      if (this._clientId && this._clientId !== clientId) {
+        const previousClientId = this._clientId;
+        this._receiveStates.clear();
+        this._clientId = null;
+        console.warn("[GATTServer] Replacing active client:", previousClientId, "->", clientId);
+        if (this.onClientDisconnected) {
+          this.onClientDisconnected(previousClientId);
+        }
+      }
+
+      this._clientId = clientId;
+      this._receiveStates.clear();
       console.log("[GATTServer] Client connected:", clientId);
       if (this.onClientConnected) {
         this.onClientConnected(clientId);
@@ -285,8 +280,11 @@ export class GATTServer {
     };
 
     this._backend.onClientDisconnected = (clientId) => {
-      this._clients.delete(clientId);
-      this._receiveStates.delete(clientId);
+      if (!this._clientId || this._clientId !== clientId) {
+        return;
+      }
+      this._clientId = null;
+      this._receiveStates.clear();
       console.log("[GATTServer] Client disconnected:", clientId);
       if (this.onClientDisconnected) {
         this.onClientDisconnected(clientId);
@@ -325,8 +323,11 @@ export class GATTServer {
       }
 
       const decoded = this._decodeChunkPayload(payload);
-      const perClient = this._getOrCreateClientReceiveStates(clientId);
-      const state = this._getOrCreateReceiveState(perClient, msgType, totalChunks, decoded.transferId);
+      if (!this._clientId || this._clientId !== clientId) {
+        throw new Error(`Write from non-active client: ${clientId}`);
+      }
+
+      const state = this._getOrCreateReceiveState(msgType, totalChunks, decoded.transferId);
 
       if (chunkIndex >= state.totalChunks) {
         throw new Error(`Chunk index out of range: ${chunkIndex}/${state.totalChunks}`);
@@ -345,7 +346,7 @@ export class GATTServer {
       }
 
       const completeData = this._reassembleChunks(state.chunks);
-      perClient.delete(state.transferId);
+      this._receiveStates.delete(state.transferId);
 
       const jsonStr = new TextDecoder().decode(completeData);
       const message = JSON.parse(jsonStr);
@@ -367,7 +368,7 @@ export class GATTServer {
   }
 
   async _sendAck(clientId, transferId) {
-    if (!this._backend || !this._clients.has(clientId)) return;
+    if (!this._backend || !this._clientId || this._clientId !== clientId) return;
     const payload = new TextEncoder().encode(transferId);
     const packet = this._buildPacket(MSG_TYPE.ACK, 0, 1, payload);
     await this._backend.notifyCharacteristic(clientId, CHARACTERISTICS.MESSAGE_RX, packet);
@@ -375,22 +376,14 @@ export class GATTServer {
 
   // ─── Receive state management ─────────────────────────────────────────────
 
-  _getOrCreateClientReceiveStates(clientId) {
-    let map = this._receiveStates.get(clientId);
-    if (!map) {
-      map = new Map();
-      this._receiveStates.set(clientId, map);
-    }
-    this._cleanupExpiredReceiveStates(map);
-    return map;
-  }
-
-  _getOrCreateReceiveState(perClient, msgType, totalChunks, transferId) {
+  _getOrCreateReceiveState(msgType, totalChunks, transferId) {
     if (totalChunks < 1 || totalChunks > 0xff) {
       throw new Error(`Invalid totalChunks: ${totalChunks}`);
     }
 
-    const existing = perClient.get(transferId);
+    this._cleanupExpiredReceiveStates();
+
+    const existing = this._receiveStates.get(transferId);
     if (existing) {
       if (existing.totalChunks !== totalChunks || existing.msgType !== msgType) {
         throw new Error(`Mismatched state for transfer ${transferId}`);
@@ -408,15 +401,15 @@ export class GATTServer {
       lastUpdated: Date.now()
     };
 
-    perClient.set(transferId, state);
+    this._receiveStates.set(transferId, state);
     return state;
   }
 
-  _cleanupExpiredReceiveStates(perClient) {
+  _cleanupExpiredReceiveStates() {
     const now = Date.now();
-    for (const [id, state] of perClient.entries()) {
+    for (const [id, state] of this._receiveStates.entries()) {
       if (now - state.lastUpdated > this._protocolConfig.reassemblyTimeoutMs) {
-        perClient.delete(id);
+        this._receiveStates.delete(id);
       }
     }
   }

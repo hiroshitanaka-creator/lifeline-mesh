@@ -222,7 +222,24 @@ test("sendMessage: throws CLIENT_NOT_FOUND for unknown client", async () => {
   assert(threw, "should throw for unknown client");
 });
 
-test("broadcast: message reaches all connected clients", async () => {
+test("single-client: latest connected client becomes active", async () => {
+  const { server, backend } = makeServer();
+  await server.startAdvertising();
+
+  const disconnected = [];
+  server.onClientDisconnected = (id) => disconnected.push(id);
+
+  backend.simulateClientConnect("client-f");
+  assert(server.clientCount === 1, "first client connected");
+  assert(server.connectedClients[0] === "client-f", "first client active");
+
+  backend.simulateClientConnect("client-g");
+  assert(server.clientCount === 1, "still single active client");
+  assert(server.connectedClients[0] === "client-g", "second client replaced first");
+  assert(disconnected.includes("client-f"), "replacement emits disconnect callback for previous client");
+});
+
+test("broadcast: sends only to the active client in single-client mode", async () => {
   const { server, backend } = makeServer();
   await server.startAdvertising();
   backend.simulateClientConnect("client-f");
@@ -233,8 +250,26 @@ test("broadcast: message reaches all connected clients", async () => {
 
   const fNotifs = backend.notifications.filter(n => n.clientId === "client-f");
   const gNotifs = backend.notifications.filter(n => n.clientId === "client-g");
-  assert(fNotifs.length >= 1, "client-f received broadcast");
-  assert(gNotifs.length >= 1, "client-g received broadcast");
+  assert(fNotifs.length === 0, "inactive client-f did not receive broadcast");
+  assert(gNotifs.length >= 1, "active client-g received broadcast");
+});
+
+
+test("sendMessage: previous client is not addressable after replacement", async () => {
+  const { server, backend } = makeServer();
+  await server.startAdvertising();
+  backend.simulateClientConnect("client-old");
+  backend.simulateClientConnect("client-new");
+
+  let threw = false;
+  try {
+    await server.sendMessage({ msgId: "old-client" }, "client-old");
+  } catch (e) {
+    threw = true;
+    assert(e.message === GATT_SERVER_ERROR.CLIENT_NOT_FOUND, "old client should not be targetable");
+  }
+
+  assert(threw, "sendMessage throws for replaced client");
 });
 
 test("stopAdvertising: clears client list", async () => {
