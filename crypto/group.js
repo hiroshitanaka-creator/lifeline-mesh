@@ -4,7 +4,6 @@
 
 const GROUP_DOMAIN = "DMESH_GROUP_V1";
 const GROUP_MSG_KEY_INFO = "DMESH_GROUP_MSG_KEY";
-export const GROUP_SENDER_STATE_KIND = "dmesh-group-sender-state";
 
 function buildGroupSignBytes({ groupId, senderKeyVersion, nonce, ciphertext }, naclUtil) {
   const domain = naclUtil.decodeUTF8(GROUP_DOMAIN);
@@ -127,37 +126,5 @@ export function decryptGroupMessage({ message, senderKey, expectedSenderSignPK =
       version: senderKey.version + 1,
       chainKey: ratchetChainKey(senderKey.chainKey, nacl)
     }
-  };
-}
-
-export function resolveSenderKeyForMessage(senderState, message, naclUtil) {
-  if (!senderState) {
-    throw new Error("Missing sender state for group sender. Import sender-state JSON and retry.");
-  }
-
-  if (senderState.version === message.senderKeyVersion) {
-    return hydrateSenderKey(senderState, naclUtil);
-  }
-
-  if (senderState.prevVersion === message.senderKeyVersion && senderState.prevChainKey) {
-    return hydrateSenderKey({ version: senderState.prevVersion, chainKey: senderState.prevChainKey }, naclUtil);
-  }
-
-  throw new Error(
-    `SenderKey version mismatch (have v${senderState.version}, message v${message.senderKeyVersion}). Import sender-state JSON to resync.`
-  );
-}
-
-export function createSenderKeyStateMessage({ groupId, senderSignPK, senderKey }, naclUtil) {
-  return {
-    v: 1,
-    kind: GROUP_SENDER_STATE_KIND,
-    groupId,
-    senderSignPK,
-    senderKey: {
-      version: senderKey.version,
-      chainKey: naclUtil.encodeBase64(senderKey.chainKey)
-    },
-    issuedAt: Date.now()
   };
 }
