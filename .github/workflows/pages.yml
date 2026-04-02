@@ -2,7 +2,7 @@ name: Deploy Pages
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 concurrency:
@@ -63,6 +63,12 @@ jobs:
 
       - name: Build app
         run: npm run build --prefix app
+
+      - name: Include docs and specs in Pages artifact
+        run: |
+          mkdir -p app/dist/docs app/dist/spec
+          cp docs/USAGE.md docs/FAQ.md app/dist/docs/
+          cp spec/THREAT_MODEL.md spec/PROTOCOL.md app/dist/spec/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
