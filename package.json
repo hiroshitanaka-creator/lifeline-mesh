@@ -28,7 +28,8 @@
     "test:e2e:install": "npx playwright install --with-deps chromium",
     "check:compat": "node tools/check-compat-policy.js",
     "check:security-audit": "node tools/security-audit-check.js",
-    "test:e2e:real-browser": "npm run test:e2e:install && npm run test:e2e:playwright"
+    "test:e2e:real-browser": "npm run test:e2e:install && npm run test:e2e:playwright",
+    "test:e2e:playwright:main-ci": "node tests/e2e/run-playwright.js tests/e2e/main-ci-critical-path.spec.js"
   },
   "keywords": [
     "cryptography",
