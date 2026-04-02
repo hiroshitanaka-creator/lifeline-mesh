@@ -42,9 +42,8 @@ jobs:
       - name: Run typecheck (crypto + tools)
         run: npm run typecheck
 
-      - name: Run typecheck:runtime (app/src + bluetooth — surfaces gaps, non-blocking)
+      - name: Run typecheck:runtime (app/src + bluetooth)
         run: npm run typecheck:runtime
-        continue-on-error: true
 
   unit_tests:
     name: Unit tests
@@ -154,9 +153,8 @@ jobs:
     steps:
       - name: CI quality gates passed
         run: |
-          echo "Gates: lint + typecheck(crypto/tools) + unit + integration + compat + e2e:smoke passed"
+          echo "Gates: lint + typecheck(crypto/tools) + typecheck:runtime(app/src+bluetooth) + unit + integration + compat + e2e:smoke passed"
           echo "Real-browser Playwright runs in separate workflow (nightly/manual/main push)"
-          echo "Note: typecheck:runtime(app/src+bluetooth) runs separately with continue-on-error"
 
   security:
     runs-on: ubuntu-latest

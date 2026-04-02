@@ -128,7 +128,7 @@ export function createMeshRuntime(localPeerId = "unknown") {
       try {
         await manager.sendMessage(adv);
       } catch (err) {
-        console.warn("[MeshRuntime] Route adv broadcast failed on link:", err?.message ?? err);
+        console.warn("[MeshRuntime] Route adv broadcast failed on link:", err instanceof Error ? err.message : String(err));
       }
     }
   }
@@ -153,7 +153,7 @@ export function createMeshRuntime(localPeerId = "unknown") {
         await manager.sendMessage(message);
         forwardedTo.push(peerId);
       } catch (err) {
-        console.warn(`[MeshRuntime] Forward to ${peerId} failed:`, err?.message ?? err);
+        console.warn(`[MeshRuntime] Forward to ${peerId} failed:`, err instanceof Error ? err.message : String(err));
         skippedLinks.push(peerId);
       }
     }

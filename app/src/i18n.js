@@ -340,7 +340,7 @@ export function setLang(lang) {
  * @param {Record<string, string>} [vars]
  */
 export function t(key, vars = {}) {
-  const str = translations[currentLang]?.[key] ?? translations['en']?.[key] ?? key;
+  const str = translations[currentLang]?.[key] ?? translations.en?.[key] ?? key;
   return str.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 }
 

@@ -338,7 +338,7 @@ export class BLEManager {
         try {
           await this._sendQueuedEntry(decision.normalizedEntry);
         } catch (error) {
-          console.warn("[BLE] Failed retry entry did not block flush", entry.msgId, error?.message || error);
+          console.warn("[BLE] Failed retry entry did not block flush", entry.msgId, error instanceof Error ? error.message : String(error));
         }
       }
     })();
@@ -387,7 +387,7 @@ export class BLEManager {
 
       await this.store.updateOutboxStatus(msgId, finalStatus, {
         transport: "ble",
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       });
 
       if (!this.isConnected) {
@@ -397,14 +397,14 @@ export class BLEManager {
       }
 
       if (attempts >= this.protocolConfig.retryCount) {
-        this._emitTransferState("fallback", { msgId, error: error.message });
+        this._emitTransferState("fallback", { msgId, error: error instanceof Error ? error.message : String(error) });
         await this._sendFallback(entry.message, error);
-        this._emitTransferState("failed", { msgId, error: error.message });
+        this._emitTransferState("failed", { msgId, error: error instanceof Error ? error.message : String(error) });
         console.error("[BLE] Message delivery failed after retries", msgId);
         throw new Error(BLE_ERROR.SEND_FAILED);
       }
 
-      this._emitTransferState("retrying", { msgId, attempt: attempts + 1, error: error.message });
+      this._emitTransferState("retrying", { msgId, attempt: attempts + 1, error: error instanceof Error ? error.message : String(error) });
       await this._delay(this.protocolConfig.retryDelayMs);
       await this._sendQueuedEntry({ ...entry, attempts });
     }
@@ -575,7 +575,7 @@ export class BLEManager {
       try {
         await this.onForward(message, ingressPeerId);
       } catch (err) {
-        console.warn("[BLE] onForward error:", err?.message || err);
+        console.warn("[BLE] onForward error:", err instanceof Error ? err.message : String(err));
       }
     }
   }
@@ -706,7 +706,7 @@ export class BLEManager {
       }
 
       this.flushOutbox().catch((error) => {
-        console.warn("[BLE] Background outbox flush failed", error?.message || error);
+        console.warn("[BLE] Background outbox flush failed", error instanceof Error ? error.message : String(error));
       });
     }, OUTBOX_RETRY_INTERVAL_MS);
   }
@@ -824,7 +824,7 @@ export class BLEManager {
     try {
       const result = await this.transportManager.sendWithFallback("ble", message, ["clipboard", "file"]);
       if (result.transport !== "ble") {
-        console.warn(`[BLE] Fallback sent via ${result.transport} after BLE failure`, error?.message || error);
+        console.warn(`[BLE] Fallback sent via ${result.transport} after BLE failure`, error instanceof Error ? error.message : String(error));
       }
     } catch (fallbackError) {
       console.warn("[BLE] All fallback transports failed", fallbackError);

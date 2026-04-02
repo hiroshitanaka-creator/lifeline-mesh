@@ -62,7 +62,7 @@ export interface PanelHandleWithElement extends PanelHandle {
 
 export interface OperatorPanelOptions {
   /** Returns the current mesh runtime snapshot. Called on every refresh cycle. */
-  getSnapshot: () => MeshSnapshot;
+  getSnapshot?: () => MeshSnapshot;
   /**
    * Returns outbox queue stats. Called synchronously on every refresh cycle.
    * Defaults to returning empty object (all counts shown as 0).
