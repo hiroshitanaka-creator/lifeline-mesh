@@ -340,7 +340,7 @@ export function setLang(lang) {
  * @param {Record<string, string>} [vars]
  */
 export function t(key, vars = {}) {
-  const str = translations[currentLang]?.[key] ?? translations['en']?.[key] ?? key;
+  const str = translations[currentLang]?.[key] ?? translations.en?.[key] ?? key;
   return str.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
 }
 
@@ -363,11 +363,11 @@ export function applyTranslations() {
   });
 
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+    /** @type {HTMLInputElement} */ (el).placeholder = t(el.getAttribute('data-i18n-placeholder'));
   });
 
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
-    el.title = t(el.getAttribute('data-i18n-title'));
+    /** @type {HTMLElement} */ (el).title = t(el.getAttribute('data-i18n-title'));
   });
 
   document.querySelectorAll('[data-i18n-aria]').forEach(el => {

@@ -76,12 +76,12 @@ export const GATT_SERVER_ERROR = {
 export class GATTServer {
   /**
    * @param {object} [options]
-   * @param {IGATTBackend|null} [options.backend]       - Backend adapter (set later via setBackend).
+   * @param {object|null} [options.backend]       - Backend adapter (set later via setBackend).
    * @param {string}            [options.localName]     - BLE advertisement name.
    * @param {object}            [options.protocolConfig] - Protocol overrides (chunkSize, etc.).
    */
   constructor(options = {}) {
-    /** @type {IGATTBackend|null} */
+    /** @type {object|null} */
     this._backend = options.backend ?? null;
 
     this._localName = options.localName ?? "LifelineMesh";
@@ -121,7 +121,7 @@ export class GATTServer {
   /**
    * Attach (or replace) the native backend adapter.
    * Must be called before startAdvertising().
-   * @param {IGATTBackend} backend
+   * @param {object} backend
    */
   setBackend(backend) {
     this._backend = backend;

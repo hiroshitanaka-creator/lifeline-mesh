@@ -158,11 +158,6 @@ function shortId(id) {
   return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
 }
 
-function colorVal(value, greenTest, yellowTest) {
-  const cls = greenTest(value) ? "green" : yellowTest(value) ? "yellow" : "red";
-  return `<span class="lm-op-val ${cls}">${esc(value)}</span>`;
-}
-
 function formatMs(ms) {
   if (ms <= 0) return "0s";
   if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
@@ -334,12 +329,12 @@ export function renderPanel(snapshot, outboxStats = {}) {
  * @param {number} [options.pollIntervalMs=2000] - Refresh interval in ms
  * @returns {{ update: function, destroy: function }} Panel handle
  */
-export function mountOperatorPanel(container, options = {}) {
+export function mountOperatorPanel(container, options) {
   const {
     getSnapshot,
     getOutboxStats = () => ({}),
     pollIntervalMs = 2000
-  } = options;
+  } = options || {};
 
   if (!container || typeof getSnapshot !== "function") {
     throw new Error("mountOperatorPanel: container and options.getSnapshot are required");
@@ -376,7 +371,7 @@ export function mountOperatorPanel(container, options = {}) {
       const outboxStats = getOutboxStats();
       inner.innerHTML = renderPanel(snapshot, outboxStats);
     } catch (err) {
-      inner.innerHTML = `<div class="lm-op-empty">Error rendering panel: ${esc(err?.message ?? String(err))}</div>`;
+      inner.innerHTML = `<div class="lm-op-empty">Error rendering panel: ${esc(err instanceof Error ? err.message : String(err))}</div>`;
     }
   }
 
@@ -400,7 +395,7 @@ export function mountOperatorPanel(container, options = {}) {
  * @param {object} options - Same as mountOperatorPanel options
  * @returns {{ element: HTMLElement, update: function, destroy: function }}
  */
-export function createOperatorPanel(options = {}) {
+export function createOperatorPanel(options) {
   const container = document.createElement("div");
   const handle = mountOperatorPanel(container, options);
   return { element: container, ...handle };

@@ -46,7 +46,7 @@ import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from
 import { createTransportManager } from '../../crypto/transport.js';
 import { createMeshRuntime } from './runtime-mesh.js';
 import { mountOperatorPanel } from './operator-panel.js';
-import { t as tr, setLang, getLang, applyTranslations } from './i18n.js';
+import { t as tr, setLang, getLang } from './i18n.js';
 
 
 /* =========================
@@ -55,7 +55,6 @@ import { t as tr, setLang, getLang, applyTranslations } from './i18n.js';
 let bleManager = null;
 const bleManagers = new Map(); // deviceId → BLEManager (all active connections)
 let _bleTestForceSupported = false;
-let lastEncryptedMessage = null;
 let bleManagerFactory = (options = {}) => new BLEManager(options);
 let transportManager = null;
 let meshRuntime = null;
@@ -190,7 +189,7 @@ async function refreshOutboxSnapshot() {
       failed: compact.filter(e => e.status === 'failed').length
     };
   } catch (error) {
-    outboxEl.textContent = `outbox read failed: ${error.message}`;
+    outboxEl.textContent = `outbox read failed: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
@@ -227,7 +226,7 @@ async function refreshInboxSnapshot() {
       recent: compact
     }, null, 2);
   } catch (error) {
-    inboxEl.textContent = `inbox read failed: ${error.message}`;
+    inboxEl.textContent = `inbox read failed: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
@@ -334,7 +333,7 @@ function _attachBleCallbacks(manager) {
     // toContainText assertion can find the content via child text nodes)
     const msgJson = JSON.stringify(message, null, 2);
     const inputEl = document.getElementById('input');
-    inputEl.value = msgJson;
+    /** @type {HTMLTextAreaElement} */ (inputEl).value = msgJson;
     inputEl.textContent = msgJson;
     setStatus(true, tr('status.bleReceived'));
 
@@ -344,7 +343,7 @@ function _attachBleCallbacks(manager) {
       try {
         await window.decryptMsg();
       } catch (e) {
-        console.warn('[BLE] Auto-decrypt failed (may not be for this node):', e.message);
+        console.warn('[BLE] Auto-decrypt failed (may not be for this node):', e instanceof Error ? e.message : String(e));
       }
     }
   };
@@ -406,11 +405,11 @@ function initBLE() {
 function initTransportLayer() {
   transportManager = createTransportManager({
     nacl,
-    naclUtil: nacl.util
+    naclUtil: naclUtil
   });
 
   transportManager.onError = (error, transportName) => {
-    setStatus(false, `Transport error (${transportName}): ${error.message}`);
+    setStatus(false, `Transport error (${transportName}): ${error instanceof Error ? error.message : String(error)}`);
   };
 }
 
@@ -456,7 +455,7 @@ async function sendEncryptedViaTransport(transportName) {
 
 function getBleProtocolConfigFromInputs() {
   const readNumber = (id, fallback) => {
-    const value = Number(document.getElementById(id)?.value);
+    const value = Number((/** @type {HTMLInputElement|null} */ (document.getElementById(id)))?.value);
     return Number.isFinite(value) ? value : fallback;
   };
 
@@ -478,11 +477,11 @@ function renderBleProtocolConfig(config = {}) {
     reassemblyTimeoutMs: config.reassemblyTimeoutMs || 60000
   };
 
-  document.getElementById('ble-ack-timeout').value = String(safe.ackTimeoutMs);
-  document.getElementById('ble-retry-count').value = String(safe.retryCount);
-  document.getElementById('ble-retry-delay').value = String(safe.retryDelayMs);
-  document.getElementById('ble-chunk-delay').value = String(safe.chunkDelayMs);
-  document.getElementById('ble-reassembly-timeout').value = String(safe.reassemblyTimeoutMs);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-ack-timeout')).value = String(safe.ackTimeoutMs);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-retry-count')).value = String(safe.retryCount);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-retry-delay')).value = String(safe.retryDelayMs);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-chunk-delay')).value = String(safe.chunkDelayMs);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-reassembly-timeout')).value = String(safe.reassemblyTimeoutMs);
 }
 
 function loadSavedBleProtocolConfig() {
@@ -511,7 +510,7 @@ window.applyBleConfig = function() {
     updateMessageDraftMetrics();
     setStatus(true, `BLE config updated (retry=${applied.retryCount}, ack=${applied.ackTimeoutMs}ms)`);
   } catch (error) {
-    setStatus(false, `BLE config update failed: ${error.message}`);
+    setStatus(false, `BLE config update failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -534,7 +533,7 @@ window.resetBleConfig = function() {
     updateMessageDraftMetrics();
     setStatus(true, 'BLE config reset to defaults');
   } catch (error) {
-    setStatus(false, `BLE config reset failed: ${error.message}`);
+    setStatus(false, `BLE config reset failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 
@@ -646,9 +645,6 @@ window.flushOutboxNow = async function() {
   }
 };
 
-// Attach util to nacl for compatibility with existing code
-nacl.util = naclUtil;
-
 /* =========================
   Utility
 ========================= */
@@ -691,7 +687,7 @@ function bindUIActions() {
 
   document.querySelectorAll('[data-action]').forEach((element) => {
     element.addEventListener('click', (event) => {
-      const action = event.currentTarget.dataset.action;
+      const action = /** @type {HTMLElement} */ (event.currentTarget).dataset.action;
       const handler = actionMap[action];
       if (!handler) {
         console.warn('No handler for action:', action);
@@ -703,12 +699,12 @@ function bindUIActions() {
 
   document.querySelectorAll('input[name="message-mode"]').forEach((element) => {
     element.addEventListener('change', () => {
-      window.setMessageMode(element.value);
+      window.setMessageMode(/** @type {HTMLInputElement} */ (element).value);
     });
   });
   document.querySelectorAll('input[name="app-mode"]').forEach((element) => {
     element.addEventListener('change', () => {
-      window.setAppMode(element.value);
+      window.setAppMode(/** @type {HTMLInputElement} */ (element).value);
     });
   });
 
@@ -743,10 +739,10 @@ function setActionBusy(actionName, busy, loadingText) {
   }
 
   if (busy) {
-    if (!button.dataset.originalText) {
-      button.dataset.originalText = button.textContent;
+    if (!/** @type {HTMLElement} */ (button).dataset.originalText) {
+      /** @type {HTMLElement} */ (button).dataset.originalText = button.textContent || "";
     }
-    button.disabled = true;
+    /** @type {HTMLButtonElement} */ (button).disabled = true;
     button.classList.add('loading-btn');
     button.setAttribute('aria-busy', 'true');
     if (loadingText) {
@@ -755,12 +751,12 @@ function setActionBusy(actionName, busy, loadingText) {
     return;
   }
 
-  button.disabled = false;
+  /** @type {HTMLButtonElement} */ (button).disabled = false;
   button.classList.remove('loading-btn');
   button.removeAttribute('aria-busy');
-  if (button.dataset.originalText) {
-    button.textContent = button.dataset.originalText;
-    delete button.dataset.originalText;
+  if (/** @type {HTMLElement} */ (button).dataset.originalText) {
+    button.textContent = /** @type {HTMLElement} */ (button).dataset.originalText;
+    delete /** @type {HTMLElement} */ (button).dataset.originalText;
   }
 }
 
@@ -783,15 +779,15 @@ function updateMessageDraftMetrics() {
     return;
   }
 
-  const text = contentEl.value || '';
+  const text = /** @type {HTMLTextAreaElement} */ (contentEl).value || '';
   const byteLength = new TextEncoder().encode(text).length;
   const usagePercent = Math.min(100, Math.round((byteLength / MAX_MESSAGE_BYTES) * 100));
   const estimatedChunks = estimateBleChunkCount(byteLength);
   const overLimit = byteLength > MAX_MESSAGE_BYTES || estimatedChunks > MAX_BLE_CHUNKS;
 
   metricsEl.textContent = `${byteLength} / ${MAX_MESSAGE_BYTES} bytes • ${usagePercent}%`;
-  progressEl.max = MAX_MESSAGE_BYTES;
-  progressEl.value = Math.min(byteLength, MAX_MESSAGE_BYTES);
+  /** @type {HTMLProgressElement} */ (progressEl).max = MAX_MESSAGE_BYTES;
+  /** @type {HTMLProgressElement} */ (progressEl).value = Math.min(byteLength, MAX_MESSAGE_BYTES);
   chunkEl.textContent = `Estimated BLE chunks: ${estimatedChunks} / ${MAX_BLE_CHUNKS}`;
   chunkEl.className = overLimit ? 'small ng' : 'small';
 
@@ -832,14 +828,14 @@ function applyTemplateToContent(templateText) {
     return;
   }
 
-  const current = contentEl.value?.trim();
+  const current = /** @type {HTMLTextAreaElement} */ (contentEl).value?.trim();
   if (current) {
     pendingTemplateText = templateText;
     setTemplateOverwritePromptVisible(true);
     return;
   }
 
-  contentEl.value = templateText;
+  /** @type {HTMLTextAreaElement} */ (contentEl).value = templateText;
   contentEl.textContent = templateText;
   updateMessageDraftMetrics();
   contentEl.focus();
@@ -853,7 +849,7 @@ window.confirmEmergencyTemplateOverwrite = function() {
     return;
   }
   const contentEl = document.getElementById('content');
-  contentEl.value = pendingTemplateText;
+  /** @type {HTMLTextAreaElement} */ (contentEl).value = pendingTemplateText;
   updateMessageDraftMetrics();
   contentEl.focus();
   pendingTemplateText = '';
@@ -869,7 +865,7 @@ window.cancelEmergencyTemplateOverwrite = function() {
 
 window.applyDisasterTemplate = function() {
   const selector = document.getElementById('disaster-template');
-  const key = selector?.value || '';
+  const key = (/** @type {HTMLSelectElement|null} */ (selector))?.value || '';
   if (!key) {
     setStatus(false, tr('status.templateSelect'));
     return;
@@ -878,13 +874,13 @@ window.applyDisasterTemplate = function() {
 };
 
 window.applyEmergencyTemplate = function() {
-  const key = document.getElementById('emergency-template')?.value || 'safety';
+  const key = (/** @type {HTMLSelectElement|null} */ (document.getElementById('emergency-template')))?.value || 'safety';
   const templateText = getEmergencyTemplateText(key, {
-    name: document.getElementById('emergency-name')?.value || '',
-    location: document.getElementById('emergency-location')?.value || '',
-    status: document.getElementById('emergency-status')?.value || '',
-    people: document.getElementById('emergency-people')?.value || '',
-    details: document.getElementById('emergency-details')?.value || ''
+    name: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-name')))?.value || '',
+    location: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-location')))?.value || '',
+    status: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-status')))?.value || '',
+    people: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-people')))?.value || '',
+    details: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-details')))?.value || ''
   });
   applyTemplateToContent(templateText);
 };
@@ -892,7 +888,7 @@ window.applyEmergencyTemplate = function() {
 window.setAppMode = function(mode) {
   const activeMode = mode === 'advanced' ? 'advanced' : 'emergency';
   document.querySelectorAll('input[name="app-mode"]').forEach((el) => {
-    el.checked = el.value === activeMode;
+    /** @type {HTMLInputElement} */ (el).checked = /** @type {HTMLInputElement} */ (el).value === activeMode;
   });
   const advancedEl = document.getElementById('advanced-mode-sections');
   const emergencyEl = document.getElementById('emergency-mode-section');
@@ -906,17 +902,17 @@ window.setAppMode = function(mode) {
 };
 
 function getLocalSignPKB64(my) {
-  return nacl.util.encodeBase64(my.signPKu8);
+  return naclUtil.encodeBase64(my.signPKu8);
 }
 
 function hydrateLocalSenderState(state) {
-  return GroupMesh.hydrateSenderKey(state, nacl.util);
+  return GroupMesh.hydrateSenderKey(state, naclUtil);
 }
 
 function encodeSenderState(senderKey) {
   return {
     version: senderKey.version,
-    chainKey: nacl.util.encodeBase64(senderKey.chainKey)
+    chainKey: naclUtil.encodeBase64(senderKey.chainKey)
   };
 }
 
@@ -931,25 +927,25 @@ async function ensureMyKeys() {
 
   if (!signPK || !signSK) {
     const kp = DMesh.generateSignKeyPair(nacl);
-    signPK = nacl.util.encodeBase64(kp.publicKey);
-    signSK = nacl.util.encodeBase64(kp.secretKey);
+    signPK = naclUtil.encodeBase64(kp.publicKey);
+    signSK = naclUtil.encodeBase64(kp.secretKey);
     await idbPut(STORE_KEYS, signPK, "my_sign_pk");
     await idbPut(STORE_KEYS, signSK, "my_sign_sk");
   }
 
   if (!boxPK || !boxSK) {
     const kp = DMesh.generateBoxKeyPair(nacl);
-    boxPK = nacl.util.encodeBase64(kp.publicKey);
-    boxSK = nacl.util.encodeBase64(kp.secretKey);
+    boxPK = naclUtil.encodeBase64(kp.publicKey);
+    boxSK = naclUtil.encodeBase64(kp.secretKey);
     await idbPut(STORE_KEYS, boxPK, "my_box_pk");
     await idbPut(STORE_KEYS, boxSK, "my_box_sk");
   }
 
   return {
-    signPKu8: nacl.util.decodeBase64(signPK),
-    signSKu8: nacl.util.decodeBase64(signSK),
-    boxPKu8: nacl.util.decodeBase64(boxPK),
-    boxSKu8: nacl.util.decodeBase64(boxSK)
+    signPKu8: naclUtil.decodeBase64(signPK),
+    signSKu8: naclUtil.decodeBase64(signSK),
+    boxPKu8: naclUtil.decodeBase64(boxPK),
+    boxSKu8: naclUtil.decodeBase64(boxSK)
   };
 }
 
@@ -966,12 +962,12 @@ window.initOrLoad = async function() {
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
     meshRuntime?.setLocalPeerId(myId.fp);
     renderMeshRuntimeState();
-    await refreshContacts();
-    await refreshGroups();
+    await window.refreshContacts();
+    await window.refreshGroups();
     await refreshOutboxSnapshot();
     setStatus(true, `Keys ready. Fingerprint: ${myId.fp}`);
   } catch (e) {
-    setStatus(false, e.message);
+    setStatus(false, e instanceof Error ? e.message : String(e));
   } finally {
     setActionBusy('initOrLoad', false);
   }
@@ -1010,7 +1006,7 @@ window.exportKeys = async function() {
       { signPK, signSK, boxPK, boxSK },
       password,
       nacl,
-      nacl.util
+      naclUtil
     );
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -1024,7 +1020,7 @@ window.exportKeys = async function() {
     const kdfLabel = backup.kdf === "argon2id" ? "Argon2id" : "PBKDF2";
     setStatus(true, "Keys exported securely (" + kdfLabel + " + NaCl secretbox)");
   } catch (e) {
-    setStatus(false, "Export failed: " + e.message);
+    setStatus(false, "Export failed: " + (e instanceof Error ? e.message : String(e)));
   }
 };
 
@@ -1038,7 +1034,7 @@ window.importKeys = async function() {
 
   input.onchange = async (e) => {
     try {
-      const file = e.target.files[0];
+      const file = /** @type {HTMLInputElement} */ (e.target).files[0];
       const text = await file.text();
       const backup = JSON.parse(text);
 
@@ -1047,17 +1043,17 @@ window.importKeys = async function() {
       if (backup.version === 2) {
         // Secure format (PBKDF2/Argon2id + NaCl secretbox)
         setStatus(true, "Decrypting keys (this may take a moment)...");
-        keys = await decryptKeys(backup, password, nacl, nacl.util);
+        keys = await decryptKeys(backup, password, nacl, naclUtil);
       } else if (backup.version === 1 && backup.keys) {
         // Legacy XOR format - decrypt and warn
-        const passwordHash = nacl.hash(nacl.util.decodeUTF8(password));
+        const passwordHash = nacl.hash(naclUtil.decodeUTF8(password));
         const xorDecrypt = (encrypted) => {
-          const encryptedBytes = nacl.util.decodeBase64(encrypted);
+          const encryptedBytes = naclUtil.decodeBase64(encrypted);
           const decrypted = new Uint8Array(encryptedBytes.length);
           for (let i = 0; i < encryptedBytes.length; i++) {
             decrypted[i] = encryptedBytes[i] ^ passwordHash[i % passwordHash.length];
           }
-          return nacl.util.encodeBase64(decrypted);
+          return naclUtil.encodeBase64(decrypted);
         };
         keys = {
           signPK: xorDecrypt(backup.keys.signPK),
@@ -1070,10 +1066,10 @@ window.importKeys = async function() {
       }
 
       // Verify key lengths
-      if (nacl.util.decodeBase64(keys.signPK).length !== 32 ||
-          nacl.util.decodeBase64(keys.signSK).length !== 64 ||
-          nacl.util.decodeBase64(keys.boxPK).length !== 32 ||
-          nacl.util.decodeBase64(keys.boxSK).length !== 32) {
+      if (naclUtil.decodeBase64(keys.signPK).length !== 32 ||
+          naclUtil.decodeBase64(keys.signSK).length !== 64 ||
+          naclUtil.decodeBase64(keys.boxPK).length !== 32 ||
+          naclUtil.decodeBase64(keys.boxSK).length !== 32) {
         return alert("Decryption failed - wrong password or corrupted file");
       }
 
@@ -1083,7 +1079,7 @@ window.importKeys = async function() {
       await idbPut(STORE_KEYS, keys.boxPK, "my_box_pk");
       await idbPut(STORE_KEYS, keys.boxSK, "my_box_sk");
 
-      await initOrLoad();
+      await window.initOrLoad();
 
       if (backup.version === 1) {
         setStatus(true, "Keys imported from LEGACY backup. Re-export recommended for better security.");
@@ -1091,7 +1087,7 @@ window.importKeys = async function() {
         setStatus(true, "Keys imported successfully (secure format)");
       }
     } catch (e) {
-      setStatus(false, "Import failed: " + e.message);
+      setStatus(false, "Import failed: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -1119,7 +1115,7 @@ window.resetAll = async function() {
 document.addEventListener("keydown", (event) => {
 
   // Don't trigger shortcuts while typing
-  const tag = event.target.tagName;
+  const tag = /** @type {HTMLElement} */ (event.target).tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return;
 
   // Ctrl + E → Encrypt
@@ -1169,20 +1165,20 @@ document.addEventListener("keydown", (event) => {
 ========================= */
 window.addContact = async function() {
   try {
-    const obj = JSON.parse(document.getElementById("contact-input").value.trim());
+    const obj = JSON.parse(/** @type {HTMLInputElement} */ (document.getElementById("contact-input")).value.trim());
 
     if (!obj || !obj.signPK || !obj.boxPK) {
       return alert("Invalid format. Need: signPK and boxPK");
     }
 
-    const signPKu8 = nacl.util.decodeBase64(obj.signPK);
-    const boxPKu8 = nacl.util.decodeBase64(obj.boxPK);
+    const signPKu8 = naclUtil.decodeBase64(obj.signPK);
+    const boxPKu8 = naclUtil.decodeBase64(obj.boxPK);
 
     if (signPKu8.length !== 32) return alert("Invalid signPK length");
     if (boxPKu8.length !== 32) return alert("Invalid boxPK length");
 
     const fp = DMesh.fingerprintFromSignPK(signPKu8, nacl);
-    const fpB64 = nacl.util.encodeBase64(fp);
+    const fpB64 = naclUtil.encodeBase64(fp);
 
     const contact = {
       fp: fpB64,
@@ -1193,10 +1189,10 @@ window.addContact = async function() {
     };
 
     await idbPut(STORE_CONTACTS, contact);
-    await refreshContacts();
+    await window.refreshContacts();
     setStatus(true, `Contact saved: ${contact.name} (fp: ${fpB64.slice(0, 16)}...)`);
   } catch (e) {
-    setStatus(false, "Add contact failed: " + e.message);
+    setStatus(false, "Add contact failed: " + (e instanceof Error ? e.message : String(e)));
   }
 };
 
@@ -1215,7 +1211,7 @@ window.refreshContacts = async function() {
   }
 
   sel.onchange = () => {
-    const selected = sel.options[sel.selectedIndex].text;
+    const selected = /** @type {HTMLSelectElement} */ (sel).options[/** @type {HTMLSelectElement} */ (sel).selectedIndex].text;
     document.getElementById("encrypt-recipient").textContent = selected || "(select above)";
   };
 
@@ -1235,11 +1231,11 @@ window.refreshContacts = async function() {
 };
 
 window.deleteSelectedContact = async function() {
-  const fp = document.getElementById("recipient-select").value;
+  const fp = /** @type {HTMLInputElement} */ (document.getElementById("recipient-select")).value;
   if (!fp) return alert("Select a contact first");
 
   await idbDel(STORE_CONTACTS, fp);
-  await refreshContacts();
+  await window.refreshContacts();
   setStatus(true, `Contact deleted (fp: ${fp.slice(0, 16)}...)`);
 };
 
@@ -1250,7 +1246,7 @@ window.deleteSelectedContact = async function() {
 window.setMessageMode = function(mode) {
   const isGroup = mode === 'group';
   document.querySelectorAll('input[name="message-mode"]').forEach((el) => {
-    el.checked = el.value === mode;
+    /** @type {HTMLInputElement} */ (el).checked = /** @type {HTMLInputElement} */ (el).value === mode;
   });
   document.getElementById('direct-controls').style.display = isGroup ? 'none' : 'block';
   document.getElementById('group-controls').style.display = isGroup ? 'block' : 'none';
@@ -1278,7 +1274,7 @@ window.refreshGroups = async function() {
 };
 
 async function renderSelectedGroup() {
-  const groupId = document.getElementById('group-select').value;
+  const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
   if (!groupId) {
     document.getElementById('group-view').textContent = '(no group selected)';
     return;
@@ -1295,7 +1291,7 @@ async function renderSelectedGroup() {
 async function forceRotateSenderKey(group) {
   group.senderKey = {
     version: (group.senderKey?.version || 0) + 1,
-    chainKey: nacl.util.encodeBase64(nacl.randomBytes(32))
+    chainKey: naclUtil.encodeBase64(nacl.randomBytes(32))
   };
   group.updatedAt = Date.now();
   await saveGroup(group);
@@ -1306,40 +1302,40 @@ async function forceRotateSenderKey(group) {
 
 window.createGroup = async function() {
   try {
-    const name = (document.getElementById('group-name').value || '').trim();
+    const name = (/** @type {HTMLInputElement} */ (document.getElementById('group-name')).value || '').trim();
     if (!name) return alert('Group name is required');
 
     const my = await ensureMyKeys();
-    const myFp = nacl.util.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
+    const myFp = naclUtil.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
     const group = GroupMesh.createGroup({
       name,
       createdBy: myFp,
       members: [myFp]
-    }, nacl, nacl.util);
+    }, nacl, naclUtil);
 
     await saveGroup(group);
     await saveGroupMembers(group.id, group.members);
     await saveSenderKeyState(group.id, getLocalSignPKB64(my), group.senderKey);
 
-    await refreshGroups();
-    document.getElementById('group-select').value = group.id;
+    await window.refreshGroups();
+    /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value = group.id;
     await renderSelectedGroup();
     setStatus(true, `Group created: ${group.name}`);
   } catch (e) {
-    setStatus(false, 'Create group failed: ' + e.message);
+    setStatus(false, 'Create group failed: ' + (e instanceof Error ? e.message : String(e)));
   }
 };
 
 window.joinGroup = async function() {
   try {
-    const raw = document.getElementById('group-json').value.trim();
+    const raw = /** @type {HTMLInputElement} */ (document.getElementById('group-json')).value.trim();
     const parsed = JSON.parse(raw);
     if (!parsed.id || !parsed.senderKey) {
       throw new Error('Invalid group JSON');
     }
 
     const my = await ensureMyKeys();
-    const myFp = nacl.util.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
+    const myFp = naclUtil.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
     const members = Array.from(new Set([...(parsed.members || []), myFp]));
     parsed.members = members;
 
@@ -1347,19 +1343,19 @@ window.joinGroup = async function() {
     await saveGroupMembers(parsed.id, members);
     await saveSenderKeyState(parsed.id, getLocalSignPKB64(my), parsed.senderKey);
 
-    await refreshGroups();
-    document.getElementById('group-select').value = parsed.id;
+    await window.refreshGroups();
+    /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value = parsed.id;
     await renderSelectedGroup();
     setStatus(true, `Joined group: ${parsed.name || parsed.id}`);
   } catch (e) {
-    setStatus(false, 'Join group failed: ' + e.message);
+    setStatus(false, 'Join group failed: ' + (e instanceof Error ? e.message : String(e)));
   }
 };
 
 window.addSelectedMemberToGroup = async function() {
   try {
-    const groupId = document.getElementById('group-select').value;
-    const memberFp = document.getElementById('group-member-select').value;
+    const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
+    const memberFp = /** @type {HTMLInputElement} */ (document.getElementById('group-member-select')).value;
     if (!groupId || !memberFp) return alert('Select group and member');
 
     const group = await getGroup(groupId);
@@ -1375,14 +1371,14 @@ window.addSelectedMemberToGroup = async function() {
     await renderSelectedGroup();
     setStatus(true, 'Member added. SenderKey rotated.');
   } catch (e) {
-    setStatus(false, 'Add member failed: ' + e.message);
+    setStatus(false, 'Add member failed: ' + (e instanceof Error ? e.message : String(e)));
   }
 };
 
 window.removeSelectedMemberFromGroup = async function() {
   try {
-    const groupId = document.getElementById('group-select').value;
-    const memberFp = document.getElementById('group-member-select').value;
+    const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
+    const memberFp = /** @type {HTMLInputElement} */ (document.getElementById('group-member-select')).value;
     if (!groupId || !memberFp) return alert('Select group and member');
 
     const group = await getGroup(groupId);
@@ -1398,7 +1394,7 @@ window.removeSelectedMemberFromGroup = async function() {
     await renderSelectedGroup();
     setStatus(true, 'Member removed. SenderKey rotated.');
   } catch (e) {
-    setStatus(false, 'Remove member failed: ' + e.message);
+    setStatus(false, 'Remove member failed: ' + (e instanceof Error ? e.message : String(e)));
   }
 };
 
@@ -1409,12 +1405,12 @@ window.encryptMsg = async function() {
   setActionBusy('encryptMsg', true, '🔒 Encrypting...');
   setStatus(true, '🔒 Encrypting...');
   try {
-    const content = document.getElementById("content").value || "";
-    const mode = document.querySelector('input[name="message-mode"]:checked')?.value || 'direct';
+    const content = /** @type {HTMLInputElement} */ (document.getElementById("content")).value || "";
+    const mode = (/** @type {HTMLInputElement|null} */ (document.querySelector('input[name="message-mode"]:checked')))?.value || 'direct';
     const my = await ensureMyKeys();
 
     if (mode === 'group') {
-      const groupId = document.getElementById('group-select').value;
+      const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
       if (!groupId) return alert('Select a group');
 
       const group = await getGroup(groupId);
@@ -1433,12 +1429,12 @@ window.encryptMsg = async function() {
         senderKey,
         senderSignPK: my.signPKu8,
         senderSignSK: my.signSKu8
-      }, nacl, nacl.util);
+      }, nacl, naclUtil);
 
       await saveSenderKeyState(groupId, localSignPK, {
         ...encodeSenderState(encrypted.nextSenderKey),
         prevVersion: senderKey.version,
-        prevChainKey: nacl.util.encodeBase64(senderKey.chainKey)
+        prevChainKey: naclUtil.encodeBase64(senderKey.chainKey)
       });
       document.getElementById("encrypted").textContent = JSON.stringify(encrypted.message, null, 2);
       document.getElementById("encrypted-actions").style.display = "flex";
@@ -1446,7 +1442,7 @@ window.encryptMsg = async function() {
       return;
     }
 
-    const fp = document.getElementById("recipient-select").value;
+    const fp = /** @type {HTMLInputElement} */ (document.getElementById("recipient-select")).value;
     if (!fp) return alert("Select a recipient");
 
     const recipient = await idbGet(STORE_CONTACTS, fp);
@@ -1458,7 +1454,7 @@ window.encryptMsg = async function() {
       senderSignSK: my.signSKu8,
       senderBoxPK: my.boxPKu8,
       senderBoxSK: my.boxSKu8,
-      recipientBoxPK: nacl.util.decodeBase64(recipient.boxPK)
+      recipientBoxPK: naclUtil.decodeBase64(recipient.boxPK)
     });
 
     document.getElementById("encrypted").textContent = JSON.stringify(message, null, 2);
@@ -1494,7 +1490,7 @@ window.exportEncryptedFile = async function() {
 window.decryptMsg = async function() {
   setActionBusy('decryptMsg', true, '🔓 Decrypting...');
   try {
-    const message = JSON.parse(document.getElementById("input").value.trim());
+    const message = JSON.parse(/** @type {HTMLInputElement} */ (document.getElementById("input")).value.trim());
     const my = await ensureMyKeys();
 
     if (message.kind === 'dmesh-group-msg') {
@@ -1502,8 +1498,8 @@ window.decryptMsg = async function() {
       if (!group) throw new Error('Unknown group');
 
       const members = await getGroupMembers(message.groupId);
-      const senderSignPKu8 = nacl.util.decodeBase64(message.senderSignPK);
-      const senderFpB64 = nacl.util.encodeBase64(DMesh.fingerprintFromSignPK(senderSignPKu8, nacl));
+      const senderSignPKu8 = naclUtil.decodeBase64(message.senderSignPK);
+      const senderFpB64 = naclUtil.encodeBase64(DMesh.fingerprintFromSignPK(senderSignPKu8, nacl));
       if (!members.includes(senderFpB64)) {
         throw new Error('Sender is not a current group member');
       }
@@ -1523,7 +1519,7 @@ window.decryptMsg = async function() {
       const decrypted = GroupMesh.decryptGroupMessage({
         message,
         senderKey: activeSenderKey
-      }, nacl, nacl.util);
+      }, nacl, naclUtil);
 
       await saveSenderKeyState(message.groupId, message.senderSignPK, encodeSenderState(decrypted.nextSenderKey));
       document.getElementById("decrypted").textContent = decrypted.payload.content;
@@ -1532,9 +1528,9 @@ window.decryptMsg = async function() {
     }
 
     // Sender fingerprint
-    const senderSignPK = nacl.util.decodeBase64(message.senderSignPK);
+    const senderSignPK = naclUtil.decodeBase64(message.senderSignPK);
     const senderFp = DMesh.fingerprintFromSignPK(senderSignPK, nacl);
-    const senderFpB64 = nacl.util.encodeBase64(senderFp);
+    const senderFpB64 = naclUtil.encodeBase64(senderFp);
 
     // Contact lookup
     let contact = await idbGet(STORE_CONTACTS, senderFpB64);
@@ -1543,7 +1539,7 @@ window.decryptMsg = async function() {
     let expectedSenderBoxPK = null;
 
     if (!contact) {
-      if (!document.getElementById("tofu").checked) {
+      if (!/** @type {HTMLInputElement} */ (document.getElementById("tofu")).checked) {
         setStatus(false, `Unknown sender (fp: ${senderFpB64.slice(0, 16)}...). Enable TOFU or add contact first.`);
         return;
       }
@@ -1556,11 +1552,11 @@ window.decryptMsg = async function() {
         addedAt: Date.now()
       };
       await idbPut(STORE_CONTACTS, contact);
-      await refreshContacts();
+      await window.refreshContacts();
     } else {
       // Known sender - expect keys to match
-      expectedSenderSignPK = nacl.util.decodeBase64(contact.signPK);
-      expectedSenderBoxPK = nacl.util.decodeBase64(contact.boxPK);
+      expectedSenderSignPK = naclUtil.decodeBase64(contact.signPK);
+      expectedSenderBoxPK = naclUtil.decodeBase64(contact.boxPK);
     }
 
     // Decrypt
@@ -1635,17 +1631,17 @@ window.scanQRCode = async function() {
       { fps: 10, qrbox: { width: 250, height: 250 } },
       (decodedText) => {
         // Successfully scanned
-        document.getElementById("contact-input").value = decodedText;
-        closeQRScanner();
-        addContact();
+        /** @type {HTMLInputElement} */ (document.getElementById("contact-input")).value = decodedText;
+        window.closeQRScanner();
+        window.addContact();
       },
-      (errorMessage) => {
+      (_errorMessage) => {
         // Scanning error (ignore, happens frequently)
       }
     );
   } catch (err) {
     alert("Camera access error: " + err);
-    closeQRScanner();
+    window.closeQRScanner();
   }
 };
 
@@ -1666,10 +1662,10 @@ window.onclick = function(event) {
   const scannerModal = document.getElementById("qr-scanner-modal");
 
   if (event.target === qrModal) {
-    closeQRModal();
+    window.closeQRModal();
   }
   if (event.target === scannerModal) {
-    closeQRScanner();
+    window.closeQRScanner();
   }
 };
 
@@ -1767,7 +1763,7 @@ function updateKdfStatus() {
 
     bindUIActions();
     updateKdfStatus();
-    const migrationResult = await migrateLegacyV1IfNeeded();
+    const _migrationResult = await migrateLegacyV1IfNeeded();
     initTransportLayer();
     initBLE();  // Initialize Bluetooth
 
@@ -1779,11 +1775,11 @@ function updateKdfStatus() {
       });
     }
 
-    await initOrLoad();
-    await refreshGroups();
-    setMessageMode('direct');
+    await window.initOrLoad();
+    await window.refreshGroups();
+    window.setMessageMode('direct');
     const savedMode = localStorage.getItem(APP_MODE_STORAGE_KEY) || 'advanced';
-    setAppMode(savedMode);
+    window.setAppMode(savedMode);
     await refreshOutboxSnapshot();
     await refreshInboxSnapshot();
     updateMessageDraftMetrics();

@@ -25,6 +25,6 @@ self.onmessage = (event) => {
 
     self.postMessage({ id, ok: false, error: `Unknown worker action: ${type}` });
   } catch (error) {
-    self.postMessage({ id, ok: false, error: error?.message || String(error) });
+    self.postMessage({ id, ok: false, error: error instanceof Error ? error.message : String(error) });
   }
 };

@@ -1,88 +1,142 @@
+const baseLanguageOptions = {
+  ecmaVersion: 2022,
+  sourceType: "module",
+  globals: {
+    // Node.js globals
+    console: "readonly",
+    process: "readonly",
+    Buffer: "readonly",
+    __dirname: "readonly",
+    __filename: "readonly",
+    // Browser globals
+    window: "readonly",
+    document: "readonly",
+    navigator: "readonly",
+    indexedDB: "readonly",
+    Blob: "readonly",
+    URL: "readonly",
+    alert: "readonly",
+    confirm: "readonly",
+    prompt: "readonly",
+    TextEncoder: "readonly",
+    TextDecoder: "readonly",
+    setTimeout: "readonly",
+    crypto: "readonly",
+    FileReader: "readonly",
+    DataView: "readonly",
+    // External libraries
+    nacl: "readonly",
+    QRCode: "readonly",
+    Html5Qrcode: "readonly"
+  }
+};
+
+const baseRules = {
+  // Error prevention
+  "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+  "no-undef": "error",
+  "no-console": "off",
+  "no-debugger": "error",
+
+  // Code quality
+  "eqeqeq": ["error", "always"],
+  "no-var": "error",
+  "prefer-const": "error",
+  "no-implicit-coercion": "error",
+  "no-throw-literal": "error",
+  "no-return-await": "error",
+  "require-await": "error",
+
+  // Security
+  "no-eval": "error",
+  "no-implied-eval": "error",
+  "no-new-func": "error",
+  "no-script-url": "error",
+
+  // Best practices
+  "curly": ["error", "multi-line"],
+  "default-case": "error",
+  "dot-notation": "error",
+  "no-else-return": "error",
+  "no-empty-function": "error",
+  "no-floating-decimal": "error",
+  "no-lone-blocks": "error",
+  "no-multi-spaces": "error",
+  "no-self-compare": "error",
+  "no-sequences": "error",
+  "no-useless-concat": "error",
+  "no-useless-return": "error",
+  "yoda": "error",
+
+  // Style consistency
+  "semi": ["error", "always"],
+  "quotes": ["error", "double", { "avoidEscape": true, "allowTemplateLiterals": true }],
+  "indent": ["error", 2, { "SwitchCase": 1 }],
+  "comma-dangle": ["error", "never"],
+  "no-trailing-spaces": "error",
+  "no-multiple-empty-lines": ["error", { "max": 2 }]
+};
+
 export default [
   {
+    languageOptions: baseLanguageOptions,
+    rules: baseRules
+  },
+  {
+    files: ["app/src/**/*.js", "bluetooth/**/*.js"],
     languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: "module",
       globals: {
-        // Node.js globals
-        console: "readonly",
-        process: "readonly",
-        Buffer: "readonly",
-        __dirname: "readonly",
-        __filename: "readonly",
-        // Browser globals
-        window: "readonly",
-        document: "readonly",
-        navigator: "readonly",
-        indexedDB: "readonly",
-        Blob: "readonly",
-        URL: "readonly",
-        alert: "readonly",
-        confirm: "readonly",
-        prompt: "readonly",
-        TextEncoder: "readonly",
-        TextDecoder: "readonly",
-        setTimeout: "readonly",
-        crypto: "readonly",
-        FileReader: "readonly",
-        DataView: "readonly",
-        // External libraries
-        nacl: "readonly",
-        QRCode: "readonly",
-        Html5Qrcode: "readonly"
+        localStorage: "readonly",
+        Worker: "readonly",
+        self: "readonly",
+        fetch: "readonly",
+        caches: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly"
       }
-    },
+    }
+  },
+  {
+    files: [
+      "app/src/db.js",
+      "app/src/i18n.js",
+      "app/src/main.js",
+      "app/src/worker-client.js",
+      "app/src/workers/crypto-worker.js"
+    ],
     rules: {
-      // Error prevention
-      "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
-      "no-undef": "error",
-      "no-console": "off",
-      "no-debugger": "error",
-
-      // Code quality
-      "eqeqeq": ["error", "always"],
-      "no-var": "error",
-      "prefer-const": "error",
-      "no-implicit-coercion": "error",
-      "no-throw-literal": "error",
-      "no-return-await": "error",
-      "require-await": "error",
-
-      // Security
-      "no-eval": "error",
-      "no-implied-eval": "error",
-      "no-new-func": "error",
-      "no-script-url": "error",
-
-      // Best practices
-      "curly": ["error", "multi-line"],
-      "default-case": "error",
-      "dot-notation": "error",
-      "no-else-return": "error",
-      "no-empty-function": "error",
-      "no-floating-decimal": "error",
-      "no-lone-blocks": "error",
-      "no-multi-spaces": "error",
-      "no-self-compare": "error",
-      "no-sequences": "error",
-      "no-useless-concat": "error",
-      "no-useless-return": "error",
-      "yoda": "error",
-
-      // Style consistency
-      "semi": ["error", "always"],
-      "quotes": ["error", "double", { "avoidEscape": true, "allowTemplateLiterals": true }],
-      "indent": ["error", 2, { "SwitchCase": 1 }],
-      "comma-dangle": ["error", "never"],
-      "no-trailing-spaces": "error",
-      "no-multiple-empty-lines": ["error", { "max": 2 }]
+      "quotes": "off"
+    }
+  },
+  {
+    files: ["app/src/i18n.js"],
+    rules: {
+      "comma-dangle": "off"
+    }
+  },
+  {
+    files: ["app/src/db.js", "app/src/main.js"],
+    rules: {
+      "require-await": "off"
+    }
+  },
+  {
+    files: ["app/src/main.js"],
+    rules: {
+      "no-multiple-empty-lines": "off"
+    }
+  },
+  {
+    files: ["app/src/main.js", "app/src/operator-panel.js", "app/src/runtime-mesh.js"],
+    rules: {
+      "no-multi-spaces": "off"
     }
   },
   {
     ignores: [
       "node_modules/**",
       "**/node_modules/**",
-      "app/**",
       "*.min.js"
     ]
   }
