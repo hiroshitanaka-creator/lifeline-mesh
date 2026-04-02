@@ -204,9 +204,10 @@
         <input id="group-name" data-i18n-placeholder="encrypt.group.namePlaceholder" placeholder="New group name" />
         <button data-action="createGroup" data-i18n="encrypt.group.create">👥 Create Group</button>
       </div>
-      <textarea id="group-json" data-i18n-placeholder="encrypt.group.jsonPlaceholder" placeholder='Paste group JSON to join (id/name/members/senderKey)'></textarea>
+      <textarea id="group-json" data-i18n-placeholder="encrypt.group.jsonPlaceholder" placeholder='Paste group JSON to join OR sender-state JSON to resync'></textarea>
       <div class="row">
         <button data-action="joinGroup" data-i18n="encrypt.group.join">📥 Join Group</button>
+        <button data-action="copyGroupSenderState">📋 Copy My Sender-State</button>
       </div>
       <select id="group-select">
         <option value="" data-i18n="encrypt.group.select">Select Group</option>
@@ -345,10 +346,10 @@
     <details>
       <summary data-i18n="docs.summary">📚 Documentation</summary>
       <ul>
-        <li><a href="../docs/USAGE.md" target="_blank" data-i18n="docs.usage">Usage Guide</a></li>
-        <li><a href="../docs/FAQ.md" target="_blank" data-i18n="docs.faq">FAQ</a></li>
-        <li><a href="../spec/THREAT_MODEL.md" target="_blank" data-i18n="docs.threat">Threat Model</a></li>
-        <li><a href="../spec/PROTOCOL.md" target="_blank" data-i18n="docs.protocol">Protocol Specification</a></li>
+        <li><a href="./docs/USAGE.md" target="_blank" data-i18n="docs.usage">Usage Guide</a></li>
+        <li><a href="./docs/FAQ.md" target="_blank" data-i18n="docs.faq">FAQ</a></li>
+        <li><a href="./spec/THREAT_MODEL.md" target="_blank" data-i18n="docs.threat">Threat Model</a></li>
+        <li><a href="./spec/PROTOCOL.md" target="_blank" data-i18n="docs.protocol">Protocol Specification</a></li>
       </ul>
     </details>
   </div>

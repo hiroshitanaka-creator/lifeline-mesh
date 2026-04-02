@@ -137,6 +137,89 @@ test("integration: group decrypt rejects wrong sender key state", () => {
   }
 });
 
+
+test("integration: group sender-state resync unblocks version mismatch across two devices", () => {
+  const alice = nacl.sign.keyPair();
+
+  const group = GroupMesh.createGroup({
+    name: "Resync",
+    createdBy: naclUtil.encodeBase64(alice.publicKey),
+    members: [naclUtil.encodeBase64(alice.publicKey)]
+  }, nacl, naclUtil);
+
+  let aliceState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+  let bobSenderStateRecord = {
+    version: aliceState.version,
+    chainKey: naclUtil.encodeBase64(aliceState.chainKey)
+  };
+
+  const m1 = GroupMesh.encryptGroupMessage({
+    content: "m1",
+    groupId: group.id,
+    senderKey: aliceState,
+    senderSignPK: alice.publicKey,
+    senderSignSK: alice.secretKey
+  }, nacl, naclUtil);
+  aliceState = cloneSenderKeyState(m1.nextSenderKey);
+  const d1 = GroupMesh.decryptGroupMessage({
+    message: m1.message,
+    senderKey: GroupMesh.resolveSenderKeyForMessage(bobSenderStateRecord, m1.message, naclUtil)
+  }, nacl, naclUtil);
+  bobSenderStateRecord = {
+    ...GroupMesh.createSenderKeyStateMessage({
+      groupId: group.id,
+      senderSignPK: m1.message.senderSignPK,
+      senderKey: d1.nextSenderKey
+    }, naclUtil).senderKey
+  };
+
+  const m2 = GroupMesh.encryptGroupMessage({
+    content: "m2",
+    groupId: group.id,
+    senderKey: aliceState,
+    senderSignPK: alice.publicKey,
+    senderSignSK: alice.secretKey
+  }, nacl, naclUtil);
+  aliceState = cloneSenderKeyState(m2.nextSenderKey);
+
+  const m3 = GroupMesh.encryptGroupMessage({
+    content: "m3",
+    groupId: group.id,
+    senderKey: aliceState,
+    senderSignPK: alice.publicKey,
+    senderSignSK: alice.secretKey
+  }, nacl, naclUtil);
+  aliceState = cloneSenderKeyState(m3.nextSenderKey);
+
+  let mismatch = false;
+  try {
+    GroupMesh.resolveSenderKeyForMessage(bobSenderStateRecord, m3.message, naclUtil);
+  } catch (error) {
+    mismatch = String(error?.message || error).includes("SenderKey version mismatch");
+  }
+  if (!mismatch) {
+    throw new Error("Expected sender key version mismatch before resync");
+  }
+
+  const resyncPayload = GroupMesh.createSenderKeyStateMessage({
+    groupId: group.id,
+    senderSignPK: m3.message.senderSignPK,
+    senderKey: cloneSenderKeyState(m2.nextSenderKey)
+  }, naclUtil);
+  bobSenderStateRecord = {
+    ...resyncPayload.senderKey
+  };
+
+  const decryptedAfterResync = GroupMesh.decryptGroupMessage({
+    message: m3.message,
+    senderKey: GroupMesh.resolveSenderKeyForMessage(bobSenderStateRecord, m3.message, naclUtil)
+  }, nacl, naclUtil);
+
+  if (decryptedAfterResync.payload.content !== "m3") {
+    throw new Error("Resynced sender state failed to decrypt latest message");
+  }
+});
+
 for (const { name, fn } of tests) {
   try {
     await fn();

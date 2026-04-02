@@ -663,6 +663,7 @@ function bindUIActions() {
     deleteSelectedContact: () => window.deleteSelectedContact(),
     createGroup: () => window.createGroup(),
     joinGroup: () => window.joinGroup(),
+    copyGroupSenderState: () => window.copyGroupSenderState(),
     addSelectedMemberToGroup: () => window.addSelectedMemberToGroup(),
     removeSelectedMemberFromGroup: () => window.removeSelectedMemberFromGroup(),
     encryptMsg: () => window.encryptMsg(),
@@ -913,6 +914,34 @@ function encodeSenderState(senderKey) {
   return {
     version: senderKey.version,
     chainKey: naclUtil.encodeBase64(senderKey.chainKey)
+  };
+}
+
+function parseSenderStateImportPayload(parsed) {
+  if (!parsed || parsed.kind !== GroupMesh.GROUP_SENDER_STATE_KIND) {
+    return null;
+  }
+
+  if (!parsed.groupId || !parsed.senderSignPK || !parsed.senderKey) {
+    throw new Error('Invalid sender-state JSON');
+  }
+
+  if (!Number.isFinite(parsed.senderKey.version) || parsed.senderKey.version < 1) {
+    throw new Error('Invalid sender-state version');
+  }
+
+  const keyBytes = naclUtil.decodeBase64(parsed.senderKey.chainKey || '');
+  if (keyBytes.length !== 32) {
+    throw new Error('Invalid sender-state chainKey length');
+  }
+
+  return {
+    groupId: parsed.groupId,
+    senderSignPK: parsed.senderSignPK,
+    senderKey: {
+      version: parsed.senderKey.version,
+      chainKey: parsed.senderKey.chainKey
+    }
   };
 }
 
@@ -1300,6 +1329,34 @@ async function forceRotateSenderKey(group) {
   await saveSenderKeyState(group.id, getLocalSignPKB64(my), group.senderKey);
 }
 
+
+window.copyGroupSenderState = async function() {
+  try {
+    const my = await ensureMyKeys();
+    const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
+    if (!groupId) return alert('Select a group');
+
+    const localSignPK = getLocalSignPKB64(my);
+    const senderState = await getSenderKeyState(groupId, localSignPK);
+    if (!senderState) {
+      throw new Error('Local sender state not found. Re-join group first.');
+    }
+
+    const payload = GroupMesh.createSenderKeyStateMessage({
+      groupId,
+      senderSignPK: localSignPK,
+      senderKey: hydrateLocalSenderState(senderState)
+    }, naclUtil);
+
+    const serialized = JSON.stringify(payload, null, 2);
+    /** @type {HTMLInputElement} */ (document.getElementById('group-json')).value = serialized;
+    await navigator.clipboard.writeText(serialized);
+    setStatus(true, `Sender-state JSON copied for group ${groupId.slice(0, 8)}...`);
+  } catch (e) {
+    setStatus(false, 'Copy sender-state failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
+};
+
 window.createGroup = async function() {
   try {
     const name = (/** @type {HTMLInputElement} */ (document.getElementById('group-name')).value || '').trim();
@@ -1330,6 +1387,18 @@ window.joinGroup = async function() {
   try {
     const raw = /** @type {HTMLInputElement} */ (document.getElementById('group-json')).value.trim();
     const parsed = JSON.parse(raw);
+
+    const senderStateImport = parseSenderStateImportPayload(parsed);
+    if (senderStateImport) {
+      const group = await getGroup(senderStateImport.groupId);
+      if (!group) {
+        throw new Error('Unknown group for sender-state import. Join group first.');
+      }
+      await saveSenderKeyState(senderStateImport.groupId, senderStateImport.senderSignPK, senderStateImport.senderKey);
+      setStatus(true, `Sender-state imported (v${senderStateImport.senderKey.version}). Retry decrypt.`);
+      return;
+    }
+
     if (!parsed.id || !parsed.senderKey) {
       throw new Error('Invalid group JSON');
     }
@@ -1505,16 +1574,7 @@ window.decryptMsg = async function() {
       }
 
       const senderState = await getSenderKeyState(message.groupId, message.senderSignPK);
-      if (!senderState) throw new Error('Missing sender state for group sender');
-
-      let activeSenderKey;
-      if (senderState.version === message.senderKeyVersion) {
-        activeSenderKey = hydrateLocalSenderState(senderState);
-      } else if (senderState.prevVersion === message.senderKeyVersion && senderState.prevChainKey) {
-        activeSenderKey = hydrateLocalSenderState({ version: senderState.prevVersion, chainKey: senderState.prevChainKey });
-      } else {
-        throw new Error('SenderKey version mismatch. Re-sync group state required.');
-      }
+      const activeSenderKey = GroupMesh.resolveSenderKeyForMessage(senderState, message, naclUtil);
 
       const decrypted = GroupMesh.decryptGroupMessage({
         message,
