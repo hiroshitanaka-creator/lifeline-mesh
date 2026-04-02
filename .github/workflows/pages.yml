@@ -73,7 +73,7 @@ jobs:
           cp crypto/README.md app/dist/crypto/
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
         with:
           enablement: true
 
