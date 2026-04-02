@@ -346,12 +346,15 @@ export async function addToOutbox(message, recipientFp, options = {}) {
  * @returns {Promise<object[]>}
  */
 export function getPendingOutbox() {
-  return Promise.all([
-    idbGetByIndex(STORE_OUTBOX, "status", DELIVERY_STATUS.PENDING),
-    idbGetByIndex(STORE_OUTBOX, "status", DELIVERY_STATUS.FAILED)
-  ]).then(([pending, failed]) =>
-    [...pending, ...failed].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
-  );
+  return idbGetByIndex(STORE_OUTBOX, "status", DELIVERY_STATUS.PENDING);
+}
+
+/**
+ * Get failed messages from outbox
+ * @returns {Promise<object[]>}
+ */
+export function getFailedOutbox() {
+  return idbGetByIndex(STORE_OUTBOX, "status", DELIVERY_STATUS.FAILED);
 }
 
 /**

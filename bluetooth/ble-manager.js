@@ -24,6 +24,7 @@ import {
   addToOutbox,
   addToInbox,
   getPendingOutbox,
+  getFailedOutbox,
   removeFromOutbox,
   updateOutboxStatus,
   checkAndMarkSeen,
@@ -96,6 +97,7 @@ export class BLEManager {
       addToOutbox,
       addToInbox,
       getPendingOutbox,
+      getFailedOutbox,
       removeFromOutbox,
       updateOutboxStatus,
       checkAndMarkSeen
@@ -314,6 +316,30 @@ export class BLEManager {
           continue;
         }
         await this._sendQueuedEntry(decision.normalizedEntry);
+      }
+
+      const failedEntries = this.store.getFailedOutbox
+        ? await this.store.getFailedOutbox()
+        : [];
+      for (const entry of failedEntries) {
+        const decision = this._classifyOutboxEntry(entry);
+        if (!decision.shouldSend) {
+          if (decision.reason === "retry-cooldown" && entry?.msgId) {
+            this._emitTransferState("queued", {
+              msgId: entry.msgId,
+              reason: decision.reason,
+              nextRetryAt: decision.nextRetryAt,
+              remainingMs: decision.remainingMs
+            });
+          }
+          continue;
+        }
+
+        try {
+          await this._sendQueuedEntry(decision.normalizedEntry);
+        } catch (error) {
+          console.warn("[BLE] Failed retry entry did not block flush", entry.msgId, error?.message || error);
+        }
       }
     })();
 
