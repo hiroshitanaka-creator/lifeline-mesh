@@ -8,9 +8,14 @@ declare module "@abandonware/bleno" {
   export default bleno;
 }
 
+declare module "qrcode" {
+  const QRCode: any;
+  export default QRCode;
+}
+
 interface Navigator {
   bluetooth?: {
-    requestDevice(options: unknown): Promise<any>;
+    requestDevice(options: unknown): Promise<unknown>;
   };
 }
 
@@ -22,32 +27,13 @@ interface Window {
   setAppMode?: (mode: string) => void;
 }
 
-declare const refreshContacts: () => void;
-declare const refreshGroups: () => void;
-declare const initOrLoad: () => Promise<void>;
-declare const closeQRScanner: () => void;
-declare const closeQRModal: () => void;
-declare const addContact: () => void;
-declare const setMessageMode: (mode: string) => void;
-declare const setAppMode: (mode: string) => void;
-
-type UIElement = Element & {
-  value?: any;
-  checked?: boolean;
-  disabled?: boolean;
-  max?: any;
-  placeholder?: string;
-  title?: string;
-  dataset?: DOMStringMap;
-  files?: FileList | null;
-  options?: HTMLOptionsCollection;
-  selectedIndex?: number;
-  tagName?: string;
-};
-
-interface Element extends UIElement {}
-interface HTMLElement extends UIElement {}
-interface EventTarget extends UIElement {}
-
-
-type BluetoothDevice = any;
+interface BluetoothDevice {
+  id?: string;
+  name?: string;
+  gatt?: {
+    connected?: boolean;
+    connect(): Promise<unknown>;
+    disconnect(): void;
+  };
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void;
+}

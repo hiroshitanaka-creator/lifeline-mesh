@@ -333,7 +333,7 @@ function _attachBleCallbacks(manager) {
     // toContainText assertion can find the content via child text nodes)
     const msgJson = JSON.stringify(message, null, 2);
     const inputEl = document.getElementById('input');
-    inputEl.value = msgJson;
+    /** @type {HTMLTextAreaElement} */ (inputEl).value = msgJson;
     inputEl.textContent = msgJson;
     setStatus(true, tr('status.bleReceived'));
 
@@ -455,7 +455,7 @@ async function sendEncryptedViaTransport(transportName) {
 
 function getBleProtocolConfigFromInputs() {
   const readNumber = (id, fallback) => {
-    const value = Number(document.getElementById(id)?.value);
+    const value = Number((/** @type {HTMLInputElement|null} */ (document.getElementById(id)))?.value);
     return Number.isFinite(value) ? value : fallback;
   };
 
@@ -477,11 +477,11 @@ function renderBleProtocolConfig(config = {}) {
     reassemblyTimeoutMs: config.reassemblyTimeoutMs || 60000
   };
 
-  document.getElementById('ble-ack-timeout').value = String(safe.ackTimeoutMs);
-  document.getElementById('ble-retry-count').value = String(safe.retryCount);
-  document.getElementById('ble-retry-delay').value = String(safe.retryDelayMs);
-  document.getElementById('ble-chunk-delay').value = String(safe.chunkDelayMs);
-  document.getElementById('ble-reassembly-timeout').value = String(safe.reassemblyTimeoutMs);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-ack-timeout')).value = String(safe.ackTimeoutMs);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-retry-count')).value = String(safe.retryCount);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-retry-delay')).value = String(safe.retryDelayMs);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-chunk-delay')).value = String(safe.chunkDelayMs);
+  /** @type {HTMLInputElement} */ (document.getElementById('ble-reassembly-timeout')).value = String(safe.reassemblyTimeoutMs);
 }
 
 function loadSavedBleProtocolConfig() {
@@ -687,7 +687,7 @@ function bindUIActions() {
 
   document.querySelectorAll('[data-action]').forEach((element) => {
     element.addEventListener('click', (event) => {
-      const action = event.currentTarget.dataset.action;
+      const action = /** @type {HTMLElement} */ (event.currentTarget).dataset.action;
       const handler = actionMap[action];
       if (!handler) {
         console.warn('No handler for action:', action);
@@ -699,12 +699,12 @@ function bindUIActions() {
 
   document.querySelectorAll('input[name="message-mode"]').forEach((element) => {
     element.addEventListener('change', () => {
-      window.setMessageMode(element.value);
+      window.setMessageMode(/** @type {HTMLInputElement} */ (element).value);
     });
   });
   document.querySelectorAll('input[name="app-mode"]').forEach((element) => {
     element.addEventListener('change', () => {
-      window.setAppMode(element.value);
+      window.setAppMode(/** @type {HTMLInputElement} */ (element).value);
     });
   });
 
@@ -739,10 +739,10 @@ function setActionBusy(actionName, busy, loadingText) {
   }
 
   if (busy) {
-    if (!button.dataset.originalText) {
-      button.dataset.originalText = button.textContent;
+    if (!/** @type {HTMLElement} */ (button).dataset.originalText) {
+      /** @type {HTMLElement} */ (button).dataset.originalText = button.textContent || "";
     }
-    button.disabled = true;
+    /** @type {HTMLButtonElement} */ (button).disabled = true;
     button.classList.add('loading-btn');
     button.setAttribute('aria-busy', 'true');
     if (loadingText) {
@@ -751,12 +751,12 @@ function setActionBusy(actionName, busy, loadingText) {
     return;
   }
 
-  button.disabled = false;
+  /** @type {HTMLButtonElement} */ (button).disabled = false;
   button.classList.remove('loading-btn');
   button.removeAttribute('aria-busy');
-  if (button.dataset.originalText) {
-    button.textContent = button.dataset.originalText;
-    delete button.dataset.originalText;
+  if (/** @type {HTMLElement} */ (button).dataset.originalText) {
+    button.textContent = /** @type {HTMLElement} */ (button).dataset.originalText;
+    delete /** @type {HTMLElement} */ (button).dataset.originalText;
   }
 }
 
@@ -779,15 +779,15 @@ function updateMessageDraftMetrics() {
     return;
   }
 
-  const text = contentEl.value || '';
+  const text = /** @type {HTMLTextAreaElement} */ (contentEl).value || '';
   const byteLength = new TextEncoder().encode(text).length;
   const usagePercent = Math.min(100, Math.round((byteLength / MAX_MESSAGE_BYTES) * 100));
   const estimatedChunks = estimateBleChunkCount(byteLength);
   const overLimit = byteLength > MAX_MESSAGE_BYTES || estimatedChunks > MAX_BLE_CHUNKS;
 
   metricsEl.textContent = `${byteLength} / ${MAX_MESSAGE_BYTES} bytes • ${usagePercent}%`;
-  progressEl.max = MAX_MESSAGE_BYTES;
-  progressEl.value = Math.min(byteLength, MAX_MESSAGE_BYTES);
+  /** @type {HTMLProgressElement} */ (progressEl).max = MAX_MESSAGE_BYTES;
+  /** @type {HTMLProgressElement} */ (progressEl).value = Math.min(byteLength, MAX_MESSAGE_BYTES);
   chunkEl.textContent = `Estimated BLE chunks: ${estimatedChunks} / ${MAX_BLE_CHUNKS}`;
   chunkEl.className = overLimit ? 'small ng' : 'small';
 
@@ -828,14 +828,14 @@ function applyTemplateToContent(templateText) {
     return;
   }
 
-  const current = contentEl.value?.trim();
+  const current = /** @type {HTMLTextAreaElement} */ (contentEl).value?.trim();
   if (current) {
     pendingTemplateText = templateText;
     setTemplateOverwritePromptVisible(true);
     return;
   }
 
-  contentEl.value = templateText;
+  /** @type {HTMLTextAreaElement} */ (contentEl).value = templateText;
   contentEl.textContent = templateText;
   updateMessageDraftMetrics();
   contentEl.focus();
@@ -849,7 +849,7 @@ window.confirmEmergencyTemplateOverwrite = function() {
     return;
   }
   const contentEl = document.getElementById('content');
-  contentEl.value = pendingTemplateText;
+  /** @type {HTMLTextAreaElement} */ (contentEl).value = pendingTemplateText;
   updateMessageDraftMetrics();
   contentEl.focus();
   pendingTemplateText = '';
@@ -865,7 +865,7 @@ window.cancelEmergencyTemplateOverwrite = function() {
 
 window.applyDisasterTemplate = function() {
   const selector = document.getElementById('disaster-template');
-  const key = selector?.value || '';
+  const key = (/** @type {HTMLSelectElement|null} */ (selector))?.value || '';
   if (!key) {
     setStatus(false, tr('status.templateSelect'));
     return;
@@ -874,13 +874,13 @@ window.applyDisasterTemplate = function() {
 };
 
 window.applyEmergencyTemplate = function() {
-  const key = document.getElementById('emergency-template')?.value || 'safety';
+  const key = (/** @type {HTMLSelectElement|null} */ (document.getElementById('emergency-template')))?.value || 'safety';
   const templateText = getEmergencyTemplateText(key, {
-    name: document.getElementById('emergency-name')?.value || '',
-    location: document.getElementById('emergency-location')?.value || '',
-    status: document.getElementById('emergency-status')?.value || '',
-    people: document.getElementById('emergency-people')?.value || '',
-    details: document.getElementById('emergency-details')?.value || ''
+    name: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-name')))?.value || '',
+    location: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-location')))?.value || '',
+    status: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-status')))?.value || '',
+    people: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-people')))?.value || '',
+    details: (/** @type {HTMLInputElement|null} */ (document.getElementById('emergency-details')))?.value || ''
   });
   applyTemplateToContent(templateText);
 };
@@ -888,7 +888,7 @@ window.applyEmergencyTemplate = function() {
 window.setAppMode = function(mode) {
   const activeMode = mode === 'advanced' ? 'advanced' : 'emergency';
   document.querySelectorAll('input[name="app-mode"]').forEach((el) => {
-    el.checked = el.value === activeMode;
+    /** @type {HTMLInputElement} */ (el).checked = /** @type {HTMLInputElement} */ (el).value === activeMode;
   });
   const advancedEl = document.getElementById('advanced-mode-sections');
   const emergencyEl = document.getElementById('emergency-mode-section');
@@ -1034,7 +1034,7 @@ window.importKeys = async function() {
 
   input.onchange = async (e) => {
     try {
-      const file = e.target.files[0];
+      const file = /** @type {HTMLInputElement} */ (e.target).files[0];
       const text = await file.text();
       const backup = JSON.parse(text);
 
@@ -1115,7 +1115,7 @@ window.resetAll = async function() {
 document.addEventListener("keydown", (event) => {
 
   // Don't trigger shortcuts while typing
-  const tag = event.target.tagName;
+  const tag = /** @type {HTMLElement} */ (event.target).tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return;
 
   // Ctrl + E → Encrypt
@@ -1165,7 +1165,7 @@ document.addEventListener("keydown", (event) => {
 ========================= */
 window.addContact = async function() {
   try {
-    const obj = JSON.parse(document.getElementById("contact-input").value.trim());
+    const obj = JSON.parse(/** @type {HTMLInputElement} */ (document.getElementById("contact-input")).value.trim());
 
     if (!obj || !obj.signPK || !obj.boxPK) {
       return alert("Invalid format. Need: signPK and boxPK");
@@ -1211,7 +1211,7 @@ window.refreshContacts = async function() {
   }
 
   sel.onchange = () => {
-    const selected = sel.options[sel.selectedIndex].text;
+    const selected = /** @type {HTMLSelectElement} */ (sel).options[/** @type {HTMLSelectElement} */ (sel).selectedIndex].text;
     document.getElementById("encrypt-recipient").textContent = selected || "(select above)";
   };
 
@@ -1231,7 +1231,7 @@ window.refreshContacts = async function() {
 };
 
 window.deleteSelectedContact = async function() {
-  const fp = document.getElementById("recipient-select").value;
+  const fp = /** @type {HTMLInputElement} */ (document.getElementById("recipient-select")).value;
   if (!fp) return alert("Select a contact first");
 
   await idbDel(STORE_CONTACTS, fp);
@@ -1246,7 +1246,7 @@ window.deleteSelectedContact = async function() {
 window.setMessageMode = function(mode) {
   const isGroup = mode === 'group';
   document.querySelectorAll('input[name="message-mode"]').forEach((el) => {
-    el.checked = el.value === mode;
+    /** @type {HTMLInputElement} */ (el).checked = /** @type {HTMLInputElement} */ (el).value === mode;
   });
   document.getElementById('direct-controls').style.display = isGroup ? 'none' : 'block';
   document.getElementById('group-controls').style.display = isGroup ? 'block' : 'none';
@@ -1274,7 +1274,7 @@ window.refreshGroups = async function() {
 };
 
 async function renderSelectedGroup() {
-  const groupId = document.getElementById('group-select').value;
+  const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
   if (!groupId) {
     document.getElementById('group-view').textContent = '(no group selected)';
     return;
@@ -1302,7 +1302,7 @@ async function forceRotateSenderKey(group) {
 
 window.createGroup = async function() {
   try {
-    const name = (document.getElementById('group-name').value || '').trim();
+    const name = (/** @type {HTMLInputElement} */ (document.getElementById('group-name')).value || '').trim();
     if (!name) return alert('Group name is required');
 
     const my = await ensureMyKeys();
@@ -1318,7 +1318,7 @@ window.createGroup = async function() {
     await saveSenderKeyState(group.id, getLocalSignPKB64(my), group.senderKey);
 
     await window.refreshGroups();
-    document.getElementById('group-select').value = group.id;
+    /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value = group.id;
     await renderSelectedGroup();
     setStatus(true, `Group created: ${group.name}`);
   } catch (e) {
@@ -1328,7 +1328,7 @@ window.createGroup = async function() {
 
 window.joinGroup = async function() {
   try {
-    const raw = document.getElementById('group-json').value.trim();
+    const raw = /** @type {HTMLInputElement} */ (document.getElementById('group-json')).value.trim();
     const parsed = JSON.parse(raw);
     if (!parsed.id || !parsed.senderKey) {
       throw new Error('Invalid group JSON');
@@ -1344,7 +1344,7 @@ window.joinGroup = async function() {
     await saveSenderKeyState(parsed.id, getLocalSignPKB64(my), parsed.senderKey);
 
     await window.refreshGroups();
-    document.getElementById('group-select').value = parsed.id;
+    /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value = parsed.id;
     await renderSelectedGroup();
     setStatus(true, `Joined group: ${parsed.name || parsed.id}`);
   } catch (e) {
@@ -1354,8 +1354,8 @@ window.joinGroup = async function() {
 
 window.addSelectedMemberToGroup = async function() {
   try {
-    const groupId = document.getElementById('group-select').value;
-    const memberFp = document.getElementById('group-member-select').value;
+    const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
+    const memberFp = /** @type {HTMLInputElement} */ (document.getElementById('group-member-select')).value;
     if (!groupId || !memberFp) return alert('Select group and member');
 
     const group = await getGroup(groupId);
@@ -1377,8 +1377,8 @@ window.addSelectedMemberToGroup = async function() {
 
 window.removeSelectedMemberFromGroup = async function() {
   try {
-    const groupId = document.getElementById('group-select').value;
-    const memberFp = document.getElementById('group-member-select').value;
+    const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
+    const memberFp = /** @type {HTMLInputElement} */ (document.getElementById('group-member-select')).value;
     if (!groupId || !memberFp) return alert('Select group and member');
 
     const group = await getGroup(groupId);
@@ -1405,12 +1405,12 @@ window.encryptMsg = async function() {
   setActionBusy('encryptMsg', true, '🔒 Encrypting...');
   setStatus(true, '🔒 Encrypting...');
   try {
-    const content = document.getElementById("content").value || "";
-    const mode = document.querySelector('input[name="message-mode"]:checked')?.value || 'direct';
+    const content = /** @type {HTMLInputElement} */ (document.getElementById("content")).value || "";
+    const mode = (/** @type {HTMLInputElement|null} */ (document.querySelector('input[name="message-mode"]:checked')))?.value || 'direct';
     const my = await ensureMyKeys();
 
     if (mode === 'group') {
-      const groupId = document.getElementById('group-select').value;
+      const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
       if (!groupId) return alert('Select a group');
 
       const group = await getGroup(groupId);
@@ -1442,7 +1442,7 @@ window.encryptMsg = async function() {
       return;
     }
 
-    const fp = document.getElementById("recipient-select").value;
+    const fp = /** @type {HTMLInputElement} */ (document.getElementById("recipient-select")).value;
     if (!fp) return alert("Select a recipient");
 
     const recipient = await idbGet(STORE_CONTACTS, fp);
@@ -1490,7 +1490,7 @@ window.exportEncryptedFile = async function() {
 window.decryptMsg = async function() {
   setActionBusy('decryptMsg', true, '🔓 Decrypting...');
   try {
-    const message = JSON.parse(document.getElementById("input").value.trim());
+    const message = JSON.parse(/** @type {HTMLInputElement} */ (document.getElementById("input")).value.trim());
     const my = await ensureMyKeys();
 
     if (message.kind === 'dmesh-group-msg') {
@@ -1539,7 +1539,7 @@ window.decryptMsg = async function() {
     let expectedSenderBoxPK = null;
 
     if (!contact) {
-      if (!document.getElementById("tofu").checked) {
+      if (!/** @type {HTMLInputElement} */ (document.getElementById("tofu")).checked) {
         setStatus(false, `Unknown sender (fp: ${senderFpB64.slice(0, 16)}...). Enable TOFU or add contact first.`);
         return;
       }
@@ -1631,7 +1631,7 @@ window.scanQRCode = async function() {
       { fps: 10, qrbox: { width: 250, height: 250 } },
       (decodedText) => {
         // Successfully scanned
-        document.getElementById("contact-input").value = decodedText;
+        /** @type {HTMLInputElement} */ (document.getElementById("contact-input")).value = decodedText;
         window.closeQRScanner();
         window.addContact();
       },
