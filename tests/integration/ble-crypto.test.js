@@ -47,7 +47,18 @@ function createInMemoryStore() {
       if (!existing) {
         return;
       }
-      outbox.set(msgId, { ...existing, status, ...fields });
+      const { countAttempt = false, ...rest } = fields;
+      outbox.set(msgId, {
+        ...existing,
+        status,
+        ...rest,
+        ...(countAttempt
+          ? {
+            attempts: (existing.attempts || 0) + 1,
+            lastAttempt: Date.now()
+          }
+          : {})
+      });
     },
     async checkAndMarkSeen(msgId, senderFp) {
       const key = `${msgId}:${senderFp}`;
@@ -421,6 +432,16 @@ test("integration: flushOutbox retries stale failed entries but skips cooldown f
       return [
         {
           transport: "ble",
+          msgId: "pending-1",
+          status: "pending",
+          message: { kind: "dmesh-msg", msgId: "pending-1", payload: "pending" }
+        }
+      ];
+    },
+    async getFailedOutbox() {
+      return [
+        {
+          transport: "ble",
           msgId: "failed-recent",
           status: "failed",
           lastAttempt: now,
@@ -432,12 +453,6 @@ test("integration: flushOutbox retries stale failed entries but skips cooldown f
           status: "failed",
           lastAttempt: now - OUTBOX_RETRY_INTERVAL_MS - 1,
           message: { kind: "dmesh-msg", msgId: "failed-stale", payload: "retry" }
-        },
-        {
-          transport: "ble",
-          msgId: "pending-1",
-          status: "pending",
-          message: { kind: "dmesh-msg", msgId: "pending-1", payload: "pending" }
         }
       ];
     },
@@ -466,10 +481,64 @@ test("integration: flushOutbox retries stale failed entries but skips cooldown f
   }
 });
 
+test("integration: stale failed retry failure does not block pending flush", async () => {
+  const now = Date.now();
+  const store = {
+    async getPendingOutbox() {
+      return [
+        {
+          transport: "ble",
+          msgId: "pending-survivor",
+          status: "pending",
+          message: { kind: "dmesh-msg", msgId: "pending-survivor", payload: "ok" },
+          attempts: 0
+        }
+      ];
+    },
+    async getFailedOutbox() {
+      return [
+        {
+          transport: "ble",
+          msgId: "failed-stale-blocker",
+          status: "failed",
+          lastAttempt: now - OUTBOX_RETRY_INTERVAL_MS - 1,
+          message: { kind: "dmesh-msg", msgId: "failed-stale-blocker", payload: "retry" },
+          attempts: 0
+        }
+      ];
+    },
+    async addToOutbox() {},
+    async addToInbox() {},
+    async removeFromOutbox() {},
+    async updateOutboxStatus() {}
+  };
+
+  const manager = new BLEManager({ store, protocolConfig: { retryCount: 1, retryDelayMs: 1 } });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  const sent = [];
+  manager._sendQueuedEntry = async (entry) => {
+    sent.push(entry.msgId);
+    if (entry.msgId === "failed-stale-blocker") {
+      throw new Error("retry-failed");
+    }
+  };
+
+  await manager.flushOutbox();
+
+  if (!sent.includes("pending-survivor")) {
+    throw new Error("Expected pending entry to be sent even with stale failed retry error");
+  }
+});
+
 test("integration: flushOutbox emits queued state for retry-cooldown entries", async () => {
   const now = Date.now();
   const store = {
     async getPendingOutbox() {
+      return [];
+    },
+    async getFailedOutbox() {
       return [
         {
           transport: "ble",
@@ -648,6 +717,60 @@ test("integration: flushOutbox failure injection keeps pending until retries exh
   }
 });
 
+test("integration: attempts counter tracks actual send tries (not every status write)", async () => {
+  const updates = [];
+  const store = {
+    entries: new Map([["a1", { msgId: "a1", message: { msgId: "a1" }, transport: "ble", attempts: 0 }]]),
+    async getPendingOutbox() {
+      return [...this.entries.values()];
+    },
+    async addToOutbox() {},
+    async addToInbox() {},
+    async removeFromOutbox(msgId) {
+      this.entries.delete(msgId);
+    },
+    async updateOutboxStatus(msgId, status, fields = {}) {
+      const current = this.entries.get(msgId);
+      if (!current) return;
+      const next = { ...current, status, ...fields };
+      if (fields.countAttempt) {
+        next.attempts = (current.attempts || 0) + 1;
+        next.lastAttempt = Date.now();
+      }
+      updates.push({ status, countAttempt: Boolean(fields.countAttempt) });
+      this.entries.set(msgId, next);
+    }
+  };
+
+  const manager = new BLEManager({ store, protocolConfig: { retryCount: 3, retryDelayMs: 1 } });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  let tries = 0;
+  manager._sendMessageWithAck = async () => {
+    tries += 1;
+    if (tries < 2) {
+      throw new Error("first-try-fail");
+    }
+  };
+
+  await manager.flushOutbox();
+
+  if (tries !== 2) {
+    throw new Error(`Expected 2 send attempts, got ${tries}`);
+  }
+
+  const incrementWrites = updates.filter((u) => u.countAttempt);
+  if (incrementWrites.length !== 2) {
+    throw new Error(`Expected 2 countAttempt writes, got ${incrementWrites.length}`);
+  }
+
+  const deliveredUpdate = updates.find((u) => u.status === "delivered");
+  if (!deliveredUpdate || deliveredUpdate.countAttempt) {
+    throw new Error("Expected delivered update without attempts increment");
+  }
+});
+
 test("integration: BLE failure auto-fallbacks to clipboard/file via TransportManager", async () => {
   class MockBleTransport {
     constructor() { this.name = "ble"; }
@@ -814,6 +937,59 @@ test("integration: offline send queues in outbox, then connected flush delivers 
   if (!received) {
     throw new Error("Expected queued message to be delivered to receiver inbox after reconnect");
   }
+});
+
+test("integration: connect succeeds even when stale failed retry exhausts", async () => {
+  const now = Date.now();
+  const manager = new BLEManager({
+    store: {
+      async addToOutbox() {},
+      async addToInbox() {},
+      async getPendingOutbox() { return []; },
+      async getFailedOutbox() {
+        return [{
+          transport: "ble",
+          msgId: "failed-on-connect",
+          status: "failed",
+          lastAttempt: now - OUTBOX_RETRY_INTERVAL_MS - 1,
+          attempts: 0,
+          message: { kind: "dmesh-msg", msgId: "failed-on-connect", payload: "x" }
+        }];
+      },
+      async removeFromOutbox() {},
+      async updateOutboxStatus() {},
+      async checkAndMarkSeen() { return true; }
+    },
+    io: {
+      hasBluetooth: () => true,
+      requestDevice: async () => null,
+      connectGatt: async () => ({ getPrimaryService: async () => ({ getCharacteristic: async () => ({}) }) }),
+      getPrimaryService: async (server) => server.getPrimaryService(),
+      getCharacteristic: async (service) => service.getCharacteristic(),
+      startNotifications: async () => {},
+      addCharacteristicListener: () => {},
+      addDisconnectListener: () => {},
+      disconnectGatt: () => {}
+    },
+    protocolConfig: { retryCount: 1, retryDelayMs: 1 }
+  });
+
+  manager._sendMessageWithAck = async () => {
+    throw new Error("failed-retry-connect");
+  };
+
+  await manager.connect({
+    id: "connect-test-device",
+    name: "connect-test-device",
+    gatt: { connected: true, disconnect() {} },
+    addEventListener() {}
+  });
+
+  if (!manager.isConnected) {
+    throw new Error("Expected manager to stay connected even when failed retry cannot be delivered");
+  }
+
+  manager._stopOutboxRetryLoop();
 });
 
 for (const { name, fn } of tests) {

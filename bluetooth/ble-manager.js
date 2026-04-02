@@ -24,6 +24,7 @@ import {
   addToOutbox,
   addToInbox,
   getPendingOutbox,
+  getFailedOutbox,
   removeFromOutbox,
   updateOutboxStatus,
   checkAndMarkSeen,
@@ -96,6 +97,7 @@ export class BLEManager {
       addToOutbox,
       addToInbox,
       getPendingOutbox,
+      getFailedOutbox,
       removeFromOutbox,
       updateOutboxStatus,
       checkAndMarkSeen
@@ -315,6 +317,30 @@ export class BLEManager {
         }
         await this._sendQueuedEntry(decision.normalizedEntry);
       }
+
+      const failedEntries = this.store.getFailedOutbox
+        ? await this.store.getFailedOutbox()
+        : [];
+      for (const entry of failedEntries) {
+        const decision = this._classifyOutboxEntry(entry);
+        if (!decision.shouldSend) {
+          if (decision.reason === "retry-cooldown" && entry?.msgId) {
+            this._emitTransferState("queued", {
+              msgId: entry.msgId,
+              reason: decision.reason,
+              nextRetryAt: decision.nextRetryAt,
+              remainingMs: decision.remainingMs
+            });
+          }
+          continue;
+        }
+
+        try {
+          await this._sendQueuedEntry(decision.normalizedEntry);
+        } catch (error) {
+          console.warn("[BLE] Failed retry entry did not block flush", entry.msgId, error?.message || error);
+        }
+      }
     })();
 
     try {
@@ -344,7 +370,8 @@ export class BLEManager {
       this._emitTransferState("sending", { msgId, attempt: (entry.attempts || 0) + 1 });
       await this.store.updateOutboxStatus(msgId, DELIVERY_STATUS.PENDING, {
         transport: "ble",
-        error: null
+        error: null,
+        countAttempt: true
       });
       await this._sendMessageWithAck(entry.message);
       await this.store.updateOutboxStatus(msgId, DELIVERY_STATUS.DELIVERED, {
