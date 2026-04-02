@@ -47,7 +47,18 @@ function createInMemoryStore() {
       if (!existing) {
         return;
       }
-      outbox.set(msgId, { ...existing, status, ...fields });
+      const { countAttempt = false, ...rest } = fields;
+      outbox.set(msgId, {
+        ...existing,
+        status,
+        ...rest,
+        ...(countAttempt
+          ? {
+            attempts: (existing.attempts || 0) + 1,
+            lastAttempt: Date.now()
+          }
+          : {})
+      });
     },
     async checkAndMarkSeen(msgId, senderFp) {
       const key = `${msgId}:${senderFp}`;
@@ -645,6 +656,60 @@ test("integration: flushOutbox failure injection keeps pending until retries exh
   const entry = store.entries.get("f1");
   if (!entry || entry.status !== "failed") {
     throw new Error("Expected outbox entry status=failed after retries");
+  }
+});
+
+test("integration: attempts counter tracks actual send tries (not every status write)", async () => {
+  const updates = [];
+  const store = {
+    entries: new Map([["a1", { msgId: "a1", message: { msgId: "a1" }, transport: "ble", attempts: 0 }]]),
+    async getPendingOutbox() {
+      return [...this.entries.values()];
+    },
+    async addToOutbox() {},
+    async addToInbox() {},
+    async removeFromOutbox(msgId) {
+      this.entries.delete(msgId);
+    },
+    async updateOutboxStatus(msgId, status, fields = {}) {
+      const current = this.entries.get(msgId);
+      if (!current) return;
+      const next = { ...current, status, ...fields };
+      if (fields.countAttempt) {
+        next.attempts = (current.attempts || 0) + 1;
+        next.lastAttempt = Date.now();
+      }
+      updates.push({ status, countAttempt: Boolean(fields.countAttempt) });
+      this.entries.set(msgId, next);
+    }
+  };
+
+  const manager = new BLEManager({ store, protocolConfig: { retryCount: 3, retryDelayMs: 1 } });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  let tries = 0;
+  manager._sendMessageWithAck = async () => {
+    tries += 1;
+    if (tries < 2) {
+      throw new Error("first-try-fail");
+    }
+  };
+
+  await manager.flushOutbox();
+
+  if (tries !== 2) {
+    throw new Error(`Expected 2 send attempts, got ${tries}`);
+  }
+
+  const incrementWrites = updates.filter((u) => u.countAttempt);
+  if (incrementWrites.length !== 2) {
+    throw new Error(`Expected 2 countAttempt writes, got ${incrementWrites.length}`);
+  }
+
+  const deliveredUpdate = updates.find((u) => u.status === "delivered");
+  if (!deliveredUpdate || deliveredUpdate.countAttempt) {
+    throw new Error("Expected delivered update without attempts increment");
   }
 });
 

@@ -346,7 +346,12 @@ export async function addToOutbox(message, recipientFp, options = {}) {
  * @returns {Promise<object[]>}
  */
 export function getPendingOutbox() {
-  return idbGetByIndex(STORE_OUTBOX, "status", DELIVERY_STATUS.PENDING);
+  return Promise.all([
+    idbGetByIndex(STORE_OUTBOX, "status", DELIVERY_STATUS.PENDING),
+    idbGetByIndex(STORE_OUTBOX, "status", DELIVERY_STATUS.FAILED)
+  ]).then(([pending, failed]) =>
+    [...pending, ...failed].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+  );
 }
 
 /**
@@ -412,10 +417,13 @@ export async function purgeExpiredOutbox(now = Date.now()) {
 export async function updateOutboxStatus(msgId, status, extra = {}) {
   const entry = await idbGet(STORE_OUTBOX, msgId);
   if (entry) {
+    const { countAttempt = false, ...fields } = extra;
     entry.status = status;
-    entry.lastAttempt = Date.now();
-    entry.attempts = (entry.attempts || 0) + 1;
-    Object.assign(entry, extra);
+    if (countAttempt) {
+      entry.lastAttempt = Date.now();
+      entry.attempts = (entry.attempts || 0) + 1;
+    }
+    Object.assign(entry, fields);
     await idbPut(STORE_OUTBOX, entry);
   }
 }

@@ -344,7 +344,8 @@ export class BLEManager {
       this._emitTransferState("sending", { msgId, attempt: (entry.attempts || 0) + 1 });
       await this.store.updateOutboxStatus(msgId, DELIVERY_STATUS.PENDING, {
         transport: "ble",
-        error: null
+        error: null,
+        countAttempt: true
       });
       await this._sendMessageWithAck(entry.message);
       await this.store.updateOutboxStatus(msgId, DELIVERY_STATUS.DELIVERED, {
