@@ -99,6 +99,19 @@ export class BlenoBackend {
 
     this._advertisingPromise = null;
     this._stopPromise = null;
+
+    this._boundAccept = (clientAddress) => {
+      this._clientId = clientAddress;
+      console.log("[BlenoBackend] Central connected:", clientAddress);
+      if (this.onClientConnected) this.onClientConnected(clientAddress);
+    };
+
+    this._boundDisconnect = (clientAddress) => {
+      const id = clientAddress || this._clientId;
+      this._clientId = null;
+      console.log("[BlenoBackend] Central disconnected:", id);
+      if (id && this.onClientDisconnected) this.onClientDisconnected(id);
+    };
   }
 
   // ─── IGATTBackend API ───────────────────────────────────────────────────────
@@ -125,32 +138,26 @@ export class BlenoBackend {
         bleno.on("stateChange", onStateChange);
       }
 
-      // Wire connection events once
-      bleno.on("accept", (clientAddress) => {
-        this._clientId = clientAddress;
-        console.log("[BlenoBackend] Central connected:", clientAddress);
-        if (this.onClientConnected) this.onClientConnected(clientAddress);
-      });
-
-      bleno.on("disconnect", (clientAddress) => {
-        const id = clientAddress || this._clientId;
-        this._clientId = null;
-        console.log("[BlenoBackend] Central disconnected:", id);
-        if (this.onClientDisconnected) this.onClientDisconnected(id);
-      });
+      bleno.removeListener("accept", this._boundAccept);
+      bleno.removeListener("disconnect", this._boundDisconnect);
+      bleno.on("accept", this._boundAccept);
+      bleno.on("disconnect", this._boundDisconnect);
     });
 
     return this._advertisingPromise;
   }
 
   /**
-   * Stop advertisement and disconnect all clients.
+   * Stop advertisement and disconnect the active client.
    * @returns {Promise<void>}
    */
   stopAdvertising() {
     return new Promise((resolve) => {
       bleno.stopAdvertising(() => {
         this._advertisingPromise = null;
+        this._clientId = null;
+        bleno.removeListener("accept", this._boundAccept);
+        bleno.removeListener("disconnect", this._boundDisconnect);
         console.log("[BlenoBackend] Advertising stopped");
         resolve();
       });
@@ -159,19 +166,22 @@ export class BlenoBackend {
 
   /**
    * Send data to the connected central via RX notify.
-   * clientId is tracked internally; the parameter is accepted for API compat.
-   * @param {string}     _clientId - Ignored (single-central bleno model).
+   * @param {string}     clientId  - Must match the active connected central.
    * @param {string}     charUuid  - Must be CHARACTERISTICS.MESSAGE_RX.
    * @param {Uint8Array} data
    * @returns {Promise<void>}
    */
-  notifyCharacteristic(_clientId, charUuid, data) {
+  notifyCharacteristic(clientId, charUuid, data) {
     if (charUuid !== CHARACTERISTICS.MESSAGE_RX) {
-      return Promise.resolve(); // Only RX char is notifiable
+      return Promise.resolve();
     }
     if (!this._rxChar) {
       return Promise.reject(new Error("[BlenoBackend] RX characteristic not initialised"));
     }
+    if (!this._clientId || this._clientId !== clientId) {
+      return Promise.reject(new Error(`[BlenoBackend] Unknown client: ${clientId}`));
+    }
+
     const sent = this._rxChar.notify(data);
     if (!sent) {
       console.warn("[BlenoBackend] notifyCharacteristic: no subscriber");

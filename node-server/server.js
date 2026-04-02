@@ -37,11 +37,11 @@ server.onMessageReceived = (message, clientId) => {
 };
 
 server.onClientConnected = (clientId) => {
-  console.log(`[Server] Client connected: ${clientId}  (total: ${server.clientCount})`);
+  console.log(`[Server] Client connected: ${clientId} (single-client mode active)`);
 };
 
 server.onClientDisconnected = (clientId) => {
-  console.log(`[Server] Client disconnected: ${clientId}  (total: ${server.clientCount})`);
+  console.log(`[Server] Client disconnected: ${clientId}`);
 };
 
 server.onError = (code, err) => {
@@ -56,7 +56,7 @@ console.log(`[Server] Starting Lifeline Mesh peripheral as "${LOCAL_NAME}" ...`)
 
 try {
   await server.startAdvertising();
-  console.log("[Server] Advertising. Waiting for central connections (Ctrl-C to stop)...");
+  console.log("[Server] Advertising. Waiting for one central connection at a time (Ctrl-C to stop)...");
 } catch (err) {
   console.error("[Server] Failed to start advertising:", err.message);
   process.exit(1);

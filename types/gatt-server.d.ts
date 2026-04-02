@@ -22,7 +22,7 @@ export interface IGATTBackend {
   /** Begin BLE advertisement so centrals can discover and connect. */
   startAdvertising(serviceUuid: string, localName: string): Promise<void>;
 
-  /** Stop advertisement and disconnect all clients. */
+  /** Stop advertisement and disconnect the active client. */
   stopAdvertising(): Promise<void>;
 
   /**
@@ -86,10 +86,10 @@ export declare class GATTServer {
   /** Whether the server is currently advertising. */
   readonly isAdvertising: boolean;
 
-  /** Number of currently connected central clients. */
+  /** Number of currently connected central clients (0 or 1). */
   readonly clientCount: number;
 
-  /** Snapshot of connected client IDs. */
+  /** Snapshot of connected client IDs (single-client model, so length is 0 or 1). */
   readonly connectedClients: string[];
 
   /**
@@ -101,7 +101,7 @@ export declare class GATTServer {
   /** Start advertising the Lifeline Mesh GATT service. */
   startAdvertising(): Promise<void>;
 
-  /** Stop advertising and disconnect all clients. */
+  /** Stop advertising and disconnect the active client. */
   stopAdvertising(): Promise<void>;
 
   /**
@@ -112,7 +112,7 @@ export declare class GATTServer {
   sendMessage(message: Record<string, unknown>, clientId: string): Promise<void>;
 
   /**
-   * Broadcast a message to all connected central clients.
+   * Broadcast a message to the active connected central client (if any).
    * @param message  Lifeline Mesh message object.
    */
   broadcast(message: Record<string, unknown>): Promise<void>;
