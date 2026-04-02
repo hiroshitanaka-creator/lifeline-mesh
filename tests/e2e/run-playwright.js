@@ -5,7 +5,9 @@ function run(cmd, args) {
   return spawnSync(cmd, args, { stdio: "inherit", shell: false });
 }
 
-const direct = run("playwright", ["test"]);
+const args = ["test", ...process.argv.slice(2)];
+
+const direct = run("playwright", args);
 if (direct.status === 0) {
   process.exit(0);
 }
@@ -14,7 +16,7 @@ if (direct.status !== null && direct.status !== 127 && !direct.error) {
   process.exit(direct.status);
 }
 
-const npxRun = run("npx", ["--no", "playwright", "test"]);
+const npxRun = run("npx", ["--no", "playwright", ...args]);
 if (npxRun.status === 0) {
   process.exit(0);
 }
