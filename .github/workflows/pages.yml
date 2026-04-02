@@ -66,9 +66,11 @@ jobs:
 
       - name: Include docs and specs in Pages artifact
         run: |
-          mkdir -p app/dist/docs app/dist/spec
-          cp docs/USAGE.md docs/FAQ.md app/dist/docs/
+          mkdir -p app/dist/docs app/dist/spec app/dist/crypto
+          cp docs/USAGE.md docs/FAQ.md docs/WEB_BLUETOOTH_SUPPORT.md app/dist/docs/
           cp spec/THREAT_MODEL.md spec/PROTOCOL.md app/dist/spec/
+          cp CONTRIBUTING.md PROJECT_CHARTER.md SECURITY.md app/dist/
+          cp crypto/README.md app/dist/crypto/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
