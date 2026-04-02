@@ -95,15 +95,41 @@ export default [
         setInterval: "readonly",
         clearInterval: "readonly"
       }
-    },
+    }
+  },
+  {
+    files: [
+      "app/src/db.js",
+      "app/src/i18n.js",
+      "app/src/main.js",
+      "app/src/worker-client.js",
+      "app/src/workers/crypto-worker.js"
+    ],
     rules: {
-      "quotes": "off",
-      "semi": "off",
-      "indent": "off",
-      "comma-dangle": "off",
-      "no-trailing-spaces": "off",
-      "no-multiple-empty-lines": "off",
-      "require-await": "off",
+      "quotes": "off"
+    }
+  },
+  {
+    files: ["app/src/i18n.js"],
+    rules: {
+      "comma-dangle": "off"
+    }
+  },
+  {
+    files: ["app/src/db.js", "app/src/main.js"],
+    rules: {
+      "require-await": "off"
+    }
+  },
+  {
+    files: ["app/src/main.js"],
+    rules: {
+      "no-multiple-empty-lines": "off"
+    }
+  },
+  {
+    files: ["app/src/main.js", "app/src/operator-panel.js", "app/src/runtime-mesh.js"],
+    rules: {
       "no-multi-spaces": "off"
     }
   },
