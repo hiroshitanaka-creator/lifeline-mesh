@@ -7,7 +7,7 @@
 ## 1) Release flow
 1. Run: `npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run test:e2e`
 2. Run Playwright on CI environment with browser install.
-3. Confirm `docs/RELEASE_CHECKLIST.md` items are all complete.
+3. Confirm [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) items are all complete.
 4. Execute Go/No-Go meeting agenda.
 
 ### Release exit criteria (must-pass)

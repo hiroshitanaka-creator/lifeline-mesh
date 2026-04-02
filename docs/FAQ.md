@@ -228,7 +228,7 @@ Use the following quick triage order:
 4. Run manual outbox flush.
 5. If BLE remains unstable, switch to clipboard/file/USB relay and continue encrypted delivery.
 
-See `docs/OPERATIONS_RUNBOOK.md` for the full incident procedure.
+See [OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md) for the full incident procedure.
 
 
 ### What are the BLE constraints and supported browsers?
