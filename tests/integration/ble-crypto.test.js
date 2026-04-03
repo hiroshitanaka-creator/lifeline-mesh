@@ -22,6 +22,7 @@ function createInMemoryStore() {
   const outbox = new Map();
   const inbox = [];
   const seen = new Set();
+  const chunks = new Map();
   return {
     inbox,
     async addToOutbox(message, recipientFp, meta = {}) {
@@ -68,8 +69,70 @@ function createInMemoryStore() {
       seen.add(key);
       return true;
     },
+    async storeChunk(chunk) {
+      const key = `${chunk.msgId}:${chunk.seq}`;
+      if (chunks.has(key)) {
+        return null;
+      }
+
+      chunks.set(key, { ...chunk, receivedAt: Date.now() });
+      const messageChunks = [...chunks.values()]
+        .filter((entry) => entry.msgId === chunk.msgId)
+        .sort((a, b) => a.seq - b.seq);
+
+      if (messageChunks.some((entry) => entry.total !== chunk.total)) {
+        for (const entry of messageChunks) {
+          chunks.delete(`${entry.msgId}:${entry.seq}`);
+        }
+        throw new Error("Inconsistent chunk totals detected");
+      }
+
+      if (messageChunks.length !== chunk.total) {
+        return null;
+      }
+
+      for (let i = 0; i < messageChunks.length; i++) {
+        if (messageChunks[i].seq !== i) {
+          return null;
+        }
+      }
+
+      for (const entry of messageChunks) {
+        chunks.delete(`${entry.msgId}:${entry.seq}`);
+      }
+
+      return messageChunks.map((entry) => ({
+        v: 1,
+        kind: "dmesh-chunk",
+        msgId: entry.msgId,
+        seq: entry.seq,
+        total: entry.total,
+        data: entry.data
+      }));
+    },
+    async getPendingChunks(msgId) {
+      return [...chunks.values()].filter((entry) => entry.msgId === msgId);
+    },
+    async cleanupOldChunks(maxAgeMs = 24 * 60 * 60 * 1000) {
+      const cutoff = Date.now() - maxAgeMs;
+      for (const [key, entry] of chunks.entries()) {
+        if (entry.receivedAt < cutoff) {
+          chunks.delete(key);
+        }
+      }
+    },
+    async clearPendingChunks(msgId) {
+      for (const key of [...chunks.keys()]) {
+        if (key.startsWith(`${msgId}:`)) {
+          chunks.delete(key);
+        }
+      }
+    },
     snapshot() {
       return [...outbox.values()];
+    },
+    pendingChunks(msgId) {
+      return [...chunks.values()].filter((entry) => entry.msgId === msgId);
     }
   };
 }
@@ -331,6 +394,118 @@ test("integration: duplicate complete BLE message is deduplicated in inbox", asy
   }
 });
 
+test("integration: persisted chunks resume across receiver restart", async () => {
+  const sharedStore = createInMemoryStore();
+  const sender = new BLEManager({ protocolConfig: { chunkSize: 80 }, store: createInMemoryStore() });
+  sender.isConnected = true;
+
+  const outgoingPackets = [];
+  sender.txCharacteristic = {
+    async writeValue(packet) {
+      outgoingPackets.push(packet.slice());
+    }
+  };
+  sender._waitForAck = async () => {};
+
+  await sender.sendMessage({
+    kind: "dmesh-msg",
+    msgId: "resume-case",
+    sndr: "sender-a",
+    payload: "r".repeat(700),
+    ts: Date.now()
+  });
+
+  const directPackets = outgoingPackets.filter((packet) => packet[0] !== 0x03);
+  const firstReceiver = new BLEManager({ protocolConfig: { chunkSize: 80 }, store: sharedStore });
+  firstReceiver.isConnected = true;
+  await firstReceiver._handleIncomingData({ target: { value: packetToDataView(directPackets[0]) } });
+
+  if (sharedStore.pendingChunks("resume-case").length !== 1) {
+    throw new Error("Expected first chunk to be persisted before restart");
+  }
+
+  const resumedReceiver = new BLEManager({ protocolConfig: { chunkSize: 80 }, store: sharedStore });
+  resumedReceiver.isConnected = true;
+  resumedReceiver.txCharacteristic = { async writeValue() {} };
+  let received = 0;
+  resumedReceiver.onMessageReceived = () => {
+    received += 1;
+  };
+
+  for (const packet of directPackets.slice(1)) {
+    await resumedReceiver._handleIncomingData({ target: { value: packetToDataView(packet) } });
+  }
+
+  if (received !== 1) {
+    throw new Error(`Expected resumed receiver to emit once, got ${received}`);
+  }
+  if (sharedStore.pendingChunks("resume-case").length !== 0) {
+    throw new Error("Expected persisted chunks to be cleaned up after completion");
+  }
+});
+
+test("integration: stale persisted chunks are cleaned before reassembly", async () => {
+  const store = createInMemoryStore();
+  const manager = new BLEManager({ store, protocolConfig: { chunkSize: 80, reassemblyTimeoutMs: 1000 } });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+
+  await store.storeChunk({
+    v: 1,
+    kind: "dmesh-chunk",
+    msgId: "stale-case",
+    seq: 0,
+    total: 2,
+    data: Buffer.from("stale").toString("base64")
+  });
+
+  const stale = store.pendingChunks("stale-case")[0];
+  stale.receivedAt = Date.now() - 60_000;
+
+  const chunkPayload = new TextEncoder().encode(JSON.stringify({
+    transferId: "stale-case",
+    data: Buffer.from("fresh").toString("base64")
+  }));
+  const packet = new Uint8Array([0x01, 0x00, 0x02, 0x00, ...chunkPayload]);
+  await manager._handleIncomingData({ target: { value: packetToDataView(packet) } });
+
+  if (store.pendingChunks("stale-case").length !== 1) {
+    throw new Error("Expected stale chunk cleanup to remove old residue before storing fresh chunk");
+  }
+});
+
+test("integration: inconsistent persisted total aborts transfer and purges chunk store", async () => {
+  const store = createInMemoryStore();
+  await store.storeChunk({
+    v: 1,
+    kind: "dmesh-chunk",
+    msgId: "mismatch-case",
+    seq: 0,
+    total: 2,
+    data: Buffer.from("a").toString("base64")
+  });
+
+  const manager = new BLEManager({ store });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+  const errors = [];
+  manager.onError = (_code, error) => errors.push(error.message);
+
+  const chunkPayload = new TextEncoder().encode(JSON.stringify({
+    transferId: "mismatch-case",
+    data: Buffer.from("b").toString("base64")
+  }));
+  const packet = new Uint8Array([0x01, 0x01, 0x03, 0x00, ...chunkPayload]);
+  await manager._handleIncomingData({ target: { value: packetToDataView(packet) } });
+
+  if (!errors.some((message) => /Mismatched totalChunks/.test(message))) {
+    throw new Error("Expected mismatched totalChunks error");
+  }
+  if (store.pendingChunks("mismatch-case").length !== 0) {
+    throw new Error("Expected inconsistent persisted chunks to be purged");
+  }
+});
+
 test("integration: rejects invalid BLE packet header before decode", async () => {
   const { receiver } = createLinkedManagers();
 
@@ -353,11 +528,11 @@ test("integration: rejects invalid BLE packet header before decode", async () =>
 test("integration: rejects receive state mismatch by msgType", async () => {
   const manager = new BLEManager();
 
-  manager._getOrCreateReceiveState(0x01, 2, "transfer-1");
+  await manager._getOrCreateReceiveState(0x01, 2, "transfer-1");
 
   let threw = false;
   try {
-    manager._getOrCreateReceiveState(0x02, 2, "transfer-1");
+    await manager._getOrCreateReceiveState(0x02, 2, "transfer-1");
   } catch (error) {
     threw = /Mismatched msgType/.test(error.message);
   }
