@@ -129,6 +129,66 @@ test("runtime mesh multi-link: message from link-A forwarded to link-B only", as
   runtime.destroy();
 });
 
+test("runtime mesh multi-link: known route prefers getNextHop over egress flood", async () => {
+  const runtime = createMeshRuntime("relay-node");
+
+  const sentByB = [];
+  const sentByD = [];
+  const mgrA = { sendMessage: () => Promise.resolve() };
+  const mgrB = { sendMessage: (m) => { sentByB.push(m); return Promise.resolve(); } };
+  const mgrD = { sendMessage: (m) => { sentByD.push(m); return Promise.resolve(); } };
+
+  runtime.addLink("peer-a", mgrA);
+  runtime.addLink("peer-b", mgrB);
+  runtime.addLink("peer-d", mgrD);
+
+  runtime.router.processRouteAdv(
+    { kind: "dmesh-route-adv", src: "peer-c", seq: 1, ts: Date.now(), routes: [] },
+    "peer-b"
+  );
+
+  const msg = { kind: "dmesh-msg", msgId: "route-known-1", rcpt: "peer-c", ts: Date.now(), relay: { hops: 0, maxHops: 3 } };
+  const shouldFwd = runtime.router.shouldForward(msg, "peer-a");
+  assert(shouldFwd, "router should forward");
+
+  const result = await runtime.onForward({ message: msg, ingressPeerId: "peer-a" });
+  assert(result.routing === "known-route", "known route branch is used");
+  assert(result.nextHop === "peer-b", "next hop selected from router");
+  assert(result.forwardedTo.length === 1 && result.forwardedTo[0] === "peer-b", "forwarded only to preferred next-hop");
+  assert(sentByB.length === 1, "preferred next-hop received message");
+  assert(sentByD.length === 0, "other egress link not flooded");
+
+  runtime.destroy();
+});
+
+test("runtime mesh multi-link: unknown route falls back to egress flood", async () => {
+  const runtime = createMeshRuntime("relay-node");
+
+  const sentByB = [];
+  const sentByD = [];
+  const mgrA = { sendMessage: () => Promise.resolve() };
+  const mgrB = { sendMessage: (m) => { sentByB.push(m); return Promise.resolve(); } };
+  const mgrD = { sendMessage: (m) => { sentByD.push(m); return Promise.resolve(); } };
+
+  runtime.addLink("peer-a", mgrA);
+  runtime.addLink("peer-b", mgrB);
+  runtime.addLink("peer-d", mgrD);
+
+  const msg = { kind: "dmesh-msg", msgId: "route-unknown-1", rcpt: "peer-z", ts: Date.now(), relay: { hops: 0, maxHops: 3 } };
+  const shouldFwd = runtime.router.shouldForward(msg, "peer-a");
+  assert(shouldFwd, "router should forward");
+
+  const result = await runtime.onForward({ message: msg, ingressPeerId: "peer-a" });
+  assert(result.routing === "unknown-route-fallback", "unknown route uses flood fallback");
+  assert(result.nextHop === null, "next hop is unknown");
+  assert(result.forwardedTo.includes("peer-b"), "fallback flood includes peer-b");
+  assert(result.forwardedTo.includes("peer-d"), "fallback flood includes peer-d");
+  assert(sentByB.length === 1, "peer-b got flooded message");
+  assert(sentByD.length === 1, "peer-d got flooded message");
+
+  runtime.destroy();
+});
+
 test("runtime mesh multi-link: removeLink reduces linkCount", () => {
   const runtime = createMeshRuntime("relay-node");
   const mgr = { sendMessage: () => Promise.resolve() };

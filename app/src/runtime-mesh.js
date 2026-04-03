@@ -150,7 +150,7 @@ export function createMeshRuntime(localPeerId = "unknown") {
         continue;
       }
       try {
-        await manager.sendMessage(message);
+        await manager.sendMessage(message, { linkId: peerId });
         forwardedTo.push(peerId);
       } catch (err) {
         console.warn(`[MeshRuntime] Forward to ${peerId} failed:`, err instanceof Error ? err.message : String(err));
@@ -159,6 +159,20 @@ export function createMeshRuntime(localPeerId = "unknown") {
     }
 
     return { action: "forwarded", forwardedTo, skippedLinks };
+  }
+
+  async function _forwardToSpecificLink(message, peerId) {
+    const link = links.get(peerId);
+    if (!link) {
+      return { action: "skipped", forwardedTo: [], skippedLinks: [peerId], reason: "missing-next-hop-link" };
+    }
+    try {
+      await link.manager.sendMessage(message, { linkId: peerId });
+      return { action: "forwarded", forwardedTo: [peerId], skippedLinks: [] };
+    } catch (err) {
+      console.warn(`[MeshRuntime] Forward to preferred next-hop ${peerId} failed:`, err instanceof Error ? err.message : String(err));
+      return { action: "skipped", forwardedTo: [], skippedLinks: [peerId], reason: "next-hop-send-failed" };
+    }
   }
 
   // ─── Public API ───────────────────────────────────────────────────────────
@@ -289,12 +303,45 @@ export function createMeshRuntime(localPeerId = "unknown") {
         return result;
       }
 
-      // Multi-link: forward to all egress peers.
-      const { action, forwardedTo, skippedLinks } = await _forwardToEgressLinks(message, ingressPeerId);
+      const destination = message?.rcpt || null;
+      const nextHop = destination ? router.getNextHop(destination) : null;
+      let action = "forwarded";
+      let forwardedTo = [];
+      let skippedLinks = [];
+      let routing = nextHop ? "known-route" : "unknown-route-fallback";
+
+      if (nextHop && nextHop !== ingressPeerId) {
+        const preferred = await _forwardToSpecificLink(message, nextHop);
+        forwardedTo = preferred.forwardedTo;
+        skippedLinks = preferred.skippedLinks;
+
+        if (forwardedTo.length === 0) {
+          // Route can be stale in dynamic mesh; preserve delivery with egress flood fallback.
+          const fallback = await _forwardToEgressLinks(message, ingressPeerId);
+          forwardedTo = fallback.forwardedTo;
+          skippedLinks = Array.from(new Set([...skippedLinks, ...fallback.skippedLinks]));
+          routing = "known-route-fallback-flood";
+        } else {
+          routing = "known-route";
+        }
+      } else {
+        // Unknown destination (or stale route pointing back to ingress): flood fallback.
+        const fallback = await _forwardToEgressLinks(message, ingressPeerId);
+        action = fallback.action;
+        forwardedTo = fallback.forwardedTo;
+        skippedLinks = fallback.skippedLinks;
+        if (nextHop && nextHop === ingressPeerId) {
+          routing = "stale-route-fallback-flood";
+        }
+      }
+
       const result = {
         action,
         forwardedTo,
         skippedLinks,
+        routing,
+        nextHop,
+        destination,
         ingressPeerId,
         msgId: message?.msgId ?? null,
         at: Date.now()
