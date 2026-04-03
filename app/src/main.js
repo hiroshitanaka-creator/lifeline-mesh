@@ -119,6 +119,16 @@ function renderContactVerificationDetails(contact) {
   return lines.join('\n');
 }
 
+function syncEncryptRecipientLabel(selectEl) {
+  const selectedOption = /** @type {HTMLSelectElement} */ (selectEl).options[
+    /** @type {HTMLSelectElement} */ (selectEl).selectedIndex
+  ];
+  const hasRecipient = Boolean(selectedOption?.value);
+  document.getElementById("encrypt-recipient").textContent = hasRecipient
+    ? (selectedOption.textContent || "(select above)")
+    : "(select above)";
+}
+
 async function refreshSelectedContactDetails() {
   const fp = /** @type {HTMLInputElement} */ (document.getElementById("recipient-select"))?.value;
   const detailsEl = document.getElementById('contact-details-view');
@@ -1295,6 +1305,7 @@ window.refreshContacts = async function() {
   contacts.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   const sel = document.getElementById("recipient-select");
+  const selectedFpBefore = /** @type {HTMLSelectElement} */ (sel).value;
   sel.innerHTML = `<option value="">Select Recipient</option>`;
 
   for (const c of contacts) {
@@ -1305,8 +1316,7 @@ window.refreshContacts = async function() {
   }
 
   sel.onchange = async () => {
-    const selected = /** @type {HTMLSelectElement} */ (sel).options[/** @type {HTMLSelectElement} */ (sel).selectedIndex].text;
-    document.getElementById("encrypt-recipient").textContent = selected || "(select above)";
+    syncEncryptRecipientLabel(sel);
     await refreshSelectedContactDetails();
   };
 
@@ -1324,6 +1334,10 @@ window.refreshContacts = async function() {
   document.getElementById("contacts-view").textContent =
     contacts.length ? JSON.stringify(contacts, null, 2) : "(none)";
 
+  if (selectedFpBefore && contacts.some((contact) => contact.fp === selectedFpBefore)) {
+    /** @type {HTMLSelectElement} */ (sel).value = selectedFpBefore;
+  }
+  syncEncryptRecipientLabel(sel);
   await refreshSelectedContactDetails();
 };
 
@@ -1563,6 +1577,7 @@ window.encryptMsg = async function() {
 
     const recipient = await idbGet(STORE_CONTACTS, fp);
     if (!recipient) return alert("Recipient not found");
+    let verificationWarning = '';
 
     const recipientStatus = getContactVerificationStatus(recipient);
     if (recipientStatus === VERIFICATION_STATUS.COMPROMISED) {
@@ -1574,7 +1589,7 @@ window.encryptMsg = async function() {
         return;
       }
     } else if (recipientStatus !== VERIFICATION_STATUS.VERIFIED) {
-      setStatus(true, `Warning: ${recipient.name} is unverified (TOFU). Consider safety-number verification.`);
+      verificationWarning = ` ⚠️ ${recipient.name} is unverified (TOFU). Verify safety number.`;
     }
 
     const message = await encryptInWorker({
@@ -1588,7 +1603,7 @@ window.encryptMsg = async function() {
 
     document.getElementById("encrypted").textContent = JSON.stringify(message, null, 2);
     document.getElementById("encrypted-actions").style.display = "flex";
-    setStatus(true, `Encrypted for ${recipient.name}`);
+    setStatus(true, `Encrypted for ${recipient.name}.${verificationWarning}`);
   } catch (e) {
     setStatus(false, formatErrorMessage('Encryption failed', e));
   } finally {
