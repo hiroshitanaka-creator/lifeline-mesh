@@ -20,6 +20,9 @@ import {
   STORE_OUTBOX,
   STORE_INBOX,
   OUTBOX_RETRY_INTERVAL_MS,
+  OUTBOX_DEFAULT_TTL_MS,
+  SEEN_RETENTION_MS,
+  CHUNK_MAX_AGE_MS,
   idbGet,
   idbPut,
   idbDel,
@@ -29,6 +32,7 @@ import {
   resetDatabase,
   checkAndMarkSeen,
   cleanupSeen,
+  runMaintenance,
   saveGroup,
   getGroup,
   getAllGroups,
@@ -65,6 +69,14 @@ let meshRuntime = null;
 let pendingTemplateText = '';
 let _cachedOutboxStats = { pending: 0, failed: 0 };
 let _operatorPanel = null;
+let _maintenanceState = {
+  lastRunAt: null,
+  lastResult: null,
+  lastError: null,
+  runs: 0
+};
+let _maintenanceTimer = null;
+const MAINTENANCE_INTERVAL_MS = 5 * 60 * 1000;
 
 const DELIVERY_UI_STATUS = {
   UNSENT: 'unsent',
@@ -328,6 +340,31 @@ async function refreshInboxSnapshot() {
     }, null, 2);
   } catch (error) {
     inboxEl.textContent = `inbox read failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+async function runAndRecordMaintenance(reason = 'interval') {
+  try {
+    const result = await runMaintenance();
+    _maintenanceState = {
+      lastRunAt: result.at,
+      lastResult: {
+        reason,
+        ...result
+      },
+      lastError: null,
+      runs: _maintenanceState.runs + 1
+    };
+  } catch (error) {
+    _maintenanceState = {
+      ..._maintenanceState,
+      lastRunAt: Date.now(),
+      lastError: error instanceof Error ? error.message : String(error),
+      runs: _maintenanceState.runs + 1
+    };
+    console.error('Maintenance run failed', error);
+  } finally {
+    _operatorPanel?.update?.();
   }
 }
 
@@ -1876,6 +1913,13 @@ window.__lifelineTest = {
   getMeshRuntimeSnapshot() {
     return meshRuntime?.getSnapshot?.() || null;
   },
+  getMaintenanceState() {
+    return _maintenanceState;
+  },
+  async runMaintenanceNow(reason = 'manual-test') {
+    await runAndRecordMaintenance(reason);
+    return _maintenanceState;
+  },
   simulateBleReceive(message) {
     if (!bleManager?.onMessageReceived) {
       throw new Error('BLE manager not initialized');
@@ -1916,7 +1960,13 @@ function updateKdfStatus() {
     if (opPanelEl) {
       _operatorPanel = mountOperatorPanel(opPanelEl, {
         getSnapshot: () => meshRuntime?.getSnapshot() ?? {},
-        getOutboxStats: () => _cachedOutboxStats
+        getOutboxStats: () => _cachedOutboxStats,
+        getMaintenanceStats: () => _maintenanceState,
+        retention: {
+          outboxTtlMs: OUTBOX_DEFAULT_TTL_MS,
+          seenRetentionMs: SEEN_RETENTION_MS,
+          chunkMaxAgeMs: CHUNK_MAX_AGE_MS
+        }
       });
     }
 
@@ -1927,11 +1977,18 @@ function updateKdfStatus() {
     window.setAppMode(savedMode);
     await refreshOutboxSnapshot();
     await refreshInboxSnapshot();
+    await runAndRecordMaintenance('startup');
     updateMessageDraftMetrics();
     setInterval(() => {
       refreshOutboxSnapshot();
       refreshInboxSnapshot();
     }, 5000);
+    if (_maintenanceTimer) {
+      clearInterval(_maintenanceTimer);
+    }
+    _maintenanceTimer = setInterval(() => {
+      runAndRecordMaintenance('interval');
+    }, MAINTENANCE_INTERVAL_MS);
   } catch (e) {
     console.error("Auto-init failed:", e);
   }

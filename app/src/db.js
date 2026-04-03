@@ -13,6 +13,9 @@ import {
   STORE_SEEN,
   STORE_GROUPS,
   OUTBOX_RETRY_INTERVAL_MS,
+  OUTBOX_DEFAULT_TTL_MS,
+  SEEN_RETENTION_MS,
+  CHUNK_MAX_AGE_MS,
   idbGet,
   idbPut,
   idbDel,
@@ -36,7 +39,10 @@ import {
   saveContact,
   verifyContact,
   markContactCompromised,
-  getVerifiedContacts
+  getVerifiedContacts,
+  purgeExpiredOutbox,
+  cleanupOldChunks,
+  runMaintenance
 } from '../../crypto/store.js';
 
 export {
@@ -46,6 +52,9 @@ export {
   STORE_INBOX,
   STORE_GROUPS,
   OUTBOX_RETRY_INTERVAL_MS,
+  OUTBOX_DEFAULT_TTL_MS,
+  SEEN_RETENTION_MS,
+  CHUNK_MAX_AGE_MS,
   idbGet,
   idbPut,
   idbDel,
@@ -54,6 +63,9 @@ export {
   getRecentInbox,
   checkAndMarkSeen,
   cleanupSeen,
+  cleanupOldChunks,
+  purgeExpiredOutbox,
+  runMaintenance,
   saveGroup,
   getGroup,
   getAllGroups,

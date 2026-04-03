@@ -44,6 +44,23 @@ export interface OutboxStats {
   failed?: number;
 }
 
+export interface MaintenanceStats {
+  runs?: number;
+  lastRunAt?: number | null;
+  lastResult?: {
+    outboxPurged?: number;
+    seenRemoved?: number;
+    chunksRemoved?: number;
+  } | null;
+  lastError?: string | null;
+}
+
+export interface RetentionPolicy {
+  outboxTtlMs?: number | null;
+  seenRetentionMs?: number | null;
+  chunkMaxAgeMs?: number | null;
+}
+
 // ─── Panel handle ─────────────────────────────────────────────────────────────
 
 export interface PanelHandle {
@@ -68,6 +85,10 @@ export interface OperatorPanelOptions {
    * Defaults to returning empty object (all counts shown as 0).
    */
   getOutboxStats?: () => OutboxStats;
+  /** Returns recent maintenance execution summary for operator visibility. */
+  getMaintenanceStats?: () => MaintenanceStats;
+  /** Retention policy values displayed in the panel. */
+  retention?: RetentionPolicy;
   /**
    * How often (ms) to refresh the panel.
    * @default 2000
@@ -85,7 +106,12 @@ export interface OperatorPanelOptions {
  * @param outboxStats Outbox queue stats (optional).
  * @returns           HTML string (sanitised; safe to assign to innerHTML).
  */
-export declare function renderPanel(snapshot: MeshSnapshot, outboxStats?: OutboxStats): string;
+export declare function renderPanel(
+  snapshot: MeshSnapshot,
+  outboxStats?: OutboxStats,
+  maintenanceStats?: MaintenanceStats,
+  retention?: RetentionPolicy
+): string;
 
 /**
  * Mount the operator panel into an existing DOM element.

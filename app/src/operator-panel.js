@@ -164,6 +164,12 @@ function formatMs(ms) {
   return `${Math.round(ms / 60_000)}m`;
 }
 
+function formatAgo(ts) {
+  if (!Number.isFinite(ts)) return "never";
+  const delta = Math.max(0, Date.now() - ts);
+  return `${Math.round(delta / 1000)}s ago`;
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────────
 
 /**
@@ -171,9 +177,11 @@ function formatMs(ms) {
  *
  * @param {object} snapshot - Output of meshRuntime.getSnapshot()
  * @param {object} [outboxStats] - { pending, failed } counts
+ * @param {object} [maintenanceStats]
+ * @param {object} [retention]
  * @returns {string} HTML string
  */
-export function renderPanel(snapshot, outboxStats = {}) {
+export function renderPanel(snapshot, outboxStats = {}, maintenanceStats = {}, retention = {}) {
   const {
     localPeerId = "unknown",
     linkCount = 0,
@@ -191,6 +199,17 @@ export function renderPanel(snapshot, outboxStats = {}) {
 
   const pending = outboxStats.pending ?? 0;
   const failed  = outboxStats.failed  ?? 0;
+  const {
+    runs = 0,
+    lastRunAt = null,
+    lastResult = null,
+    lastError = null
+  } = maintenanceStats || {};
+  const {
+    outboxTtlMs = null,
+    seenRetentionMs = null,
+    chunkMaxAgeMs = null
+  } = retention || {};
 
   // ── Links section ──────────────────────────────────────────────────────────
   const linkChips = links.length > 0
@@ -309,6 +328,36 @@ export function renderPanel(snapshot, outboxStats = {}) {
     </div>
 
     <div class="lm-op-section">
+      <div class="lm-op-section-title">Maintenance</div>
+      <div class="lm-op-kv">
+        <div class="lm-op-stat">
+          <span class="lm-op-key">runs</span>
+          <span class="lm-op-val">${esc(runs)}</span>
+        </div>
+        <div class="lm-op-stat">
+          <span class="lm-op-key">last</span>
+          <span class="lm-op-val ${lastError ? "red" : "green"}">${esc(formatAgo(lastRunAt))}</span>
+        </div>
+        <div class="lm-op-stat">
+          <span class="lm-op-key">outbox-purged</span>
+          <span class="lm-op-val">${esc(lastResult?.outboxPurged ?? 0)}</span>
+        </div>
+        <div class="lm-op-stat">
+          <span class="lm-op-key">seen-removed</span>
+          <span class="lm-op-val">${esc(lastResult?.seenRemoved ?? 0)}</span>
+        </div>
+        <div class="lm-op-stat">
+          <span class="lm-op-key">chunks-removed</span>
+          <span class="lm-op-val">${esc(lastResult?.chunksRemoved ?? 0)}</span>
+        </div>
+      </div>
+      <div class="lm-op-last-relay">
+        <span>retention(outbox/seen/chunks): ${esc(formatMs(outboxTtlMs))} / ${esc(formatMs(seenRetentionMs))} / ${esc(formatMs(chunkMaxAgeMs))}</span>
+      </div>
+      ${lastError ? `<div class="lm-op-last-relay"><span>last-error: ${esc(lastError)}</span></div>` : ""}
+    </div>
+
+    <div class="lm-op-section">
       <div class="lm-op-section-title">Route table (${esc(routeTable.length)})</div>
       ${routeTableHtml}
     </div>
@@ -326,6 +375,8 @@ export function renderPanel(snapshot, outboxStats = {}) {
  * @param {object} options
  * @param {function(): object} options.getSnapshot - Returns meshRuntime.getSnapshot()
  * @param {function(): object} [options.getOutboxStats] - Returns { pending, failed }
+ * @param {function(): object} [options.getMaintenanceStats]
+ * @param {object} [options.retention]
  * @param {number} [options.pollIntervalMs=2000] - Refresh interval in ms
  * @returns {{ update: function, destroy: function }} Panel handle
  */
@@ -333,6 +384,8 @@ export function mountOperatorPanel(container, options) {
   const {
     getSnapshot,
     getOutboxStats = () => ({}),
+    getMaintenanceStats = () => ({}),
+    retention = {},
     pollIntervalMs = 2000
   } = options || {};
 
@@ -369,7 +422,8 @@ export function mountOperatorPanel(container, options) {
     try {
       const snapshot = getSnapshot();
       const outboxStats = getOutboxStats();
-      inner.innerHTML = renderPanel(snapshot, outboxStats);
+      const maintenanceStats = getMaintenanceStats();
+      inner.innerHTML = renderPanel(snapshot, outboxStats, maintenanceStats, retention);
     } catch (err) {
       inner.innerHTML = `<div class="lm-op-empty">Error rendering panel: ${esc(err instanceof Error ? err.message : String(err))}</div>`;
     }

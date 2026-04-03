@@ -150,6 +150,36 @@ test("renderPanel: relay counters are rendered", () => {
   assert(html.includes(">42<"), "seenMessages rendered");
 });
 
+test("renderPanel: maintenance metrics are rendered for operators", () => {
+  const now = 1_700_000_000_000;
+  const originalNow = Date.now;
+  Date.now = () => now;
+  try {
+    const html = renderPanel(
+      {},
+      {},
+      {
+        runs: 4,
+        lastRunAt: now - 2_000,
+        lastResult: { outboxPurged: 3, seenRemoved: 7, chunksRemoved: 2 }
+      },
+      {
+        outboxTtlMs: 7 * 24 * 60 * 60 * 1000,
+        seenRetentionMs: 30 * 24 * 60 * 60 * 1000,
+        chunkMaxAgeMs: 24 * 60 * 60 * 1000
+      }
+    );
+    assert(html.includes("Maintenance"), "maintenance section rendered");
+    assert(html.includes(">4<"), "run count rendered");
+    assert(html.includes(">3<"), "outbox purge count rendered");
+    assert(html.includes(">7<"), "seen cleanup count rendered");
+    assert(html.includes(">2<"), "chunk cleanup count rendered");
+    assert(html.includes("retention(outbox/seen/chunks)"), "retention policy text rendered");
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
 test("renderPanel: XSS characters in peerId are escaped", () => {
   const evil = "<script>alert(1)</script>";
   const html = renderPanel({
