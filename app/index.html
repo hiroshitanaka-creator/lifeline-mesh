@@ -185,6 +185,14 @@
     <select id="recipient-select" aria-label="Recipient selector">
       <option value="" data-i18n="contacts.recipient.placeholder">Select Recipient</option>
     </select>
+    <div class="row">
+      <button data-action="verifySelectedContact">✅ Mark Verified</button>
+      <button class="danger" data-action="markSelectedContactCompromised">⚠️ Mark Compromised</button>
+    </div>
+    <label class="small">Selected Contact Verification Details</label>
+    <pre id="contact-details-view">(select a contact)</pre>
+    <label class="small">Safety Number (compare out-of-band)</label>
+    <pre id="contact-safety-number">(select a contact)</pre>
     <pre id="contacts-view">(none)</pre>
   </div>
 

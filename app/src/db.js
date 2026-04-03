@@ -31,7 +31,12 @@ import {
   removeGroupMember,
   saveSenderKeyState,
   getSenderKeyState,
-  removeSenderKeyState
+  removeSenderKeyState,
+  VERIFICATION_STATUS,
+  saveContact,
+  verifyContact,
+  markContactCompromised,
+  getVerifiedContacts
 } from '../../crypto/store.js';
 
 export {
@@ -58,7 +63,12 @@ export {
   removeGroupMember,
   saveSenderKeyState,
   getSenderKeyState,
-  removeSenderKeyState
+  removeSenderKeyState,
+  VERIFICATION_STATUS,
+  saveContact,
+  verifyContact,
+  markContactCompromised,
+  getVerifiedContacts
 };
 
 export async function resetDatabase() {
