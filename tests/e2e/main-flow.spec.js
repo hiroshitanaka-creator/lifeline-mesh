@@ -88,6 +88,7 @@ test("decrypt sender policy branches: TOFU off reject unknown, TOFU on accept un
   await alice.getByRole("button", { name: "🔓 Decrypt" }).click();
   await expect(alice.locator("#status")).toContainText("Decrypted from TOFU-");
   await expect(alice.locator("#decrypted")).toContainText("TOFU_BRANCH_MESSAGE");
+  await expect(alice.locator("#contacts-view")).toContainText("\"verified\": \"unverified\"");
 
   // Known sender already learned => accept even with TOFU off
   const bobSenderOnly = {
@@ -109,6 +110,31 @@ test("decrypt sender policy branches: TOFU off reject unknown, TOFU on accept un
 
   await aliceContext.close();
   await bobContext.close();
+});
+
+test("contact verification workflow: unverified -> verified -> compromised and compromised send guard", async ({ page }) => {
+  await boot(page);
+  const myIdentity = await getMyIdentity(page);
+  await addContact(page, myIdentity);
+  await selectFirstContact(page);
+
+  await expect(page.locator("#recipient-select")).toContainText("unverified");
+  await expect(page.locator("#contact-safety-number")).toContainText("-");
+
+  await page.getByRole("button", { name: "✅ Mark Verified" }).click();
+  await expect(page.locator("#status")).toContainText("Contact verified");
+  await expect(page.locator("#recipient-select")).toContainText("verified");
+
+  page.on("dialog", async (dialog) => {
+    await dialog.accept("suspected key leak");
+  });
+  await page.getByRole("button", { name: "⚠️ Mark Compromised" }).click();
+  await expect(page.locator("#status")).toContainText("Contact marked compromised");
+  await expect(page.locator("#recipient-select")).toContainText("compromised");
+
+  await page.locator("#content").fill("SHOULD_BE_BLOCKED");
+  await page.getByRole("button", { name: "🔒 Encrypt" }).click();
+  await expect(page.locator("#status")).toContainText("Blocked:");
 });
 
 test("pseudo-e2e BLE: mock BLEManager I/O boundary", async ({ page }) => {

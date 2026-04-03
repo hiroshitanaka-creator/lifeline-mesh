@@ -39,7 +39,11 @@ import {
   saveSenderKeyState,
   getSenderKeyState,
   removeSenderKeyState,
-  migrateLegacyV1IfNeeded
+  migrateLegacyV1IfNeeded,
+  VERIFICATION_STATUS,
+  saveContact,
+  verifyContact,
+  markContactCompromised
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
@@ -74,6 +78,103 @@ const APP_MODE_STORAGE_KEY = "lifeline:appMode";
 const MAX_MESSAGE_BYTES = 150 * 1024;
 const MAX_BLE_CHUNKS = 255;
 const DEFAULT_BLE_CHUNK_SIZE = 140;
+const CONTACT_BLOCK_COMPROMISED_SEND = true;
+
+function getContactVerificationStatus(contact) {
+  return contact?.verified || VERIFICATION_STATUS.UNVERIFIED;
+}
+
+function getVerificationBadge(status) {
+  if (status === VERIFICATION_STATUS.VERIFIED) {
+    return '✅ verified';
+  }
+  if (status === VERIFICATION_STATUS.COMPROMISED) {
+    return '⚠️ compromised';
+  }
+  return '🕒 unverified (TOFU)';
+}
+
+function renderContactVerificationDetails(contact) {
+  if (!contact) {
+    return '(select a contact)';
+  }
+
+  const status = getContactVerificationStatus(contact);
+  const lines = [
+    `name: ${contact.name}`,
+    `fp: ${contact.fp}`,
+    `verification: ${status}`
+  ];
+
+  if (contact.verifiedAt) {
+    lines.push(`verifiedAt: ${new Date(contact.verifiedAt).toISOString()}`);
+  }
+  if (contact.compromisedAt) {
+    lines.push(`compromisedAt: ${new Date(contact.compromisedAt).toISOString()}`);
+  }
+  if (contact.compromisedReason) {
+    lines.push(`compromisedReason: ${contact.compromisedReason}`);
+  }
+
+  return lines.join('\n');
+}
+
+function syncEncryptRecipientLabel(selectEl) {
+  const selectedOption = /** @type {HTMLSelectElement} */ (selectEl).options[
+    /** @type {HTMLSelectElement} */ (selectEl).selectedIndex
+  ];
+  const hasRecipient = Boolean(selectedOption?.value);
+  document.getElementById("encrypt-recipient").textContent = hasRecipient
+    ? (selectedOption.textContent || "(select above)")
+    : "(select above)";
+}
+
+async function refreshSelectedContactDetails() {
+  const fp = /** @type {HTMLInputElement} */ (document.getElementById("recipient-select"))?.value;
+  const detailsEl = document.getElementById('contact-details-view');
+  const safetyEl = document.getElementById('contact-safety-number');
+  const verifyBtn = /** @type {HTMLButtonElement|null} */ (document.querySelector('[data-action="verifySelectedContact"]'));
+  const compromisedBtn = /** @type {HTMLButtonElement|null} */ (document.querySelector('[data-action="markSelectedContactCompromised"]'));
+
+  if (!detailsEl || !safetyEl) {
+    return;
+  }
+
+  if (!fp) {
+    detailsEl.textContent = '(select a contact)';
+    safetyEl.textContent = '(select a contact)';
+    if (verifyBtn) verifyBtn.disabled = true;
+    if (compromisedBtn) compromisedBtn.disabled = true;
+    return;
+  }
+
+  const [contact, mySignPK] = await Promise.all([
+    idbGet(STORE_CONTACTS, fp),
+    idbGet(STORE_KEYS, "my_sign_pk")
+  ]);
+
+  if (!contact || !mySignPK) {
+    detailsEl.textContent = '(contact unavailable)';
+    safetyEl.textContent = '(unavailable)';
+    if (verifyBtn) verifyBtn.disabled = true;
+    if (compromisedBtn) compromisedBtn.disabled = true;
+    return;
+  }
+
+  const myFp = DMesh.fingerprintFromSignPK(mySignPK, nacl);
+  const contactFp = naclUtil.decodeBase64(contact.fp);
+  const safetyNumber = DMesh.generateSafetyNumber(myFp, contactFp);
+
+  detailsEl.textContent = renderContactVerificationDetails(contact);
+  safetyEl.textContent = `${safetyNumber} (${getVerificationBadge(getContactVerificationStatus(contact))})`;
+
+  if (verifyBtn) {
+    verifyBtn.disabled = getContactVerificationStatus(contact) === VERIFICATION_STATUS.VERIFIED;
+  }
+  if (compromisedBtn) {
+    compromisedBtn.disabled = getContactVerificationStatus(contact) === VERIFICATION_STATUS.COMPROMISED;
+  }
+}
 
 function formatRemainingDuration(ms) {
   const safeMs = Math.max(0, Number(ms) || 0);
@@ -661,6 +762,8 @@ function bindUIActions() {
     scanQRCode: () => window.scanQRCode(),
     refreshContacts: () => window.refreshContacts(),
     deleteSelectedContact: () => window.deleteSelectedContact(),
+    verifySelectedContact: () => window.verifySelectedContact(),
+    markSelectedContactCompromised: () => window.markSelectedContactCompromised(),
     createGroup: () => window.createGroup(),
     joinGroup: () => window.joinGroup(),
     addSelectedMemberToGroup: () => window.addSelectedMemberToGroup(),
@@ -1185,10 +1288,11 @@ window.addContact = async function() {
       name: obj.name || `Contact-${fpB64.slice(0, 8)}`,
       signPK: obj.signPK,
       boxPK: obj.boxPK,
-      addedAt: Date.now()
+      addedAt: Date.now(),
+      verified: VERIFICATION_STATUS.UNVERIFIED
     };
 
-    await idbPut(STORE_CONTACTS, contact);
+    await saveContact(contact);
     await window.refreshContacts();
     setStatus(true, `Contact saved: ${contact.name} (fp: ${fpB64.slice(0, 16)}...)`);
   } catch (e) {
@@ -1201,18 +1305,19 @@ window.refreshContacts = async function() {
   contacts.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   const sel = document.getElementById("recipient-select");
+  const selectedFpBefore = /** @type {HTMLSelectElement} */ (sel).value;
   sel.innerHTML = `<option value="">Select Recipient</option>`;
 
   for (const c of contacts) {
     const opt = document.createElement("option");
     opt.value = c.fp;
-    opt.textContent = `${c.name} [${c.fp.slice(0, 12)}...]`;
+    opt.textContent = `${c.name} [${c.fp.slice(0, 12)}...] ${getVerificationBadge(getContactVerificationStatus(c))}`;
     sel.appendChild(opt);
   }
 
-  sel.onchange = () => {
-    const selected = /** @type {HTMLSelectElement} */ (sel).options[/** @type {HTMLSelectElement} */ (sel).selectedIndex].text;
-    document.getElementById("encrypt-recipient").textContent = selected || "(select above)";
+  sel.onchange = async () => {
+    syncEncryptRecipientLabel(sel);
+    await refreshSelectedContactDetails();
   };
 
   const groupMemberSel = document.getElementById("group-member-select");
@@ -1228,6 +1333,12 @@ window.refreshContacts = async function() {
 
   document.getElementById("contacts-view").textContent =
     contacts.length ? JSON.stringify(contacts, null, 2) : "(none)";
+
+  if (selectedFpBefore && contacts.some((contact) => contact.fp === selectedFpBefore)) {
+    /** @type {HTMLSelectElement} */ (sel).value = selectedFpBefore;
+  }
+  syncEncryptRecipientLabel(sel);
+  await refreshSelectedContactDetails();
 };
 
 window.deleteSelectedContact = async function() {
@@ -1237,6 +1348,25 @@ window.deleteSelectedContact = async function() {
   await idbDel(STORE_CONTACTS, fp);
   await window.refreshContacts();
   setStatus(true, `Contact deleted (fp: ${fp.slice(0, 16)}...)`);
+};
+
+window.verifySelectedContact = async function() {
+  const fp = /** @type {HTMLInputElement} */ (document.getElementById("recipient-select")).value;
+  if (!fp) return alert("Select a contact first");
+
+  await verifyContact(fp);
+  await window.refreshContacts();
+  setStatus(true, `Contact verified (fp: ${fp.slice(0, 16)}...)`);
+};
+
+window.markSelectedContactCompromised = async function() {
+  const fp = /** @type {HTMLInputElement} */ (document.getElementById("recipient-select")).value;
+  if (!fp) return alert("Select a contact first");
+
+  const reason = prompt("Reason for compromised status (optional):") || undefined;
+  await markContactCompromised(fp, reason);
+  await window.refreshContacts();
+  setStatus(false, `Contact marked compromised (fp: ${fp.slice(0, 16)}...)`);
 };
 
 
@@ -1447,6 +1577,20 @@ window.encryptMsg = async function() {
 
     const recipient = await idbGet(STORE_CONTACTS, fp);
     if (!recipient) return alert("Recipient not found");
+    let verificationWarning = '';
+
+    const recipientStatus = getContactVerificationStatus(recipient);
+    if (recipientStatus === VERIFICATION_STATUS.COMPROMISED) {
+      if (CONTACT_BLOCK_COMPROMISED_SEND) {
+        setStatus(false, `Blocked: ${recipient.name} is marked compromised. Re-verify identity before sending.`);
+        return;
+      }
+      if (!confirm(`Warning: ${recipient.name} is marked compromised. Continue sending anyway?`)) {
+        return;
+      }
+    } else if (recipientStatus !== VERIFICATION_STATUS.VERIFIED) {
+      verificationWarning = ` ⚠️ ${recipient.name} is unverified (TOFU). Verify safety number.`;
+    }
 
     const message = await encryptInWorker({
       content,
@@ -1459,7 +1603,7 @@ window.encryptMsg = async function() {
 
     document.getElementById("encrypted").textContent = JSON.stringify(message, null, 2);
     document.getElementById("encrypted-actions").style.display = "flex";
-    setStatus(true, `Encrypted for ${recipient.name}`);
+    setStatus(true, `Encrypted for ${recipient.name}.${verificationWarning}`);
   } catch (e) {
     setStatus(false, formatErrorMessage('Encryption failed', e));
   } finally {
@@ -1549,9 +1693,10 @@ window.decryptMsg = async function() {
         name: `TOFU-${senderFpB64.slice(0, 8)}`,
         signPK: message.senderSignPK,
         boxPK: message.senderBoxPK,
-        addedAt: Date.now()
+        addedAt: Date.now(),
+        verified: VERIFICATION_STATUS.UNVERIFIED
       };
-      await idbPut(STORE_CONTACTS, contact);
+      await saveContact(contact);
       await window.refreshContacts();
     } else {
       // Known sender - expect keys to match
