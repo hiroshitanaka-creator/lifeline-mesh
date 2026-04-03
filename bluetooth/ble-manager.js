@@ -30,6 +30,10 @@ import {
   removeFromOutbox,
   updateOutboxStatus,
   checkAndMarkSeen,
+  storeChunk,
+  getPendingChunks,
+  cleanupOldChunks,
+  clearPendingChunks,
   DELIVERY_STATUS,
   OUTBOX_PRIORITY,
   OUTBOX_RETRY_INTERVAL_MS
@@ -93,6 +97,7 @@ export class BLEManager {
      * Phase 2 path-tracking but is unused by shouldForward in Phase 1.
      */
     this.router = router;
+    this.lastChunkCleanupAt = 0;
   }
 
   static createStoreAdapter() {
@@ -105,7 +110,11 @@ export class BLEManager {
       getOutboxByMinPriority,
       removeFromOutbox,
       updateOutboxStatus,
-      checkAndMarkSeen
+      checkAndMarkSeen,
+      storeChunk,
+      getPendingChunks,
+      cleanupOldChunks,
+      clearPendingChunks
     };
   }
 
@@ -543,7 +552,8 @@ export class BLEManager {
       }
 
       const decoded = this._decodeChunkPayload(payload);
-      const state = this._getOrCreateReceiveState(msgType, totalChunks, decoded.transferId);
+      await this._maybeCleanupPersistedChunks();
+      const state = await this._getOrCreateReceiveState(msgType, totalChunks, decoded.transferId);
 
       if (chunkIndex >= state.totalChunks) {
         throw new Error(`Chunk index out of range: ${chunkIndex}/${state.totalChunks}`);
@@ -555,15 +565,30 @@ export class BLEManager {
         return;
       }
 
+      let persistedChunks = null;
+      try {
+        persistedChunks = await this._storeIncomingChunk(
+          state.transferId,
+          chunkIndex,
+          state.totalChunks,
+          decoded.data
+        );
+      } catch (error) {
+        this.receiveStates.delete(state.transferId);
+        throw error;
+      }
+
       state.chunks[chunkIndex] = decoded.data;
       state.receivedCount += 1;
       state.lastUpdated = Date.now();
 
-      if (state.receivedCount !== state.totalChunks) {
+      if (!persistedChunks && state.receivedCount !== state.totalChunks) {
         return;
       }
 
-      const completeData = this._reassembleChunks(state.chunks);
+      const completeData = persistedChunks
+        ? this._reassembleChunks(persistedChunks.map((chunk) => this._fromBase64(chunk.data)))
+        : this._reassembleChunks(state.chunks);
       this.receiveStates.delete(state.transferId);
 
       const jsonStr = new TextDecoder().decode(completeData);
@@ -634,7 +659,7 @@ export class BLEManager {
     }
   }
 
-  _getOrCreateReceiveState(msgType, totalChunks, transferId) {
+  async _getOrCreateReceiveState(msgType, totalChunks, transferId) {
     this._cleanupExpiredReceiveStates();
 
     if (totalChunks < 1 || totalChunks > 0xff) {
@@ -653,12 +678,35 @@ export class BLEManager {
       return existing;
     }
 
+    let pending = [];
+    if (this.store.getPendingChunks) {
+      try {
+        pending = await this.store.getPendingChunks(transferId);
+      } catch (error) {
+        console.warn("[BLE] Pending chunk hydration skipped:", error instanceof Error ? error.message : String(error));
+      }
+    }
+    const hydratedChunks = new Array(totalChunks).fill(null);
+
+    for (const chunk of pending) {
+      if (!Number.isInteger(chunk.seq) || chunk.seq < 0 || chunk.seq >= totalChunks) {
+        continue;
+      }
+      if (chunk.total !== totalChunks) {
+        if (this.store.clearPendingChunks) {
+          await this.store.clearPendingChunks(transferId);
+        }
+        throw new Error(`Mismatched totalChunks for ${transferId}`);
+      }
+      hydratedChunks[chunk.seq] = this._fromBase64(chunk.data);
+    }
+
     const state = {
       transferId,
       msgType,
       totalChunks,
-      chunks: new Array(totalChunks).fill(null),
-      receivedCount: 0,
+      chunks: hydratedChunks,
+      receivedCount: hydratedChunks.filter(Boolean).length,
       duplicates: 0,
       createdAt: Date.now(),
       lastUpdated: Date.now()
@@ -749,6 +797,35 @@ export class BLEManager {
         this.receiveStates.delete(transferId);
       }
     }
+  }
+
+  _storeIncomingChunk(transferId, chunkIndex, totalChunks, data) {
+    if (!this.store.storeChunk) {
+      return null;
+    }
+
+    return this.store.storeChunk({
+      v: 1,
+      kind: "dmesh-chunk",
+      msgId: transferId,
+      seq: chunkIndex,
+      total: totalChunks,
+      data: this._toBase64(data)
+    });
+  }
+
+  async _maybeCleanupPersistedChunks() {
+    if (!this.store.cleanupOldChunks) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this.lastChunkCleanupAt < 60 * 1000) {
+      return;
+    }
+
+    this.lastChunkCleanupAt = now;
+    await this.store.cleanupOldChunks(this.protocolConfig.reassemblyTimeoutMs);
   }
 
   _startOutboxRetryLoop() {

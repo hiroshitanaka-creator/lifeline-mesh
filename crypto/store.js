@@ -792,6 +792,18 @@ export function getPendingChunks(msgId) {
 }
 
 /**
+ * Remove all pending chunks for a message
+ * @param {string} msgId - Message ID / transfer ID
+ * @returns {Promise<void>}
+ */
+export async function clearPendingChunks(msgId) {
+  const chunks = await getPendingChunks(msgId);
+  for (const chunk of chunks) {
+    await idbDel(STORE_CHUNKS, chunk.chunkKey);
+  }
+}
+
+/**
  * Cleanup old incomplete chunks
  * @param {number} [maxAgeMs] - Maximum age in milliseconds (default: 24 hours)
  */
