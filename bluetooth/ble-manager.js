@@ -25,10 +25,13 @@ import {
   addToInbox,
   getPendingOutbox,
   getFailedOutbox,
+  getOutboxForLink,
+  getOutboxByMinPriority,
   removeFromOutbox,
   updateOutboxStatus,
   checkAndMarkSeen,
   DELIVERY_STATUS,
+  OUTBOX_PRIORITY,
   OUTBOX_RETRY_INTERVAL_MS
 } from "../crypto/store.js";
 
@@ -98,6 +101,8 @@ export class BLEManager {
       addToInbox,
       getPendingOutbox,
       getFailedOutbox,
+      getOutboxForLink,
+      getOutboxByMinPriority,
       removeFromOutbox,
       updateOutboxStatus,
       checkAndMarkSeen
@@ -254,10 +259,14 @@ export class BLEManager {
    */
   async sendMessage(message, options = {}) {
     const recipientFp = options.recipientFp || message.rcpt || "unknown";
+    const linkId = options.linkId ?? this.device?.id ?? null;
+    const priority = options.priority ?? OUTBOX_PRIORITY.NORMAL;
 
     await this.store.addToOutbox(message, recipientFp, {
       transport: "ble",
-      status: DELIVERY_STATUS.PENDING
+      status: DELIVERY_STATUS.PENDING,
+      linkId,
+      priority
     });
 
     if (!this.isConnected || !this.txCharacteristic) {
@@ -302,7 +311,7 @@ export class BLEManager {
       }
 
       const pending = await this.store.getPendingOutbox();
-      for (const entry of pending) {
+      for (const entry of await this._prepareFlushEntries(pending)) {
         const decision = this._classifyOutboxEntry(entry);
         if (!decision.shouldSend) {
           if (decision.reason === "retry-cooldown" && entry?.msgId) {
@@ -321,7 +330,7 @@ export class BLEManager {
       const failedEntries = this.store.getFailedOutbox
         ? await this.store.getFailedOutbox()
         : [];
-      for (const entry of failedEntries) {
+      for (const entry of this._prepareLinkScopedEntries(failedEntries)) {
         const decision = this._classifyOutboxEntry(entry);
         if (!decision.shouldSend) {
           if (decision.reason === "retry-cooldown" && entry?.msgId) {
@@ -360,6 +369,51 @@ export class BLEManager {
       state,
       ts: Date.now(),
       ...details
+    });
+  }
+
+  _prepareLinkScopedEntries(entries) {
+    const activeLinkId = this.device?.id || null;
+    return entries.filter((entry) => !entry?.linkId || (activeLinkId && entry.linkId === activeLinkId));
+  }
+
+  async _prepareFlushEntries(pendingEntries) {
+    const activeLinkId = this.device?.id || null;
+    const scoped = this._prepareLinkScopedEntries(pendingEntries);
+
+    // Prefer entries explicitly targeted at this link when the store supports it.
+    if (activeLinkId && this.store.getOutboxForLink) {
+      const targeted = await this.store.getOutboxForLink(activeLinkId);
+      const pendingTargeted = targeted.filter((entry) => entry.status === DELIVERY_STATUS.PENDING);
+      const byId = new Map();
+      for (const entry of [...scoped, ...pendingTargeted]) {
+        byId.set(entry.msgId, entry);
+      }
+      return this._sortFlushEntries(Array.from(byId.values()));
+    }
+
+    return this._sortFlushEntries(scoped);
+  }
+
+  async _sortFlushEntries(entries) {
+    const highPriorityIds = new Set();
+    if (this.store.getOutboxByMinPriority) {
+      try {
+        const rows = await this.store.getOutboxByMinPriority(OUTBOX_PRIORITY.HIGH);
+        for (const row of rows || []) highPriorityIds.add(row.msgId);
+      } catch {
+        // Optional store capability; ignore when unavailable/mocked.
+      }
+    }
+
+    return [...entries].sort((a, b) => {
+      const aPriority = a.priority ?? OUTBOX_PRIORITY.NORMAL;
+      const bPriority = b.priority ?? OUTBOX_PRIORITY.NORMAL;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      const aBoost = highPriorityIds.has(a.msgId) ? 1 : 0;
+      const bBoost = highPriorityIds.has(b.msgId) ? 1 : 0;
+      if (aBoost !== bBoost) return bBoost - aBoost;
+      return (a.createdAt ?? 0) - (b.createdAt ?? 0);
     });
   }
 

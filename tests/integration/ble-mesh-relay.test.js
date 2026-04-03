@@ -61,6 +61,15 @@ function createInMemoryStore() {
     async getPendingOutbox() {
       return [...outbox.values()].filter((e) => e.status !== "delivered");
     },
+    async getFailedOutbox() {
+      return [...outbox.values()].filter((e) => e.status === "failed");
+    },
+    async getOutboxForLink(linkId) {
+      return [...outbox.values()].filter((e) => e.linkId === linkId);
+    },
+    async getOutboxByMinPriority(minPriority) {
+      return [...outbox.values()].filter((e) => (e.priority ?? 0) >= minPriority);
+    },
     async removeFromOutbox(msgId) {
       outbox.delete(msgId);
     },
@@ -249,6 +258,43 @@ test("relay: A→B→C - B receives from A and routes to C via onForward", async
   assert(receivedByC[0].relay?.via === "B", "relay.via identifies B as the relay node");
   assert(receivedByC[0].relay?.hops === 1, "1 hop consumed");
   assert(receivedByC[0].relay?.maxHops === 1, "maxHops carried through");
+});
+
+test("flushOutbox: sends only entries for active link and prioritizes higher priority", async () => {
+  const store = createInMemoryStore();
+  const manager = new BLEManager({ store });
+
+  manager.isConnected = true;
+  manager.device = { id: "peer-b" };
+  manager.txCharacteristic = { async writeValue() { return Promise.resolve(); } };
+
+  const sendOrder = [];
+  manager._sendQueuedEntry = async (entry) => {
+    sendOrder.push(entry.msgId);
+    await store.removeFromOutbox(entry.msgId);
+  };
+
+  await store.addToOutbox(makeDummyMessage("normal-peer-b"), "peer-z", {
+    status: "pending",
+    linkId: "peer-b",
+    priority: 0
+  });
+  await store.addToOutbox(makeDummyMessage("high-peer-b"), "peer-z", {
+    status: "pending",
+    linkId: "peer-b",
+    priority: 1
+  });
+  await store.addToOutbox(makeDummyMessage("other-link"), "peer-z", {
+    status: "pending",
+    linkId: "peer-x",
+    priority: 2
+  });
+
+  await manager.flushOutbox();
+
+  assert(sendOrder.length === 2, "only active-link entries are sent");
+  assert(sendOrder[0] === "high-peer-b", "higher priority entry sent first");
+  assert(sendOrder[1] === "normal-peer-b", "lower priority entry sent second");
 });
 
 // ─── Runner ──────────────────────────────────────────────────────────────────
