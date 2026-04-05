@@ -363,23 +363,43 @@ test("e2e: multi-device group onboarding + sender-state mismatch recovery", asyn
   await deviceB.getByRole("button", { name: "📥 Join Group" }).click();
   await expect(deviceB.locator("#status")).toContainText("Sender state sync skipped");
 
-  await deviceB.locator("#input").fill(secondEncrypted);
-  await deviceB.getByRole("button", { name: "🔓 Decrypt" }).click();
-  await expect(deviceB.locator("#status")).toContainText("SenderKey version mismatch");
-
-  // A exports current sender-state sync payload for recovery, B imports and decrypts again.
-  await deviceA.getByRole("button", { name: "🔁 Copy Sender-State Sync" }).click();
-  const freshSyncPayload = await deviceA.locator("#group-json").inputValue();
-  await deviceB.locator("#group-json").fill(freshSyncPayload);
-  await deviceB.getByRole("button", { name: "📥 Join Group" }).click();
-  await expect(deviceB.locator("#status")).toContainText("Sender state synced");
-
+  // Skip means newer state is preserved, so decrypt should still succeed.
   await deviceB.locator("#input").fill(secondEncrypted);
   await deviceB.getByRole("button", { name: "🔓 Decrypt" }).click();
   await expect(deviceB.locator("#decrypted")).toHaveText("A_TO_B_GROUP_MESSAGE_2");
 
+  // Realistic mismatch path: fresh late-joining device C imports stale onboarding only.
+  const contextC = await browser.newContext();
+  const deviceC = await contextC.newPage();
+  await boot(deviceC);
+  await deviceC.getByLabel("Group").check();
+  await deviceC.locator("#group-json").fill(onboardingPayload);
+  await deviceC.getByRole("button", { name: "📥 Join Group" }).click();
+  await expect(deviceC.locator("#status")).toContainText("Joined group");
+  await deviceC.locator("#group-select").selectOption({ index: 1 });
+
+  await deviceA.locator("#content").fill("A_TO_LATE_JOINER_MESSAGE");
+  await deviceA.getByRole("button", { name: "🔒 Encrypt" }).click();
+  const lateJoinerEncrypted = (await deviceA.locator("#encrypted").textContent()) || "";
+
+  await deviceC.locator("#input").fill(lateJoinerEncrypted);
+  await deviceC.getByRole("button", { name: "🔓 Decrypt" }).click();
+  await expect(deviceC.locator("#status")).toContainText("SenderKey version mismatch");
+
+  // A exports current sender-state sync payload for recovery, C imports and decrypts again.
+  await deviceA.getByRole("button", { name: "🔁 Copy Sender-State Sync" }).click();
+  const freshSyncPayload = await deviceA.locator("#group-json").inputValue();
+  await deviceC.locator("#group-json").fill(freshSyncPayload);
+  await deviceC.getByRole("button", { name: "📥 Join Group" }).click();
+  await expect(deviceC.locator("#status")).toContainText("Sender state synced");
+
+  await deviceC.locator("#input").fill(lateJoinerEncrypted);
+  await deviceC.getByRole("button", { name: "🔓 Decrypt" }).click();
+  await expect(deviceC.locator("#decrypted")).toHaveText("A_TO_LATE_JOINER_MESSAGE");
+
   await contextA.close();
   await contextB.close();
+  await contextC.close();
 });
 
 test("emergency mode: simplified template flow + mode persistence", async ({ page }) => {

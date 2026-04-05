@@ -18,7 +18,8 @@ export function shouldAcceptIncomingSenderState(existingState, incomingState) {
   }
 
   const incomingVersion = Number(incomingState.version);
-  if (!Number.isFinite(incomingVersion)) {
+  const incomingChainKey = typeof incomingState.chainKey === "string" ? incomingState.chainKey : "";
+  if (!Number.isFinite(incomingVersion) || !incomingChainKey) {
     return false;
   }
 
@@ -38,7 +39,18 @@ export function shouldAcceptIncomingSenderState(existingState, incomingState) {
     return false;
   }
 
-  return getRecoveryMetadataScore(incomingState) >= getRecoveryMetadataScore(existingState);
+  const existingChainKey = typeof existingState.chainKey === "string" ? existingState.chainKey : "";
+  if (!existingChainKey) {
+    return true;
+  }
+
+  // Same version with different active chain is conflicting state and must be rejected.
+  if (incomingChainKey !== existingChainKey) {
+    return false;
+  }
+
+  // Same active state: only accept strict metadata enrichment.
+  return getRecoveryMetadataScore(incomingState) > getRecoveryMetadataScore(existingState);
 }
 
 export function filterSenderStateEntriesByMembers(entries, currentMembers, resolveMemberFp) {

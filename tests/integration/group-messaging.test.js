@@ -245,6 +245,52 @@ test("integration: same-version import preserves richer recovery metadata", () =
   }
 });
 
+test("integration: same-version conflicting chainKey is rejected", () => {
+  const existing = {
+    version: 9,
+    chainKey: "chain-A",
+    prevVersion: 8,
+    prevChainKey: "prev-A"
+  };
+  const incomingConflicting = {
+    version: 9,
+    chainKey: "chain-B",
+    prevVersion: 8,
+    prevChainKey: "prev-B"
+  };
+
+  if (shouldAcceptIncomingSenderState(existing, incomingConflicting)) {
+    throw new Error("Same-version conflicting chainKey must be rejected");
+  }
+});
+
+test("integration: same-version exact or poorer metadata does not overwrite", () => {
+  const existing = {
+    version: 6,
+    chainKey: "chain-same",
+    prevVersion: 5,
+    prevChainKey: "prev-same"
+  };
+
+  const incomingExact = {
+    version: 6,
+    chainKey: "chain-same",
+    prevVersion: 5,
+    prevChainKey: "prev-same"
+  };
+  const incomingPoorer = {
+    version: 6,
+    chainKey: "chain-same"
+  };
+
+  if (shouldAcceptIncomingSenderState(existing, incomingExact)) {
+    throw new Error("Exact same state should be treated as no-op/skip");
+  }
+  if (shouldAcceptIncomingSenderState(existing, incomingPoorer)) {
+    throw new Error("Poorer same-version metadata should not overwrite");
+  }
+});
+
 test("integration: removed member sender state is not exported in onboarding payload filter", () => {
   const alice = nacl.sign.keyPair();
   const bob = nacl.sign.keyPair();
