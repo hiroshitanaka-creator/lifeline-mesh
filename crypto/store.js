@@ -31,6 +31,7 @@ export const STORE_SENDER_KEYS = "senderKeys";
 // Cleanup intervals
 export const SEEN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const OUTBOX_RETRY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+export const CHUNK_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Contact verification states
 export const VERIFICATION_STATUS = {
@@ -598,6 +599,7 @@ export async function hasSeen(msgId, senderFp) {
 export async function cleanupSeen(maxAgeMs = SEEN_RETENTION_MS) {
   const cutoff = Date.now() - maxAgeMs;
   const db = await openDB();
+  let removed = 0;
 
   await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_SEEN, "readwrite");
@@ -615,10 +617,12 @@ export async function cleanupSeen(maxAgeMs = SEEN_RETENTION_MS) {
       const entry = cursor.value;
       if (entry.seenAt < cutoff) {
         cursor.delete();
+        removed++;
       }
       cursor.continue();
     };
   });
+  return removed;
 }
 
 // ============================================================================
@@ -807,9 +811,10 @@ export async function clearPendingChunks(msgId) {
  * Cleanup old incomplete chunks
  * @param {number} [maxAgeMs] - Maximum age in milliseconds (default: 24 hours)
  */
-export async function cleanupOldChunks(maxAgeMs = 24 * 60 * 60 * 1000) {
+export async function cleanupOldChunks(maxAgeMs = CHUNK_MAX_AGE_MS) {
   const cutoff = Date.now() - maxAgeMs;
   const db = await openDB();
+  let removed = 0;
 
   await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_CHUNKS, "readwrite");
@@ -827,10 +832,12 @@ export async function cleanupOldChunks(maxAgeMs = 24 * 60 * 60 * 1000) {
       const entry = cursor.value;
       if (entry.receivedAt < cutoff) {
         cursor.delete();
+        removed++;
       }
       cursor.continue();
     };
   });
+  return removed;
 }
 
 // ============================================================================
@@ -921,13 +928,22 @@ export function getSenderKeysForGroup(groupId) {
  * Run all cleanup operations
  */
 export async function runMaintenance() {
-  await cleanupSeen();
-  await cleanupOldChunks();
-  const purged = await purgeExpiredOutbox();
-  if (purged > 0) {
-    console.log(`Database maintenance: purged ${purged} expired outbox entries`);
-  }
-  console.log("Database maintenance completed");
+  const seenRemoved = await cleanupSeen();
+  const chunksRemoved = await cleanupOldChunks();
+  const outboxPurged = await purgeExpiredOutbox();
+
+  const result = {
+    at: Date.now(),
+    seenRemoved,
+    chunksRemoved,
+    outboxPurged
+  };
+
+  console.log(
+    "Database maintenance completed",
+    JSON.stringify(result)
+  );
+  return result;
 }
 
 /**
