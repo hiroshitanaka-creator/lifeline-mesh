@@ -163,6 +163,9 @@ const {
   saveContact,
   verifyContact
 } = await import("../../crypto/store.js");
+const {
+  buildDecryptVerificationOutcome
+} = await import("../../app/src/decrypt-verification-policy.js");
 
 const tests = [];
 let passed = 0;
@@ -244,6 +247,51 @@ test("integration: saveContact update preserves existing verification state", as
   }
   if (stored.verified !== VERIFICATION_STATUS.VERIFIED) {
     throw new Error(`Expected verified to persist after update, got ${stored.verified}`);
+  }
+});
+
+test("integration: decrypt verification policy flags unverified sender", () => {
+  const outcome = buildDecryptVerificationOutcome(createContact(), "sender-fp-1234567890abcd");
+  if (outcome.level !== "unverified") {
+    throw new Error(`Expected unverified level, got ${outcome.level}`);
+  }
+  if (outcome.statusOk !== false) {
+    throw new Error("Expected unverified sender to produce warning status");
+  }
+  if (!outcome.message.includes("unverified sender")) {
+    throw new Error(`Expected warning message, got '${outcome.message}'`);
+  }
+});
+
+test("integration: decrypt verification policy flags compromised sender", () => {
+  const outcome = buildDecryptVerificationOutcome(
+    createContact({ verified: VERIFICATION_STATUS.COMPROMISED, compromisedReason: "suspected leak" }),
+    "sender-fp-1234567890abcd"
+  );
+  if (outcome.level !== "compromised") {
+    throw new Error(`Expected compromised level, got ${outcome.level}`);
+  }
+  if (outcome.statusOk !== false) {
+    throw new Error("Expected compromised sender to produce warning status");
+  }
+  if (!outcome.message.includes("Compromised sender")) {
+    throw new Error(`Expected compromised warning message, got '${outcome.message}'`);
+  }
+});
+
+test("integration: decrypt verification policy accepts verified sender", () => {
+  const outcome = buildDecryptVerificationOutcome(
+    createContact({ verified: VERIFICATION_STATUS.VERIFIED, verifiedAt: Date.now() }),
+    "sender-fp-1234567890abcd"
+  );
+  if (outcome.level !== "verified") {
+    throw new Error(`Expected verified level, got ${outcome.level}`);
+  }
+  if (outcome.statusOk !== true) {
+    throw new Error("Expected verified sender to produce success status");
+  }
+  if (!outcome.message.includes("verified sender")) {
+    throw new Error(`Expected verified success message, got '${outcome.message}'`);
   }
 });
 

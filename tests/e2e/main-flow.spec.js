@@ -92,11 +92,12 @@ test("decrypt sender policy branches: TOFU off reject unknown, TOFU on accept un
   await alice.locator("#tofu").check();
   await alice.locator("#input").fill(encryptedFromBob);
   await alice.getByRole("button", { name: "🔓 Decrypt" }).click();
-  await expect(alice.locator("#status")).toContainText("Decrypted from TOFU-");
+  await expect(alice.locator("#status")).toContainText("unverified sender");
   await expect(alice.locator("#decrypted")).toContainText("TOFU_BRANCH_MESSAGE");
+  await expect(alice.locator("#decrypt-verification")).toContainText("UNVERIFIED");
   await expect(alice.locator("#contacts-view")).toContainText("\"verified\": \"unverified\"");
 
-  // Known sender already learned => accept even with TOFU off
+  // Known sender already learned + verified => success even with TOFU off
   const bobSenderOnly = {
     name: bobIdentity.name,
     signPK: bobIdentity.signPK,
@@ -105,14 +106,31 @@ test("decrypt sender policy branches: TOFU off reject unknown, TOFU on accept un
 
   await alice.locator("#contact-input").fill(JSON.stringify(bobSenderOnly, null, 2));
   await alice.getByRole("button", { name: "➕ Add Contact" }).click();
+  await alice.locator("#recipient-select").selectOption({ index: 1 });
+  await alice.getByRole("button", { name: "✅ Mark Verified" }).click();
+  await expect(alice.locator("#status")).toContainText("Contact verified");
 
   const encryptedFromBobKnown = await encryptMessage(bob, "KNOWN_SENDER_MESSAGE");
 
   await alice.locator("#tofu").uncheck();
   await alice.locator("#input").fill(encryptedFromBobKnown);
   await alice.getByRole("button", { name: "🔓 Decrypt" }).click();
-  await expect(alice.locator("#status")).toContainText("Decrypted from");
+  await expect(alice.locator("#status")).toContainText("verified sender");
   await expect(alice.locator("#decrypted")).toContainText("KNOWN_SENDER_MESSAGE");
+  await expect(alice.locator("#decrypt-verification")).toContainText("VERIFIED");
+
+  // Compromised sender => decrypt plaintext with strong warning (not normal success)
+  alice.on("dialog", async (dialog) => {
+    await dialog.accept("sender device reportedly stolen");
+  });
+  await alice.getByRole("button", { name: "⚠️ Mark Compromised" }).click();
+  await expect(alice.locator("#status")).toContainText("Contact marked compromised");
+  const encryptedFromCompromisedBob = await encryptMessage(bob, "COMPROMISED_SENDER_MESSAGE");
+  await alice.locator("#input").fill(encryptedFromCompromisedBob);
+  await alice.getByRole("button", { name: "🔓 Decrypt" }).click();
+  await expect(alice.locator("#decrypted")).toContainText("COMPROMISED_SENDER_MESSAGE");
+  await expect(alice.locator("#status")).toContainText("Compromised sender");
+  await expect(alice.locator("#decrypt-verification")).toContainText("COMPROMISED");
 
   await aliceContext.close();
   await bobContext.close();

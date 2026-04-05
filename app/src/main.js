@@ -57,6 +57,7 @@ import { createMeshRuntime } from './runtime-mesh.js';
 import { mountOperatorPanel } from './operator-panel.js';
 import { t as tr, setLang, getLang } from './i18n.js';
 import { shouldAcceptIncomingSenderState, filterSenderStateEntriesByMembers } from './group-sender-state.js';
+import { getContactVerificationStatus, buildDecryptVerificationOutcome } from './decrypt-verification-policy.js';
 
 
 /* =========================
@@ -94,10 +95,6 @@ const MAX_BLE_CHUNKS = 255;
 const DEFAULT_BLE_CHUNK_SIZE = 140;
 const CONTACT_BLOCK_COMPROMISED_SEND = true;
 
-function getContactVerificationStatus(contact) {
-  return contact?.verified || VERIFICATION_STATUS.UNVERIFIED;
-}
-
 function getVerificationBadge(status) {
   if (status === VERIFICATION_STATUS.VERIFIED) {
     return '✅ verified';
@@ -106,6 +103,26 @@ function getVerificationBadge(status) {
     return '⚠️ compromised';
   }
   return '🕒 unverified (TOFU)';
+}
+
+function renderDecryptVerification(outcome) {
+  const el = document.getElementById('decrypt-verification');
+  if (!el) {
+    return;
+  }
+
+  if (!outcome) {
+    el.textContent = '(no decrypted message yet)';
+    return;
+  }
+
+  const prefix = {
+    verified: '✅ VERIFIED',
+    unverified: '⚠️ UNVERIFIED',
+    compromised: '🚨 COMPROMISED'
+  }[outcome.level] || 'ℹ️ UNKNOWN';
+
+  el.textContent = `${prefix}\n${outcome.details}`;
 }
 
 function renderContactVerificationDetails(contact) {
@@ -1930,6 +1947,7 @@ window.exportEncryptedFile = async function() {
 window.decryptMsg = async function() {
   setActionBusy('decryptMsg', true, '🔓 Decrypting...');
   try {
+    renderDecryptVerification(null);
     const message = JSON.parse(/** @type {HTMLInputElement} */ (document.getElementById("input")).value.trim());
     const my = await ensureMyKeys();
 
@@ -1963,6 +1981,14 @@ window.decryptMsg = async function() {
 
       await saveSenderKeyState(message.groupId, message.senderSignPK, encodeSenderState(decrypted.nextSenderKey));
       document.getElementById("decrypted").textContent = decrypted.payload.content;
+      renderDecryptVerification({
+        level: 'verified',
+        details: [
+          'sender verification: group-member validated',
+          `group: ${group.name}`,
+          `senderSignPK: ${message.senderSignPK.slice(0, 16)}...`
+        ].join('\n')
+      });
       setStatus(true, `✓ Group message decrypted (${group.name})`);
       return;
     }
@@ -2012,14 +2038,17 @@ window.decryptMsg = async function() {
     await cleanupSeen(DMesh.REPLAY_RETENTION_MS);
     const replayAllowed = await checkAndMarkSeen(result.msgId, senderFpB64);
     document.getElementById("decrypted").textContent = result.content;
+    const verificationOutcome = buildDecryptVerificationOutcome(contact, senderFpB64);
+    renderDecryptVerification(verificationOutcome);
     if (!replayAllowed) {
       setStatus(false, `⚠️ Replay detected — message already received from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
     } else {
-      setStatus(true, `✓ Decrypted from ${contact.name} (fp: ${senderFpB64.slice(0, 16)}...)`);
+      setStatus(verificationOutcome.statusOk, verificationOutcome.message);
     }
   } catch (e) {
     setStatus(false, formatErrorMessage('Decryption failed', e));
     document.getElementById("decrypted").textContent = "";
+    renderDecryptVerification(null);
   } finally {
     setActionBusy('decryptMsg', false);
   }
