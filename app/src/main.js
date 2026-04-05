@@ -621,6 +621,18 @@ function loadReceivedPayloadIntoDecryptInput(message, sourceLabel) {
   setStatus(true, `Received encrypted payload from ${sourceLabel}. Review and decrypt.`);
 }
 
+function loadDraftIntoEncryptInput(text, sourceLabel) {
+  const contentEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('content'));
+  if (!contentEl) {
+    throw new Error('Encrypt message input is unavailable');
+  }
+
+  contentEl.value = text;
+  contentEl.textContent = text;
+  updateMessageDraftMetrics();
+  setStatus(true, `Received share text from ${sourceLabel}. Ready to encrypt.`);
+}
+
 function getFirstReceivedMessage(messages = []) {
   if (!messages.length) {
     throw new Error('No receivable payload found');
@@ -630,6 +642,91 @@ function getFirstReceivedMessage(messages = []) {
     throw new Error('Received payload is not an encrypted message');
   }
   return candidate;
+}
+
+function parseSharedEncryptedPayload(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    if (parsed.kind === 'dmesh-msg' || parsed.kind === 'dmesh-group-msg') {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeShareTargetText({ title, text }) {
+  const cleanedTitle = (title || '').trim();
+  const cleanedText = (text || '').trim();
+  if (cleanedTitle && cleanedText) {
+    return `${cleanedTitle}\n${cleanedText}`;
+  }
+  return cleanedText || cleanedTitle || '';
+}
+
+function applyShortcutDeepLink(hash, { silent = false } = {}) {
+  const normalized = (hash || '').trim().toLowerCase();
+  const contentEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('content'));
+  const decryptInputEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('input'));
+
+  if (normalized === '#encrypt') {
+    contentEl?.focus();
+    contentEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (!silent) {
+      setStatus(true, 'Shortcut opened Encrypt Message section.');
+    }
+    return true;
+  }
+
+  if (normalized === '#decrypt') {
+    decryptInputEl?.focus();
+    decryptInputEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (!silent) {
+      setStatus(true, 'Shortcut opened Decrypt Message section.');
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function handleStartupIntakeFromUrl() {
+  const params = new window.URLSearchParams(window.location.search);
+  const sharedText = params.get('text') || '';
+  const sharedTitle = params.get('title') || '';
+  const hasSharePayload = Boolean(sharedText || sharedTitle);
+  const hash = window.location.hash || '';
+
+  if (hasSharePayload) {
+    const merged = normalizeShareTargetText({ title: sharedTitle, text: sharedText });
+    const encryptedPayload = parseSharedEncryptedPayload(merged);
+    if (encryptedPayload) {
+      loadReceivedPayloadIntoDecryptInput(encryptedPayload, 'share target');
+      applyShortcutDeepLink('#decrypt', { silent: true });
+    } else {
+      loadDraftIntoEncryptInput(merged, 'share target');
+      applyShortcutDeepLink('#encrypt', { silent: true });
+    }
+
+    const cleanUrl = `${window.location.pathname}${hash || ''}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+    return;
+  }
+
+  applyShortcutDeepLink(hash);
 }
 
 window.receiveFromClipboard = async function() {
@@ -2212,6 +2309,10 @@ window.dismissInstall = function() {
   document.getElementById('install-prompt').style.display = 'none';
 };
 
+window.addEventListener('hashchange', () => {
+  applyShortcutDeepLink(window.location.hash);
+});
+
 // Register Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -2317,6 +2418,7 @@ function updateKdfStatus() {
     await refreshInboxSnapshot();
     await runAndRecordMaintenance('startup');
     updateMessageDraftMetrics();
+    handleStartupIntakeFromUrl();
     setInterval(() => {
       refreshOutboxSnapshot();
       refreshInboxSnapshot();
