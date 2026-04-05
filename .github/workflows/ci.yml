@@ -36,14 +36,8 @@ jobs:
           npm ci --prefix tools
           npm ci --prefix app
 
-      - name: Run lint
-        run: npm run lint
-
-      - name: Run typecheck (crypto + tools)
-        run: npm run typecheck
-
-      - name: Run typecheck:runtime (app/src + bluetooth)
-        run: npm run typecheck:runtime
+      - name: Run lint + typecheck gates (CI scope)
+        run: npm run gate:lint-typecheck:ci
 
   unit_tests:
     name: Unit tests
@@ -64,8 +58,8 @@ jobs:
           npm ci --prefix crypto
           npm ci --prefix tools
 
-      - name: Run unit tests
-        run: npm run test:unit
+      - name: Run unit test gate
+        run: npm run gate:test:unit
 
   integration_tests:
     name: Integration tests
@@ -89,7 +83,7 @@ jobs:
       - name: Run integration tests and capture logs
         run: |
           mkdir -p artifacts
-          npm run test:integration 2>&1 | tee artifacts/integration-test.log
+          npm run gate:test:integration 2>&1 | tee artifacts/integration-test.log
 
       - name: Upload integration logs on failure
         if: failure()
@@ -118,7 +112,7 @@ jobs:
           npm ci --prefix tools
 
       - name: Check compatibility policy gate
-        run: npm run check:compat
+        run: npm run gate:compat
 
   e2e_browser_smoke:
     name: E2E browser critical path (fast gate)
@@ -143,8 +137,8 @@ jobs:
       - name: Install Playwright browser
         run: npm run test:e2e:install
 
-      - name: Run critical-path Playwright E2E
-        run: npm run test:e2e:playwright:main-ci
+      - name: Run critical-path Playwright E2E gate
+        run: npm run gate:e2e:ci-critical
 
   validate_gate:
     name: Validate gate summary
@@ -158,8 +152,8 @@ jobs:
     steps:
       - name: CI quality gates passed
         run: |
-          echo "Gates: lint + typecheck(crypto/tools) + typecheck:runtime(app/src+bluetooth) + unit + integration + compat + e2e browser critical path passed"
-          echo "Main CI runs one fast Playwright critical-path test; full Playwright suite remains in separate nightly/manual workflow"
+          echo "validate:ci gates passed: lint/typecheck/runtime + unit + integration + compat + Playwright critical path"
+          echo "validate (local) intentionally keeps smoke-only E2E for lighter developer loop"
 
   security:
     runs-on: ubuntu-latest
