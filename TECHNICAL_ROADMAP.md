@@ -1,5 +1,8 @@
 # Technical Roadmap - Implementation Details
 
+> **⚠️ Planning document notice**: This file contains strategy/roadmap analysis and may include historical gaps that have since been implemented. For current implementation truth, prioritize `README.md`, `docs/PHASE_PROGRESS.md`, and `docs/ISSUE_SYNC_REPORT.md`.
+
+
 > *[日本語版はこちら / Japanese version](docs/TECHNICAL_ROADMAP_JA.md)*
 
 This document provides detailed technical implementation guidance for Lifeline Mesh.

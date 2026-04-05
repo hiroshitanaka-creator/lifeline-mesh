@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-184%2F184%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-195%2F195%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -21,7 +21,7 @@ This project could save lives, but it needs contributors to grow.
 
 | Priority | Task | Skills | Notes |
 |----------|------|--------|-------|
-| 🟡 High | **BLE GATT Server — native backend** | Capacitor / noble / Web Bluetooth API | `IGATTBackend` interface is defined; a native adapter (Capacitor, noble) needs to plug in |
+| 🟡 High | **Browser-side BLE peripheral backend** | Capacitor / WebView bridge / native BLE APIs | `IGATTBackend` already has a Node backend (`node-bleno`); mobile/browser-peripheral adapters are still needed |
 | 🟡 High | **UI/UX Overhaul** | Design, CSS, Accessibility | Functional but not polished |
 | 🟢 Good First | **Documentation i18n** | Any language | Good first issue |
 | 🟢 Good First | **Playwright E2E expansion** | Testing, browser automation | Real-browser harness exists; coverage can be widened |
@@ -118,25 +118,25 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ## 🔬 Testing
 
-All tests passing: **184/184 ✓**
+All tests passing: **195/195 ✓**
 
 | Suite | Count | Command |
 |---|---|---|
 | Crypto core unit | 22 | `npm run test:crypto` |
 | Test vectors | 27 | `npm run test:vectors` |
 | BLE + transport integration | 24 | `npm run test:integration` |
-| Group messaging integration | 3 | `npm run test:integration` |
-| Contact verification integration | 4 | `npm run test:integration` |
+| Group messaging integration | 9 | `npm run test:integration` |
+| Contact verification integration | 7 | `npm run test:integration` |
 | Store maintenance integration | 1 | `npm run test:integration` |
 | Mesh router Phase 1 integration | 14 | `npm run test:integration` |
 | BLE mesh relay integration | 6 | `npm run test:integration` |
 | Mesh router Phase 2 integration | 27 | `npm run test:integration` |
 | App runtime mesh integration | 12 | `npm run test:integration` |
 | GATT server integration | 19 | `npm run test:integration` |
-| Node-server relay integration | 3 | `npm run test:integration` |
+| Node-server relay integration | 5 | `npm run test:integration` |
 | Operator panel unit | 21 | `npm run test:integration` |
 | DB migration integration | 1 | `npm run test:integration` |
-| **Total** | **184** | `npm run test:unit && npm run test:integration` |
+| **Total** | **195** | `npm run test:unit && npm run test:integration` |
 
 ```bash
 # Run everything
@@ -234,7 +234,7 @@ The relay node maintains a `Map<peerId, BLEManager>`. Incoming messages on link-
 ❌ **Post-quantum security**: Vulnerable to quantum computers
 ❌ **Perfect forward secrecy**: Long-term signing keys used
 ❌ **BLE availability**: Web Bluetooth is effectively Chromium-only and requires a secure context (`https://` or `http://localhost`)
-❌ **BLE peripheral mode**: `bluetooth/gatt-server.js` defines the `IGATTBackend` interface but a native backend (Capacitor, noble) is not yet provided
+⚠️ **Browser/mobile peripheral mode gap**: Node relay peripheral mode exists (`bluetooth/backends/node-bleno.js`), but browser/mobile adapters are not yet implemented
 ❌ **Offline bootstrap**: First load must happen in a served origin; `file://` is unsupported. After first load, cached app assets can be used offline
 ⚠️ **Fallback path**: Clipboard/File/QR relay is the compatibility baseline when BLE is unavailable
 
@@ -269,7 +269,7 @@ See [WEB_BLUETOOTH_SUPPORT.md](docs/WEB_BLUETOOTH_SUPPORT.md) for current browse
 ## 🚀 Deployment
 
 ### GitHub Pages (Current)
-Automatically deployed from `master` branch via `.github/workflows/pages.yml`.
+Automatically deployed from `main` branch via `.github/workflows/pages.yml`.
 The workflow runs `npm install --prefix app && npm run build --prefix app` and deploys `app/dist/` (Vite build output).
 
 **Live URL**: https://hiroshitanaka-creator.github.io/lifeline-mesh/
@@ -281,7 +281,7 @@ The workflow runs `npm install --prefix app && npm run build --prefix app` and d
 
 ### Production Checklist
 - [x] SRI added to all CDN scripts
-- [x] All tests passing (184/184)
+- [x] All tests passing (195/195)
 - [x] Documentation complete
 - [ ] Consider self-hosting TweetNaCl (avoid CDN dependency)
 - [x] Add Content Security Policy headers
@@ -362,7 +362,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 **Current Version**: 0.1.0 (v0.1.0 release gate passed; prototype quality)
 
 ### Implemented ✅
-- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 184/184 tests passing
+- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 195/195 tests passing
 - Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
 - Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
 - **Multi-link BLE runtime**: concurrent links via `Map<peerId, BLEManager>`, egress relay loop, route-adv broadcast
@@ -372,14 +372,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - **Outbox schema v4**: `priority` / `ttl` / `linkId` fields, IDB migration, `getOutboxForLink()` / `getOutboxByMinPriority()` / `purgeExpiredOutbox()`
 - **TypeScript declarations**: `types/runtime-mesh.d.ts`, `types/operator-panel.d.ts`, `types/gatt-server.d.ts`, `types/app-globals.d.ts`
 - **Contact verification workflow**: safety-number display, verify / mark-compromised per contact, encryption blocked for compromised recipients
-- **Node.js relay server** (`node-server/`): persistent single-client relay with durable store; 3/3 integration tests
+- **Node.js relay server** (`node-server/`): persistent single-client relay with durable store; 5/5 integration tests
 - Group messaging MVP (Sender Keys / DMESH_GROUP_V1 protocol)
 - Multi-job CI (lint, typecheck, unit, integration, compat, security, E2E Playwright critical-path)
 - GitHub Pages deployment (Vite build)
 - Comprehensive docs and threat model
 
 ### Not Yet Implemented ⚠️
-- **GATT server native backend**: `IGATTBackend` interface is ready; a Capacitor or noble adapter is needed for real peripheral/relay mode
+- **Browser/mobile peripheral backend gap**: `IGATTBackend` already has a Node backend (`bluetooth/backends/node-bleno.js`). Browser/mobile peripheral adapters (Capacitor/WebView/native bridge) remain pending
 - Mobile apps, LoRa integration, post-quantum crypto
 - Full TypeScript strict-mode coverage for `app/src/` and `bluetooth/`
 

@@ -654,10 +654,9 @@ Group messaging uses a SenderKey ratchet per `(groupId, senderSignPK)`.
   ingressPeerId)` is called.  5 BLE+Router integration tests pass.
 - The integration is opt-in: if no `router` is set, `BLEManager` behaviour is unchanged.
 
-**What is NOT yet done:**
-- **Egress peer management**: `BLEManager` is single-peer. The caller must maintain a list of
-  connected outbound `BLEManager` instances and call `sendMessage()` in `onForward`. The app UI
-  (`app/src/main.js`) does not yet set `router` or `onForward`.
-- **Phase 2 (N-hop, multi-peer routing)** is not implemented.
-- **BLE GATT server (peripheral mode)**: `bluetooth/ble-manager.js` operates in client-only mode.
-  A device cannot currently advertise itself as a relay via Bluetooth.
+**Current constraints / remaining gaps:**
+- **Egress peer management boundary**: `BLEManager` remains single-peer; caller-managed egress fanout is still required.
+  The app (`app/src/main.js`) wires `router` + `onForward` into `runtime-mesh.js` to provide this coordination.
+- **Browser-side BLE peripheral mode** is still unavailable (Web Bluetooth central/client limitations).
+  Peripheral relay mode is currently provided by Node runtime (`bluetooth/gatt-server.js` +
+  `bluetooth/backends/node-bleno.js` + `node-server/server.js`).

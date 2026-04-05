@@ -1,6 +1,6 @@
 # Web Bluetooth Support Matrix
 
-_Last updated: 2026-03-08_
+_Last updated: 2026-04-05_
 
 This document summarizes practical support for the **Web Bluetooth API** used by Lifeline Mesh.
 
@@ -48,27 +48,26 @@ Without these requirements, BLE UI actions will not work even if encryption/decr
 - Unsupported browsers show a warning in the Bluetooth section.
 - Messaging still works with non-BLE fallback transports.
 
-## Manual 3-Device Single-Link Runtime Drill (A → B → C)
+## Manual 3-Device Multi-Link Runtime Drill (A ↔ B ↔ C)
 
-Use this drill to validate router wiring and runtime state visibility in real hardware conditions.
+Use this drill to validate active multi-link forwarding, route advertisements, and runtime observability.
 
 1. **Prepare three devices**:
    - Device A, B, C open Lifeline Mesh over HTTPS (or localhost).
    - On each device, run **Generate / Load Keys**.
-2. **Build a linear topology**:
-   - Connect B to A via Bluetooth and verify B shows `connectedPeerId` for A in **Mesh Relay / Route Runtime**.
-   - Disconnect, then connect B to C and verify the same state updates for C.
-   - (Because Web Bluetooth is client-only in this phase, you validate links sequentially.)
-3. **Send A → B**:
-   - On A, encrypt a message and send via Bluetooth to B.
-   - On B, verify message appears in **Received Messages via Bluetooth** and `seenMessages` increments in the mesh runtime panel.
-4. **Forward-decision observability on B**:
-   - While B is connected to C, receive a forwardable payload on B.
-   - Confirm on B that `relayAttempts` increments and `skipped` increments with `reason: ingress-only-link`.
-   - This confirms router decision plumbing is active even though this runtime does not perform multi-link relay.
-5. **Validate direct paths still work**:
-   - Send a normal direct BLE message B → C from the existing send button.
-   - Confirm outbox/inbox snapshots still update and decrypt path remains unchanged.
+2. **Establish links from B to both peers**:
+   - On B, connect to A and C (maintain two active links if platform allows).
+   - Confirm operator panel/runtime view on B shows `linkCount >= 2`, `routingEnabled: true`, and both peers listed in `links`.
+3. **Validate A → B receive path**:
+   - Send A → B via Bluetooth and confirm inbox update on B.
+4. **Validate B relay to C**:
+   - While both links are active, send a forwardable payload from A.
+   - Confirm on B: `relayAttempts` increments and `relayedCount` increases (not only `skipped`).
+   - Confirm on C the relayed payload arrives and decrypts.
+5. **Validate route advertisement activity**:
+   - Wait one broadcast interval (~30s) or trigger route activity, then confirm `routeAdvBroadcasts` increments on B.
+
+If your device/browser cannot sustain dual active links, use the Node relay server (`node-server/server.js`) to validate relay behavior with controlled single-client sessions and persistent replay.
 
 ## Troubleshooting Checklist
 

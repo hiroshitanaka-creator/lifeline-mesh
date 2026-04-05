@@ -25,13 +25,12 @@ Lifeline Mesh is a browser-based end-to-end encrypted messaging system designed 
 
 ### Is this production-ready?
 
-**No.** This is a prototype/reference implementation. Before production use:
-- Add Subresource Integrity (SRI) for CDN scripts
+**No.** This is still a prototype/reference implementation. Current code already includes SRI and password-protected key backup/import, but production use still requires additional hardening:
 - Consider self-hosting crypto libraries
-- Conduct security audit
-- Add key backup/export features
-- Implement proper key rotation
-- Add post-quantum crypto when available
+- Independent security review / audit
+- Operational key lifecycle procedures (rotation/revocation playbooks)
+- Environment-specific validation for BLE/browser support
+- Post-quantum migration plan when practical
 
 ## Security
 

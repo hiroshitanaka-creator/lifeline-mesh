@@ -1,4 +1,7 @@
 # Lifeline Mesh - Deep Dive Analysis
+
+> **⚠️ Planning document notice**: This file contains strategy/roadmap analysis and may include historical gaps that have since been implemented. For current implementation truth, prioritize `README.md`, `docs/PHASE_PROGRESS.md`, and `docs/ISSUE_SYNC_REPORT.md`.
+
 ## A Strategic Roadmap to Realize This Project's True Potential
 
 > *[日本語版はこちら / Japanese version](docs/DEEP_DIVE_ANALYSIS_JA.md)*

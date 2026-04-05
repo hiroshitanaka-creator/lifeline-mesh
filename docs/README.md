@@ -49,6 +49,13 @@ Execution checklist for Phase A-E (Japanese) covering:
 - Phase gate execution rules
 - Completion log template
 
+
+### [ISSUE_SYNC_REPORT.md](./ISSUE_SYNC_REPORT.md)
+PR-11 synchronization report covering:
+- code-vs-doc drift matrix
+- issue edit permission status
+- per-issue update proposals when direct GitHub edits are unavailable
+
 ## Quick Links
 
 **For Users**:
