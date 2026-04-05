@@ -1,6 +1,6 @@
 # Security Audit Report
 
-- Generated: 2026-04-05T01:25:15.947Z
+- Generated: 2026-04-05T02:57:19.885Z
 - Scope: Phase 15 security audit preparation
 
 | Check | Status | Details | Command |
@@ -14,9 +14,6 @@
 
 ## Unsafe sink scan matches
 ```text
-app/src/i18n.js:358:        el.innerHTML = t(key);
-app/src/operator-panel.js:428:      inner.innerHTML = renderPanel(snapshot, outboxStats, maintenanceStats, policy);
-app/src/operator-panel.js:430:      inner.innerHTML = `<div class="lm-op-empty">Error rendering panel: ${esc(err instanceof Error ? err.message : String(err))}</div>`;
 app/src/main.js:1244:  document.getElementById("recipient-select").innerHTML = `<option value="">${tr('contacts.recipient.placeholder')}</option>`;
 app/src/main.js:1245:  document.getElementById("group-select").innerHTML = `<option value="">${tr('encrypt.group.select')}</option>`;
 app/src/main.js:1346:  sel.innerHTML = `<option value="">Select Recipient</option>`;
@@ -24,4 +21,7 @@ app/src/main.js:1362:    groupMemberSel.innerHTML = `<option value="">Select Con
 app/src/main.js:1427:  sel.innerHTML = `<option value="">Select Group</option>`;
 app/src/main.js:1780:  qrContainer.innerHTML = "";
 app/src/main.js:1938:  el.innerHTML = tr(key);
+app/src/operator-panel.js:428:      inner.innerHTML = renderPanel(snapshot, outboxStats, maintenanceStats, policy);
+app/src/operator-panel.js:430:      inner.innerHTML = `<div class="lm-op-empty">Error rendering panel: ${esc(err instanceof Error ? err.message : String(err))}</div>`;
+app/src/i18n.js:358:        el.innerHTML = t(key);
 ```

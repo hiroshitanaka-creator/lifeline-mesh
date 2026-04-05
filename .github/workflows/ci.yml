@@ -146,6 +146,16 @@ jobs:
       - name: Run critical-path Playwright E2E
         run: npm run test:e2e:playwright:main-ci
 
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-ci
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+
   validate_gate:
     name: Validate gate summary
     runs-on: ubuntu-latest
