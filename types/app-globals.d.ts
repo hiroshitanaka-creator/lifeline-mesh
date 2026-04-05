@@ -16,6 +16,8 @@ interface Window {
   refreshContacts(): void;
   refreshGroups(): void;
   deleteSelectedContact(): void;
+  verifySelectedContact(): Promise<void>;
+  markSelectedContactCompromised(): Promise<void>;
   createGroup(): void;
   joinGroup(): void;
   addSelectedMemberToGroup(): void;
