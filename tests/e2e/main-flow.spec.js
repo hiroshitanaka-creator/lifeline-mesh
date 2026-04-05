@@ -31,7 +31,7 @@ async function encryptMessage(page, content) {
   return (await page.locator("#encrypted").textContent()) || "";
 }
 
-test("main flow: key generation -> contact add -> encrypt -> decrypt with clipboard/file handoff", async ({ page, context }) => {
+test("main flow: key generation -> contact add -> encrypt -> decrypt with transport receive UX", async ({ page, context }) => {
   await boot(page);
   const myIdentity = await getMyIdentity(page);
   await addContact(page, myIdentity);
@@ -41,14 +41,20 @@ test("main flow: key generation -> contact add -> encrypt -> decrypt with clipbo
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.evaluate((payload) => navigator.clipboard.writeText(payload), encryptedText);
-  const fromClipboard = await page.evaluate(() => navigator.clipboard.readText());
-  await page.locator("#input").fill(fromClipboard);
+  await page.getByRole("button", { name: "📥 Receive from Clipboard" }).click();
+  await expect(page.locator("#input")).toContainText("dmesh-msg");
   await page.getByRole("button", { name: "🔓 Decrypt" }).click();
   await expect(page.locator("#decrypted")).toHaveText(PLAIN_TEXT);
 
-  // file handoff simulation (save/read JSON payload)
-  const fromFile = JSON.stringify(JSON.parse(encryptedText));
-  await page.locator("#input").fill(fromFile);
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "📂 Receive from File" }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: "encrypted-message.dmesh",
+    mimeType: "application/json",
+    buffer: Buffer.from(encryptedText, "utf-8")
+  });
+  await expect(page.locator("#input")).toContainText("dmesh-msg");
   await page.getByRole("button", { name: "🔓 Decrypt" }).click();
   await expect(page.locator("#decrypted")).toHaveText(PLAIN_TEXT);
 

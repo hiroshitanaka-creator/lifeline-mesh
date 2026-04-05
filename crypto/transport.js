@@ -19,6 +19,16 @@ import {
   QR_MAX_CHUNK_SIZE
 } from "./core.js";
 
+const RECEIVABLE_KINDS = new Set(["dmesh-msg", "dmesh-group-msg", "dmesh-id"]);
+
+function parseReceivablePayload(text) {
+  const parsed = JSON.parse(text);
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+  return RECEIVABLE_KINDS.has(parsed.kind) ? parsed : null;
+}
+
 /**
  * @typedef {import("../types/transport.d.ts").DMeshIdMessage} DMeshIdMessage
  * @typedef {import("../types/transport.d.ts").DMeshChunk} DMeshChunk
@@ -211,7 +221,7 @@ export class QRTransport extends BaseTransport {
     }
 
     // Direct message
-    if (parsed.kind === "dmesh-msg") {
+    if (parsed.kind === "dmesh-msg" || parsed.kind === "dmesh-group-msg") {
       if (this.onMessage) this.onMessage(parsed);
       return parsed;
     }
@@ -382,10 +392,9 @@ export class ClipboardTransport extends BaseTransport {
 
     if (!text) return [];
 
-    // Try to parse as dmesh message
     try {
-      const parsed = JSON.parse(text);
-      if (parsed.kind === "dmesh-msg" || parsed.kind === "dmesh-id") {
+      const parsed = parseReceivablePayload(text);
+      if (parsed) {
         if (this.onMessage) this.onMessage(parsed);
         return [parsed];
       }
@@ -478,8 +487,8 @@ export class FileTransport extends BaseTransport {
 
       reader.onload = (e) => {
         try {
-          const parsed = JSON.parse(/** @type {string} */ (e.target.result));
-          if (parsed.kind === "dmesh-msg" || parsed.kind === "dmesh-id") {
+          const parsed = parseReceivablePayload(/** @type {string} */ (e.target.result));
+          if (parsed) {
             if (this.onMessage) this.onMessage(parsed);
             resolve([parsed]);
           } else {
