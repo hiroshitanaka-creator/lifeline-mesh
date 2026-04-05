@@ -266,6 +266,12 @@
       <span data-i18n="decrypt.tofu">TOFU (Trust On First Use - auto-accept unknown senders)</span>
     </label>
     <div class="row">
+      <button data-action="receiveFromClipboard">📥 Receive from Clipboard</button>
+      <button data-action="receiveFromFile">📂 Receive from File</button>
+      <button data-action="scanMessageQRCode">📷 Scan Message QR</button>
+    </div>
+    <input id="decrypt-file-input" type="file" accept=".dmesh,.json,application/json" style="display:none" />
+    <div class="row">
       <button data-action="decryptMsg" data-i18n="decrypt.btn" title="Ctrl+D">🔓 Decrypt</button>
     </div>
     <pre id="status" role="status" aria-live="polite"></pre>

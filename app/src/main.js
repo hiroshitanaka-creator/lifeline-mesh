@@ -593,6 +593,67 @@ async function sendEncryptedViaTransport(transportName) {
   setStatus(true, `Encrypted message sent via ${transportName}`);
 }
 
+function loadReceivedPayloadIntoDecryptInput(message, sourceLabel) {
+  const inputEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('input'));
+  if (!inputEl) {
+    throw new Error('Decrypt input is unavailable');
+  }
+  const payloadText = JSON.stringify(message, null, 2);
+  inputEl.value = payloadText;
+  inputEl.textContent = payloadText;
+  setStatus(true, `Received encrypted payload from ${sourceLabel}. Review and decrypt.`);
+}
+
+function getFirstReceivedMessage(messages = []) {
+  if (!messages.length) {
+    throw new Error('No receivable payload found');
+  }
+  const candidate = messages.find((message) => message?.kind === 'dmesh-msg' || message?.kind === 'dmesh-group-msg');
+  if (!candidate) {
+    throw new Error('Received payload is not an encrypted message');
+  }
+  return candidate;
+}
+
+window.receiveFromClipboard = async function() {
+  if (!transportManager) {
+    setStatus(false, 'Transport manager not initialized');
+    return;
+  }
+
+  try {
+    const messages = await transportManager.receive('clipboard');
+    const received = getFirstReceivedMessage(messages);
+    loadReceivedPayloadIntoDecryptInput(received, 'clipboard');
+  } catch (error) {
+    setStatus(false, formatErrorMessage('Clipboard receive failed', error));
+  }
+};
+
+window.receiveFromFile = function() {
+  const fileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('decrypt-file-input'));
+  if (!fileInput) {
+    setStatus(false, 'Decrypt file input not found');
+    return;
+  }
+  fileInput.value = '';
+  fileInput.click();
+};
+
+window.handleDecryptFileSelected = async function(file) {
+  if (!transportManager) {
+    setStatus(false, 'Transport manager not initialized');
+    return;
+  }
+  try {
+    const messages = await transportManager.receive('file', file);
+    const received = getFirstReceivedMessage(messages);
+    loadReceivedPayloadIntoDecryptInput(received, `file (${file.name || 'unnamed'})`);
+  } catch (error) {
+    setStatus(false, formatErrorMessage('File receive failed', error));
+  }
+};
+
 function getBleProtocolConfigFromInputs() {
   const readNumber = (id, fallback) => {
     const value = Number((/** @type {HTMLInputElement|null} */ (document.getElementById(id)))?.value);
@@ -812,6 +873,9 @@ function bindUIActions() {
     encryptMsg: () => window.encryptMsg(),
     copyEncrypted: () => window.copyEncrypted(),
     exportEncryptedFile: () => window.exportEncryptedFile(),
+    receiveFromClipboard: () => window.receiveFromClipboard(),
+    receiveFromFile: () => window.receiveFromFile(),
+    scanMessageQRCode: () => window.scanMessageQRCode(),
     decryptMsg: () => window.decryptMsg(),
     bleScan: () => window.bleScan(),
     bleDisconnect: () => window.bleDisconnect(),
@@ -854,6 +918,15 @@ function bindUIActions() {
 
   document.getElementById('content')?.addEventListener('input', () => {
     updateMessageDraftMetrics();
+  });
+
+  const decryptFileInput = /** @type {HTMLInputElement|null} */ (document.getElementById('decrypt-file-input'));
+  decryptFileInput?.addEventListener('change', async (event) => {
+    const file = /** @type {HTMLInputElement} */ (event.currentTarget).files?.[0];
+    if (!file) {
+      return;
+    }
+    await window.handleDecryptFileSelected(file);
   });
 }
 
@@ -1985,9 +2058,10 @@ window.closeQRModal = function() {
 
 let html5QrCodeScanner = null;
 
-window.scanQRCode = async function() {
+async function startQrScanner(mode, onDecoded) {
   const modal = document.getElementById("qr-scanner-modal");
   modal.style.display = "block";
+  void mode;
 
   try {
     if (!html5QrCodeScanner) {
@@ -1997,11 +2071,8 @@ window.scanQRCode = async function() {
     await html5QrCodeScanner.start(
       { facingMode: "environment" },
       { fps: 10, qrbox: { width: 250, height: 250 } },
-      (decodedText) => {
-        // Successfully scanned
-        /** @type {HTMLInputElement} */ (document.getElementById("contact-input")).value = decodedText;
-        window.closeQRScanner();
-        window.addContact();
+      async (decodedText) => {
+        await onDecoded(decodedText);
       },
       (_errorMessage) => {
         // Scanning error (ignore, happens frequently)
@@ -2011,6 +2082,52 @@ window.scanQRCode = async function() {
     alert("Camera access error: " + err);
     window.closeQRScanner();
   }
+}
+
+window.scanQRCode = async function() {
+  await startQrScanner('contact', async (decodedText) => {
+    /** @type {HTMLInputElement} */ (document.getElementById("contact-input")).value = decodedText;
+    await window.closeQRScanner();
+    await window.addContact();
+  });
+};
+
+window.scanMessageQRCode = async function() {
+  if (!transportManager) {
+    setStatus(false, 'Transport manager not initialized');
+    return;
+  }
+
+  await startQrScanner('message', async (decodedText) => {
+    const qrTransport = transportManager.getTransport('qr');
+    if (!qrTransport || typeof qrTransport.processScanned !== 'function') {
+      setStatus(false, 'QR transport unavailable');
+      await window.closeQRScanner();
+      return;
+    }
+
+    const parsed = qrTransport.processScanned(decodedText);
+    if (!parsed) {
+      return;
+    }
+
+    if (parsed.kind === 'dmesh-chunk') {
+      const progress = qrTransport.getChunkProgress(parsed.msgId);
+      if (progress) {
+        setStatus(true, `QR chunk ${progress.received}/${progress.total} received`);
+      }
+      return;
+    }
+
+    if (parsed.kind !== 'dmesh-msg' && parsed.kind !== 'dmesh-group-msg') {
+      setStatus(false, `Scanned QR is ${parsed.kind}; expected encrypted message`);
+      await window.closeQRScanner();
+      return;
+    }
+
+    loadReceivedPayloadIntoDecryptInput(parsed, 'QR message');
+    await window.closeQRScanner();
+  });
 };
 
 window.closeQRScanner = async function() {
