@@ -125,8 +125,8 @@ All tests passing: **195/195 ✓**
 | Crypto core unit | 22 | `npm run test:crypto` |
 | Test vectors | 27 | `npm run test:vectors` |
 | BLE + transport integration | 24 | `npm run test:integration` |
-| Group messaging integration | 3 | `npm run test:integration` |
-| Contact verification integration | 4 | `npm run test:integration` |
+| Group messaging integration | 9 | `npm run test:integration` |
+| Contact verification integration | 7 | `npm run test:integration` |
 | Store maintenance integration | 1 | `npm run test:integration` |
 | Mesh router Phase 1 integration | 14 | `npm run test:integration` |
 | BLE mesh relay integration | 6 | `npm run test:integration` |
