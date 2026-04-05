@@ -52,6 +52,7 @@ import {
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
+import { resolveShareTargetIntake } from './share-target-intake.js';
 import { createTransportManager } from '../../crypto/transport.js';
 import { createMeshRuntime } from './runtime-mesh.js';
 import { mountOperatorPanel } from './operator-panel.js';
@@ -621,6 +622,18 @@ function loadReceivedPayloadIntoDecryptInput(message, sourceLabel) {
   setStatus(true, `Received encrypted payload from ${sourceLabel}. Review and decrypt.`);
 }
 
+function loadDraftIntoEncryptInput(text, sourceLabel) {
+  const contentEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('content'));
+  if (!contentEl) {
+    throw new Error('Encrypt message input is unavailable');
+  }
+
+  contentEl.value = text;
+  contentEl.textContent = text;
+  updateMessageDraftMetrics();
+  setStatus(true, `Received share text from ${sourceLabel}. Ready to encrypt.`);
+}
+
 function getFirstReceivedMessage(messages = []) {
   if (!messages.length) {
     throw new Error('No receivable payload found');
@@ -630,6 +643,57 @@ function getFirstReceivedMessage(messages = []) {
     throw new Error('Received payload is not an encrypted message');
   }
   return candidate;
+}
+
+function applyShortcutDeepLink(hash, { silent = false } = {}) {
+  const normalized = (hash || '').trim().toLowerCase();
+  const contentEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('content'));
+  const decryptInputEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('input'));
+
+  if (normalized === '#encrypt') {
+    contentEl?.focus();
+    contentEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (!silent) {
+      setStatus(true, 'Shortcut opened Encrypt Message section.');
+    }
+    return true;
+  }
+
+  if (normalized === '#decrypt') {
+    decryptInputEl?.focus();
+    decryptInputEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (!silent) {
+      setStatus(true, 'Shortcut opened Decrypt Message section.');
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function handleStartupIntakeFromUrl() {
+  const params = new window.URLSearchParams(window.location.search);
+  const sharedText = params.get('text') || '';
+  const sharedTitle = params.get('title') || '';
+  const hasSharePayload = Boolean(sharedText || sharedTitle);
+  const hash = window.location.hash || '';
+
+  if (hasSharePayload) {
+    const intake = resolveShareTargetIntake({ title: sharedTitle, text: sharedText });
+    if (intake.route === 'decrypt') {
+      loadReceivedPayloadIntoDecryptInput(intake.encryptedPayload, 'share target');
+      applyShortcutDeepLink('#decrypt', { silent: true });
+    } else {
+      loadDraftIntoEncryptInput(intake.draftText, 'share target');
+      applyShortcutDeepLink('#encrypt', { silent: true });
+    }
+
+    const cleanUrl = `${window.location.pathname}${hash || ''}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+    return;
+  }
+
+  applyShortcutDeepLink(hash);
 }
 
 window.receiveFromClipboard = async function() {
@@ -2212,6 +2276,10 @@ window.dismissInstall = function() {
   document.getElementById('install-prompt').style.display = 'none';
 };
 
+window.addEventListener('hashchange', () => {
+  applyShortcutDeepLink(window.location.hash);
+});
+
 // Register Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -2317,6 +2385,7 @@ function updateKdfStatus() {
     await refreshInboxSnapshot();
     await runAndRecordMaintenance('startup');
     updateMessageDraftMetrics();
+    handleStartupIntakeFromUrl();
     setInterval(() => {
       refreshOutboxSnapshot();
       refreshInboxSnapshot();

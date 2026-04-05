@@ -64,6 +64,33 @@ test("main flow: key generation -> contact add -> encrypt -> decrypt with transp
   expect(decryptedText).toBe(PLAIN_TEXT);
 });
 
+test("PWA intake: share_target query and shortcut deep-link route to encrypt/decrypt inputs", async ({ page }) => {
+  const encryptedPayload = {
+    kind: "dmesh-msg",
+    msgId: "share-target-intake-msg",
+    senderSignPK: "invalid-for-runtime-check",
+    senderBoxPK: "invalid-for-runtime-check",
+    nonce: "invalid",
+    ephPK: "invalid",
+    ciphertext: "invalid",
+    sig: "invalid",
+    ts: Date.now(),
+    ttlMs: 60000
+  };
+
+  const encryptedQuery = encodeURIComponent(JSON.stringify(encryptedPayload));
+  await page.goto(`/?title=From%20Alice&text=${encryptedQuery}#decrypt`);
+  await expect(page.locator("#input")).toContainText("dmesh-msg");
+  await expect(page.locator("#content")).toHaveValue("");
+  await expect(page.locator("#status")).toContainText("share target");
+  await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("input");
+
+  await page.goto("/?title=Shelter%20Update&text=Bring%20water%20and%20batteries#encrypt");
+  await expect(page.locator("#content")).toHaveValue("Shelter Update\nBring water and batteries");
+  await expect(page.locator("#status")).toContainText("Ready to encrypt");
+  await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("content");
+});
+
 test("decrypt sender policy branches: TOFU off reject unknown, TOFU on accept unknown, known sender accept", async ({ browser }) => {
   const aliceContext = await browser.newContext();
   const bobContext = await browser.newContext();

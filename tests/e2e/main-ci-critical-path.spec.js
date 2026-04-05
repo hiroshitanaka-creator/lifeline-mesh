@@ -63,3 +63,29 @@ test("main CI critical path: verification workflow keeps selection and blocks co
   await page.getByRole("button", { name: "🔒 Encrypt" }).click();
   await expect(page.locator("#status")).toContainText("Blocked:");
 });
+
+test("main CI critical path: PWA share-target intake routes encrypted to decrypt and plain text to encrypt", async ({ page }) => {
+  const encryptedPayload = {
+    kind: "dmesh-msg",
+    msgId: "main-ci-share-target-intake-msg",
+    senderSignPK: "invalid-for-runtime-check",
+    senderBoxPK: "invalid-for-runtime-check",
+    nonce: "invalid",
+    ephPK: "invalid",
+    ciphertext: "invalid",
+    sig: "invalid",
+    ts: Date.now(),
+    ttlMs: 60000
+  };
+
+  const encryptedQuery = encodeURIComponent(JSON.stringify(encryptedPayload));
+  await page.goto(`/?title=From%20Alice&text=${encryptedQuery}#decrypt`);
+  await expect(page.locator("#input")).toContainText("dmesh-msg");
+  await expect(page.locator("#status")).toContainText("share target");
+  await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("input");
+
+  await page.goto("/?title=Shelter%20Update&text=Bring%20water%20and%20batteries#encrypt");
+  await expect(page.locator("#content")).toHaveValue("Shelter Update\nBring water and batteries");
+  await expect(page.locator("#status")).toContainText("Ready to encrypt");
+  await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("content");
+});
