@@ -361,7 +361,7 @@ test("e2e: multi-device group onboarding + sender-state mismatch recovery", asyn
   };
   await deviceB.locator("#group-json").fill(JSON.stringify(staleSyncPayload, null, 2));
   await deviceB.getByRole("button", { name: "📥 Join Group" }).click();
-  await expect(deviceB.locator("#status")).toContainText("Sender state synced");
+  await expect(deviceB.locator("#status")).toContainText("Sender state sync skipped");
 
   await deviceB.locator("#input").fill(secondEncrypted);
   await deviceB.getByRole("button", { name: "🔓 Decrypt" }).click();

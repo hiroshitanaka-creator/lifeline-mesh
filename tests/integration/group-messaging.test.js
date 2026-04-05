@@ -1,6 +1,8 @@
 import nacl from "../../crypto/node_modules/tweetnacl/nacl-fast.js";
 import naclUtil from "../../crypto/node_modules/tweetnacl-util/nacl-util.js";
 import * as GroupMesh from "../../crypto/group.js";
+import * as DMesh from "../../crypto/core.js";
+import { shouldAcceptIncomingSenderState, filterSenderStateEntriesByMembers } from "../../app/src/group-sender-state.js";
 
 const tests = [];
 let passed = 0;
@@ -206,6 +208,84 @@ test("integration: sender-state resync payload enables mismatch recovery", () =>
 
   if (recovered.payload.content !== "phase-2") {
     throw new Error("Resync recovery failed to decrypt expected content");
+  }
+});
+
+test("integration: stale sender-state import does not downgrade newer state", () => {
+  const existing = {
+    version: 5,
+    chainKey: "newer-chain",
+    prevVersion: 4,
+    prevChainKey: "prev-chain"
+  };
+  const incomingStale = {
+    version: 3,
+    chainKey: "stale-chain"
+  };
+
+  if (shouldAcceptIncomingSenderState(existing, incomingStale)) {
+    throw new Error("Stale sender-state should not be accepted");
+  }
+});
+
+test("integration: same-version import preserves richer recovery metadata", () => {
+  const existingRicher = {
+    version: 7,
+    chainKey: "same-version-chain",
+    prevVersion: 6,
+    prevChainKey: "rich-prev"
+  };
+  const incomingPoor = {
+    version: 7,
+    chainKey: "same-version-chain"
+  };
+
+  if (shouldAcceptIncomingSenderState(existingRicher, incomingPoor)) {
+    throw new Error("Same-version import should not overwrite richer recovery metadata");
+  }
+});
+
+test("integration: removed member sender state is not exported in onboarding payload filter", () => {
+  const alice = nacl.sign.keyPair();
+  const bob = nacl.sign.keyPair();
+  const removed = nacl.sign.keyPair();
+
+  const resolveMemberFp = (senderSignPK) => {
+    try {
+      const senderSignPKu8 = naclUtil.decodeBase64(senderSignPK);
+      return naclUtil.encodeBase64(DMesh.fingerprintFromSignPK(senderSignPKu8, nacl));
+    } catch {
+      return null;
+    }
+  };
+
+  const aliceFp = resolveMemberFp(naclUtil.encodeBase64(alice.publicKey));
+  const bobFp = resolveMemberFp(naclUtil.encodeBase64(bob.publicKey));
+  const removedFp = resolveMemberFp(naclUtil.encodeBase64(removed.publicKey));
+
+  const currentMembers = [aliceFp, bobFp];
+  const senderStateEntries = [
+    {
+      senderSignPK: naclUtil.encodeBase64(alice.publicKey),
+      senderKeyState: { version: 10, chainKey: "alice-chain" }
+    },
+    {
+      senderSignPK: naclUtil.encodeBase64(bob.publicKey),
+      senderKeyState: { version: 11, chainKey: "bob-chain" }
+    },
+    {
+      senderSignPK: naclUtil.encodeBase64(removed.publicKey),
+      senderKeyState: { version: 12, chainKey: "removed-chain" }
+    }
+  ];
+
+  const filtered = filterSenderStateEntriesByMembers(senderStateEntries, currentMembers, resolveMemberFp);
+  if (filtered.length !== 2) {
+    throw new Error("Expected removed member sender state to be excluded from export filter");
+  }
+  const filteredFps = filtered.map((entry) => resolveMemberFp(entry.senderSignPK));
+  if (filteredFps.includes(removedFp)) {
+    throw new Error("Removed member sender state leaked into onboarding export");
   }
 });
 

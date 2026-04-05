@@ -56,6 +56,7 @@ import { createTransportManager } from '../../crypto/transport.js';
 import { createMeshRuntime } from './runtime-mesh.js';
 import { mountOperatorPanel } from './operator-panel.js';
 import { t as tr, setLang, getLang } from './i18n.js';
+import { shouldAcceptIncomingSenderState, filterSenderStateEntriesByMembers } from './group-sender-state.js';
 
 
 /* =========================
@@ -1059,6 +1060,25 @@ function encodeSenderState(senderKey) {
   };
 }
 
+function senderSignPKToMemberFp(senderSignPK) {
+  try {
+    const senderSignPKu8 = naclUtil.decodeBase64(senderSignPK);
+    const senderFp = DMesh.fingerprintFromSignPK(senderSignPKu8, nacl);
+    return naclUtil.encodeBase64(senderFp);
+  } catch {
+    return null;
+  }
+}
+
+async function saveSenderStateMonotonic(groupId, senderSignPK, incomingSenderKeyState) {
+  const existingState = await getSenderKeyState(groupId, senderSignPK);
+  if (!shouldAcceptIncomingSenderState(existingState, incomingSenderKeyState)) {
+    return false;
+  }
+  await saveSenderKeyState(groupId, senderSignPK, incomingSenderKeyState);
+  return true;
+}
+
 function mergeUniqueMembers(...memberLists) {
   return Array.from(new Set(memberLists.flat().filter(Boolean)));
 }
@@ -1555,7 +1575,17 @@ window.joinGroup = async function() {
     const myFp = naclUtil.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
     if (normalized.mode === 'sender-sync') {
       const syncPayload = normalized.payload;
-      await saveSenderKeyState(syncPayload.groupId, syncPayload.senderSignPK, syncPayload.senderKeyState);
+      const members = await getGroupMembers(syncPayload.groupId);
+      const senderMemberFp = senderSignPKToMemberFp(syncPayload.senderSignPK);
+      if (members.length && (!senderMemberFp || !members.includes(senderMemberFp))) {
+        throw new Error('Sender state sync rejected: sender is not a current group member');
+      }
+
+      const accepted = await saveSenderStateMonotonic(syncPayload.groupId, syncPayload.senderSignPK, syncPayload.senderKeyState);
+      if (!accepted) {
+        setStatus(true, `Sender state sync skipped (kept newer/local richer state) for ${syncPayload.senderSignPK.slice(0, 12)}...`);
+        return;
+      }
       setStatus(true, `Sender state synced for group ${syncPayload.groupId.slice(0, 8)}... (${syncPayload.senderSignPK.slice(0, 12)}...)`);
       return;
     }
@@ -1573,9 +1603,15 @@ window.joinGroup = async function() {
     await saveGroup(groupEntry);
     await saveGroupMembers(groupEntry.id, mergedMembers);
 
-    for (const entry of onboardingPayload.senderStates || []) {
+    const filteredSenderStates = filterSenderStateEntriesByMembers(
+      onboardingPayload.senderStates || [],
+      mergedMembers,
+      senderSignPKToMemberFp
+    );
+
+    for (const entry of filteredSenderStates) {
       if (entry?.senderSignPK && entry?.senderKeyState) {
-        await saveSenderKeyState(groupEntry.id, entry.senderSignPK, entry.senderKeyState);
+        await saveSenderStateMonotonic(groupEntry.id, entry.senderSignPK, entry.senderKeyState);
       }
     }
 
@@ -1588,7 +1624,7 @@ window.joinGroup = async function() {
     await window.refreshGroups();
     /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value = groupEntry.id;
     await renderSelectedGroup();
-    const sharedStatesCount = (onboardingPayload.senderStates || []).length;
+    const sharedStatesCount = filteredSenderStates.length;
     setStatus(true, `Joined group: ${groupEntry.name || groupEntry.id} (sender states: ${sharedStatesCount})`);
   } catch (e) {
     setStatus(false, 'Join group failed: ' + (e instanceof Error ? e.message : String(e)));
@@ -1607,6 +1643,11 @@ window.copyGroupOnboardingPayload = async function() {
     }
     const members = await getGroupMembers(groupId);
     const senderStates = await getSenderKeysForGroup(groupId);
+    const filteredSenderStates = filterSenderStateEntriesByMembers(
+      senderStates,
+      members,
+      senderSignPKToMemberFp
+    );
     const payload = {
       type: 'lifeline-group-onboarding-v1',
       exportedAt: Date.now(),
@@ -1614,7 +1655,7 @@ window.copyGroupOnboardingPayload = async function() {
         ...group,
         members
       },
-      senderStates: senderStates.map((entry) => ({
+      senderStates: filteredSenderStates.map((entry) => ({
         senderSignPK: entry.senderSignPK,
         senderKeyState: entry.senderKeyState
       }))
@@ -1691,7 +1732,13 @@ window.removeSelectedMemberFromGroup = async function() {
     if (!group) return alert('Group not found');
 
     await removeGroupMember(groupId, memberFp);
-    await removeSenderKeyState(groupId, memberFp);
+    const senderStates = await getSenderKeysForGroup(groupId);
+    for (const entry of senderStates) {
+      const senderFp = senderSignPKToMemberFp(entry?.senderSignPK);
+      if (senderFp && senderFp === memberFp) {
+        await removeSenderKeyState(groupId, entry.senderSignPK);
+      }
+    }
     const members = (await getGroupMembers(groupId)).filter((fp) => fp !== memberFp);
     group.members = members;
 
