@@ -55,10 +55,20 @@ export interface MaintenanceStats {
   lastError?: string | null;
 }
 
-export interface RetentionPolicy {
+export interface MaintenancePolicy {
   outboxTtlMs?: number | null;
   seenRetentionMs?: number | null;
   chunkMaxAgeMs?: number | null;
+}
+
+export interface ReceivePathPolicy {
+  seenReplayRetentionMs?: number | null;
+  chunkCleanupMaxAgeMs?: number | null;
+}
+
+export interface OperatorPanelPolicy {
+  maintenance?: MaintenancePolicy;
+  receivePath?: ReceivePathPolicy;
 }
 
 // ─── Panel handle ─────────────────────────────────────────────────────────────
@@ -87,8 +97,8 @@ export interface OperatorPanelOptions {
   getOutboxStats?: () => OutboxStats;
   /** Returns recent maintenance execution summary for operator visibility. */
   getMaintenanceStats?: () => MaintenanceStats;
-  /** Retention policy values displayed in the panel. */
-  retention?: RetentionPolicy;
+  /** Returns policy values displayed in the panel. */
+  getPolicy?: () => OperatorPanelPolicy;
   /**
    * How often (ms) to refresh the panel.
    * @default 2000
@@ -110,7 +120,7 @@ export declare function renderPanel(
   snapshot: MeshSnapshot,
   outboxStats?: OutboxStats,
   maintenanceStats?: MaintenanceStats,
-  retention?: RetentionPolicy
+  policy?: OperatorPanelPolicy
 ): string;
 
 /**

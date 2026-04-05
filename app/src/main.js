@@ -1962,11 +1962,17 @@ function updateKdfStatus() {
         getSnapshot: () => meshRuntime?.getSnapshot() ?? {},
         getOutboxStats: () => _cachedOutboxStats,
         getMaintenanceStats: () => _maintenanceState,
-        retention: {
-          outboxTtlMs: OUTBOX_DEFAULT_TTL_MS,
-          seenRetentionMs: SEEN_RETENTION_MS,
-          chunkMaxAgeMs: CHUNK_MAX_AGE_MS
-        }
+        getPolicy: () => ({
+          maintenance: {
+            outboxTtlMs: OUTBOX_DEFAULT_TTL_MS,
+            seenRetentionMs: SEEN_RETENTION_MS,
+            chunkMaxAgeMs: CHUNK_MAX_AGE_MS
+          },
+          receivePath: {
+            seenReplayRetentionMs: DMesh.REPLAY_RETENTION_MS,
+            chunkCleanupMaxAgeMs: bleManager?.protocolConfig?.reassemblyTimeoutMs ?? null
+          }
+        })
       });
     }
 

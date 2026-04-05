@@ -7,6 +7,9 @@
  */
 
 import { renderPanel } from "../../app/src/operator-panel.js";
+import { OUTBOX_DEFAULT_TTL_MS, SEEN_RETENTION_MS, CHUNK_MAX_AGE_MS } from "../../crypto/store.js";
+import { CONFIG as BLE_CONFIG } from "../../bluetooth/constants.js";
+import * as DMesh from "../../crypto/core.js";
 
 const tests = [];
 
@@ -164,9 +167,15 @@ test("renderPanel: maintenance metrics are rendered for operators", () => {
         lastResult: { outboxPurged: 3, seenRemoved: 7, chunksRemoved: 2 }
       },
       {
-        outboxTtlMs: 7 * 24 * 60 * 60 * 1000,
-        seenRetentionMs: 30 * 24 * 60 * 60 * 1000,
-        chunkMaxAgeMs: 24 * 60 * 60 * 1000
+        maintenance: {
+          outboxTtlMs: 7 * 24 * 60 * 60 * 1000,
+          seenRetentionMs: 30 * 24 * 60 * 60 * 1000,
+          chunkMaxAgeMs: 24 * 60 * 60 * 1000
+        },
+        receivePath: {
+          seenReplayRetentionMs: 15 * 60 * 1000,
+          chunkCleanupMaxAgeMs: 60 * 1000
+        }
       }
     );
     assert(html.includes("Maintenance"), "maintenance section rendered");
@@ -174,10 +183,31 @@ test("renderPanel: maintenance metrics are rendered for operators", () => {
     assert(html.includes(">3<"), "outbox purge count rendered");
     assert(html.includes(">7<"), "seen cleanup count rendered");
     assert(html.includes(">2<"), "chunk cleanup count rendered");
-    assert(html.includes("retention(outbox/seen/chunks)"), "retention policy text rendered");
+    assert(html.includes("maintenance-policy(outboxTTL/seenRetention/chunkMaxAge)"), "maintenance policy text rendered");
+    assert(html.includes("receive-path-policy(seenReplay/chunkCleanup)"), "receive-path policy text rendered");
+    assert(!html.includes("retention(outbox/seen/chunks)"), "ambiguous single retention label removed");
   } finally {
     Date.now = originalNow;
   }
+});
+
+test("renderPanel: policy values come from split maintenance/receive sources", () => {
+  const html = renderPanel({}, {}, {}, {
+    maintenance: {
+      outboxTtlMs: OUTBOX_DEFAULT_TTL_MS,
+      seenRetentionMs: SEEN_RETENTION_MS,
+      chunkMaxAgeMs: CHUNK_MAX_AGE_MS
+    },
+    receivePath: {
+      seenReplayRetentionMs: DMesh.REPLAY_RETENTION_MS,
+      chunkCleanupMaxAgeMs: BLE_CONFIG.REASSEMBLY_TIMEOUT_MS
+    }
+  });
+
+  assert(html.includes("maintenance-policy(outboxTTL/seenRetention/chunkMaxAge)"), "maintenance policy line exists");
+  assert(html.includes("receive-path-policy(seenReplay/chunkCleanup)"), "receive-path policy line exists");
+  assert(html.includes("10080m / 43200m / 1440m"), "maintenance policy values rendered");
+  assert(html.includes("43200m / 15s"), "receive path values rendered");
 });
 
 test("renderPanel: XSS characters in peerId are escaped", () => {

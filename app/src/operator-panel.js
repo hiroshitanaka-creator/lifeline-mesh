@@ -159,6 +159,7 @@ function shortId(id) {
 }
 
 function formatMs(ms) {
+  if (!Number.isFinite(ms)) return "n/a";
   if (ms <= 0) return "0s";
   if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
   return `${Math.round(ms / 60_000)}m`;
@@ -178,10 +179,10 @@ function formatAgo(ts) {
  * @param {object} snapshot - Output of meshRuntime.getSnapshot()
  * @param {object} [outboxStats] - { pending, failed } counts
  * @param {object} [maintenanceStats]
- * @param {object} [retention]
+ * @param {object} [policy]
  * @returns {string} HTML string
  */
-export function renderPanel(snapshot, outboxStats = {}, maintenanceStats = {}, retention = {}) {
+export function renderPanel(snapshot, outboxStats = {}, maintenanceStats = {}, policy = {}) {
   const {
     localPeerId = "unknown",
     linkCount = 0,
@@ -205,11 +206,8 @@ export function renderPanel(snapshot, outboxStats = {}, maintenanceStats = {}, r
     lastResult = null,
     lastError = null
   } = maintenanceStats || {};
-  const {
-    outboxTtlMs = null,
-    seenRetentionMs = null,
-    chunkMaxAgeMs = null
-  } = retention || {};
+  const maintenancePolicy = policy?.maintenance || {};
+  const receivePolicy = policy?.receivePath || {};
 
   // ── Links section ──────────────────────────────────────────────────────────
   const linkChips = links.length > 0
@@ -352,7 +350,10 @@ export function renderPanel(snapshot, outboxStats = {}, maintenanceStats = {}, r
         </div>
       </div>
       <div class="lm-op-last-relay">
-        <span>retention(outbox/seen/chunks): ${esc(formatMs(outboxTtlMs))} / ${esc(formatMs(seenRetentionMs))} / ${esc(formatMs(chunkMaxAgeMs))}</span>
+        <span>maintenance-policy(outboxTTL/seenRetention/chunkMaxAge): ${esc(formatMs(maintenancePolicy.outboxTtlMs))} / ${esc(formatMs(maintenancePolicy.seenRetentionMs))} / ${esc(formatMs(maintenancePolicy.chunkMaxAgeMs))}</span>
+      </div>
+      <div class="lm-op-last-relay">
+        <span>receive-path-policy(seenReplay/chunkCleanup): ${esc(formatMs(receivePolicy.seenReplayRetentionMs))} / ${esc(formatMs(receivePolicy.chunkCleanupMaxAgeMs))}</span>
       </div>
       ${lastError ? `<div class="lm-op-last-relay"><span>last-error: ${esc(lastError)}</span></div>` : ""}
     </div>
@@ -376,7 +377,7 @@ export function renderPanel(snapshot, outboxStats = {}, maintenanceStats = {}, r
  * @param {function(): object} options.getSnapshot - Returns meshRuntime.getSnapshot()
  * @param {function(): object} [options.getOutboxStats] - Returns { pending, failed }
  * @param {function(): object} [options.getMaintenanceStats]
- * @param {object} [options.retention]
+ * @param {function(): object} [options.getPolicy]
  * @param {number} [options.pollIntervalMs=2000] - Refresh interval in ms
  * @returns {{ update: function, destroy: function }} Panel handle
  */
@@ -385,7 +386,7 @@ export function mountOperatorPanel(container, options) {
     getSnapshot,
     getOutboxStats = () => ({}),
     getMaintenanceStats = () => ({}),
-    retention = {},
+    getPolicy = () => ({}),
     pollIntervalMs = 2000
   } = options || {};
 
@@ -423,7 +424,8 @@ export function mountOperatorPanel(container, options) {
       const snapshot = getSnapshot();
       const outboxStats = getOutboxStats();
       const maintenanceStats = getMaintenanceStats();
-      inner.innerHTML = renderPanel(snapshot, outboxStats, maintenanceStats, retention);
+      const policy = getPolicy();
+      inner.innerHTML = renderPanel(snapshot, outboxStats, maintenanceStats, policy);
     } catch (err) {
       inner.innerHTML = `<div class="lm-op-empty">Error rendering panel: ${esc(err instanceof Error ? err.message : String(err))}</div>`;
     }
