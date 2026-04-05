@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-162%2F162%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-184%2F184%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -59,6 +59,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - 🎯 **Recipient binding** prevents message redirection
 - 🛡️ **Replay protection** with 30-day nonce tracking
 - ✅ **TOFU (Trust On First Use)** with key pinning
+- 🔏 **Contact verification workflow**: mark contacts as verified or compromised, with safety numbers and per-contact status badges
 - 🔗 **Subresource Integrity (SRI)** for CDN scripts
 
 ### Key Management
@@ -78,6 +79,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - 📤 Outbox queuing (priority / TTL / per-link targeting) with automatic flush on reconnect
 - 📥 Inbox persistence for received messages
 - 🔌 **GATT server layer** (`bluetooth/gatt-server.js`): pluggable `IGATTBackend` interface ready for native adapters (Capacitor, noble)
+- 🖥️ **Node.js relay server** (`node-server/`): persistent single-client relay mode with durable message store (`persistent-relay-store.js`) for infrastructure-independent forwarding
 
 ### Operator Panel
 - 📊 Live mesh state dashboard: active links, route table, relay counters, route-advertisement activity
@@ -116,21 +118,25 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ## 🔬 Testing
 
-All tests passing: **162/162 ✓**
+All tests passing: **184/184 ✓**
 
 | Suite | Count | Command |
 |---|---|---|
 | Crypto core unit | 22 | `npm run test:crypto` |
 | Test vectors | 27 | `npm run test:vectors` |
-| BLE + transport integration | 18 | `npm run test:integration` |
+| BLE + transport integration | 24 | `npm run test:integration` |
 | Group messaging integration | 3 | `npm run test:integration` |
+| Contact verification integration | 4 | `npm run test:integration` |
+| Store maintenance integration | 1 | `npm run test:integration` |
 | Mesh router Phase 1 integration | 14 | `npm run test:integration` |
-| BLE mesh relay integration | 5 | `npm run test:integration` |
+| BLE mesh relay integration | 6 | `npm run test:integration` |
 | Mesh router Phase 2 integration | 27 | `npm run test:integration` |
-| App runtime mesh integration | 10 | `npm run test:integration` |
-| GATT server integration | 17 | `npm run test:integration` |
-| Operator panel unit | 19 | `npm run test:integration` |
-| **Total** | **162** | `npm run test:unit && npm run test:integration` |
+| App runtime mesh integration | 12 | `npm run test:integration` |
+| GATT server integration | 19 | `npm run test:integration` |
+| Node-server relay integration | 3 | `npm run test:integration` |
+| Operator panel unit | 21 | `npm run test:integration` |
+| DB migration integration | 1 | `npm run test:integration` |
+| **Total** | **184** | `npm run test:unit && npm run test:integration` |
 
 ```bash
 # Run everything
@@ -153,8 +159,8 @@ npm run test:e2e:real-browser
 ```
 
 CI note:
-- Fast PR gate runs `test:e2e:smoke`.
-- Real browser Playwright runs in `.github/workflows/e2e-real-browser.yml` (nightly, manual dispatch, and pushes to main/master).
+- Fast PR gate (`e2e_browser_smoke` job in CI) runs the Playwright **critical-path spec** (`main-ci-critical-path.spec.js`) — full key-gen → encrypt → decrypt → verify → compromised flow.
+- Full Playwright suite runs in `.github/workflows/e2e-real-browser.yml` (nightly, manual dispatch, and pushes to main/master).
 
 ---
 
@@ -171,6 +177,9 @@ CI note:
   mesh-router.js      Phase 1 (1-hop dedup) + Phase 2 (N-hop route adv)
   gatt-server.js      GATT peripheral layer with pluggable IGATTBackend
 /crypto         Core crypto, group messaging, transport, store (schema v4)
+/node-server    Node.js relay server (persistent single-client relay mode)
+  relay-node.js             Relay session manager
+  persistent-relay-store.js Durable message store for relay forwarding
 /spec           Threat model + protocol specification
 /tools          Test vectors, validator, SRI generator
 /docs           Usage guide, FAQ, phase progress
@@ -272,7 +281,7 @@ The workflow runs `npm install --prefix app && npm run build --prefix app` and d
 
 ### Production Checklist
 - [x] SRI added to all CDN scripts
-- [x] All tests passing (162/162)
+- [x] All tests passing (184/184)
 - [x] Documentation complete
 - [ ] Consider self-hosting TweetNaCl (avoid CDN dependency)
 - [x] Add Content Security Policy headers
@@ -353,7 +362,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 **Current Version**: 0.1.0 (v0.1.0 release gate passed; prototype quality)
 
 ### Implemented ✅
-- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 162/162 tests passing
+- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 184/184 tests passing
 - Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
 - Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
 - **Multi-link BLE runtime**: concurrent links via `Map<peerId, BLEManager>`, egress relay loop, route-adv broadcast
@@ -361,9 +370,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - **GATT server layer**: `bluetooth/gatt-server.js` with pluggable `IGATTBackend` + `MockGATTBackend` for unit testing
 - **Operator Panel**: live mesh monitoring UI (`app/src/operator-panel.js`), mounted in app with 2 s polling
 - **Outbox schema v4**: `priority` / `ttl` / `linkId` fields, IDB migration, `getOutboxForLink()` / `getOutboxByMinPriority()` / `purgeExpiredOutbox()`
-- **TypeScript declarations**: `types/runtime-mesh.d.ts`, `types/operator-panel.d.ts`, `types/gatt-server.d.ts`
+- **TypeScript declarations**: `types/runtime-mesh.d.ts`, `types/operator-panel.d.ts`, `types/gatt-server.d.ts`, `types/app-globals.d.ts`
+- **Contact verification workflow**: safety-number display, verify / mark-compromised per contact, encryption blocked for compromised recipients
+- **Node.js relay server** (`node-server/`): persistent single-client relay with durable store; 3/3 integration tests
 - Group messaging MVP (Sender Keys / DMESH_GROUP_V1 protocol)
-- Multi-job CI (lint, typecheck, unit, integration, compat, security, E2E)
+- Multi-job CI (lint, typecheck, unit, integration, compat, security, E2E Playwright critical-path)
 - GitHub Pages deployment (Vite build)
 - Comprehensive docs and threat model
 
