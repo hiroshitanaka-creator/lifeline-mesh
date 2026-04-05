@@ -137,6 +137,78 @@ test("integration: group decrypt rejects wrong sender key state", () => {
   }
 });
 
+test("integration: sender-state resync payload enables mismatch recovery", () => {
+  const alice = nacl.sign.keyPair();
+  const bob = nacl.sign.keyPair();
+  const group = GroupMesh.createGroup({
+    name: "Resync-Team",
+    createdBy: naclUtil.encodeBase64(alice.publicKey),
+    members: [naclUtil.encodeBase64(alice.publicKey), naclUtil.encodeBase64(bob.publicKey)]
+  }, nacl, naclUtil);
+
+  let aliceSenderState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+  let bobViewOfAliceState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+
+  const firstEncrypted = GroupMesh.encryptGroupMessage({
+    content: "phase-1",
+    groupId: group.id,
+    senderKey: aliceSenderState,
+    senderSignPK: alice.publicKey,
+    senderSignSK: alice.secretKey
+  }, nacl, naclUtil);
+  aliceSenderState = cloneSenderKeyState(firstEncrypted.nextSenderKey);
+  const firstDecrypted = GroupMesh.decryptGroupMessage({
+    message: firstEncrypted.message,
+    senderKey: bobViewOfAliceState,
+    expectedSenderSignPK: alice.publicKey
+  }, nacl, naclUtil);
+  bobViewOfAliceState = cloneSenderKeyState(firstDecrypted.nextSenderKey);
+
+  const secondEncrypted = GroupMesh.encryptGroupMessage({
+    content: "phase-2",
+    groupId: group.id,
+    senderKey: aliceSenderState,
+    senderSignPK: alice.publicKey,
+    senderSignSK: alice.secretKey
+  }, nacl, naclUtil);
+  const secondMessageSenderState = cloneSenderKeyState(aliceSenderState);
+  aliceSenderState = cloneSenderKeyState(secondEncrypted.nextSenderKey);
+
+  // Bob gets stale/mismatched state (simulates drift across devices).
+  bobViewOfAliceState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+
+  let mismatchThrown = false;
+  try {
+    GroupMesh.decryptGroupMessage({
+      message: secondEncrypted.message,
+      senderKey: bobViewOfAliceState,
+      expectedSenderSignPK: alice.publicKey
+    }, nacl, naclUtil);
+  } catch {
+    mismatchThrown = true;
+  }
+
+  if (!mismatchThrown) {
+    throw new Error("Expected mismatch with stale sender state");
+  }
+
+  // Resync payload shares sender state for the senderSignPK from Alice device.
+  const resyncedSenderState = cloneSenderKeyState({
+    version: secondEncrypted.message.senderKeyVersion,
+    chainKey: secondMessageSenderState.chainKey
+  });
+
+  const recovered = GroupMesh.decryptGroupMessage({
+    message: secondEncrypted.message,
+    senderKey: resyncedSenderState,
+    expectedSenderSignPK: alice.publicKey
+  }, nacl, naclUtil);
+
+  if (recovered.payload.content !== "phase-2") {
+    throw new Error("Resync recovery failed to decrypt expected content");
+  }
+});
+
 for (const { name, fn } of tests) {
   try {
     await fn();

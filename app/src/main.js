@@ -43,6 +43,7 @@ import {
   saveSenderKeyState,
   getSenderKeyState,
   removeSenderKeyState,
+  getSenderKeysForGroup,
   migrateLegacyV1IfNeeded,
   VERIFICATION_STATUS,
   saveContact,
@@ -803,6 +804,8 @@ function bindUIActions() {
     markSelectedContactCompromised: () => window.markSelectedContactCompromised(),
     createGroup: () => window.createGroup(),
     joinGroup: () => window.joinGroup(),
+    copyGroupOnboardingPayload: () => window.copyGroupOnboardingPayload(),
+    copySenderStateSyncPayload: () => window.copySenderStateSyncPayload(),
     addSelectedMemberToGroup: () => window.addSelectedMemberToGroup(),
     removeSelectedMemberFromGroup: () => window.removeSelectedMemberFromGroup(),
     encryptMsg: () => window.encryptMsg(),
@@ -1054,6 +1057,55 @@ function encodeSenderState(senderKey) {
     version: senderKey.version,
     chainKey: naclUtil.encodeBase64(senderKey.chainKey)
   };
+}
+
+function mergeUniqueMembers(...memberLists) {
+  return Array.from(new Set(memberLists.flat().filter(Boolean)));
+}
+
+function normalizeImportedGroupPayload(rawPayload) {
+  if (!rawPayload || typeof rawPayload !== 'object') {
+    throw new Error('Invalid group payload');
+  }
+
+  if (rawPayload.type === 'lifeline-sender-state-sync-v1') {
+    if (!rawPayload.groupId || !rawPayload.senderSignPK || !rawPayload.senderKeyState) {
+      throw new Error('Invalid sender-state sync payload');
+    }
+    return {
+      mode: 'sender-sync',
+      payload: rawPayload
+    };
+  }
+
+  if (rawPayload.type === 'lifeline-group-onboarding-v1') {
+    if (!rawPayload.group?.id || !rawPayload.group?.senderKey) {
+      throw new Error('Invalid onboarding payload');
+    }
+    return {
+      mode: 'onboarding',
+      payload: rawPayload
+    };
+  }
+
+  if (!rawPayload.id || !rawPayload.senderKey) {
+    throw new Error('Invalid group JSON');
+  }
+
+  return {
+    mode: 'legacy',
+    payload: rawPayload
+  };
+}
+
+async function copyTextAndFillGroupTextarea(payloadText) {
+  /** @type {HTMLInputElement} */ (document.getElementById('group-json')).value = payloadText;
+  try {
+    await navigator.clipboard.writeText(payloadText);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /* =========================
@@ -1497,25 +1549,112 @@ window.joinGroup = async function() {
   try {
     const raw = /** @type {HTMLInputElement} */ (document.getElementById('group-json')).value.trim();
     const parsed = JSON.parse(raw);
-    if (!parsed.id || !parsed.senderKey) {
-      throw new Error('Invalid group JSON');
-    }
+    const normalized = normalizeImportedGroupPayload(parsed);
 
     const my = await ensureMyKeys();
     const myFp = naclUtil.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
-    const members = Array.from(new Set([...(parsed.members || []), myFp]));
-    parsed.members = members;
+    if (normalized.mode === 'sender-sync') {
+      const syncPayload = normalized.payload;
+      await saveSenderKeyState(syncPayload.groupId, syncPayload.senderSignPK, syncPayload.senderKeyState);
+      setStatus(true, `Sender state synced for group ${syncPayload.groupId.slice(0, 8)}... (${syncPayload.senderSignPK.slice(0, 12)}...)`);
+      return;
+    }
 
-    await saveGroup(parsed);
-    await saveGroupMembers(parsed.id, members);
-    await saveSenderKeyState(parsed.id, getLocalSignPKB64(my), parsed.senderKey);
+    const onboardingPayload = normalized.mode === 'onboarding'
+      ? normalized.payload
+      : { group: normalized.payload, senderStates: [] };
+
+    const mergedMembers = mergeUniqueMembers(onboardingPayload.group.members || [], [myFp]);
+    const groupEntry = {
+      ...onboardingPayload.group,
+      members: mergedMembers
+    };
+
+    await saveGroup(groupEntry);
+    await saveGroupMembers(groupEntry.id, mergedMembers);
+
+    for (const entry of onboardingPayload.senderStates || []) {
+      if (entry?.senderSignPK && entry?.senderKeyState) {
+        await saveSenderKeyState(groupEntry.id, entry.senderSignPK, entry.senderKeyState);
+      }
+    }
+
+    const localSignPK = getLocalSignPKB64(my);
+    const localSenderState = await getSenderKeyState(groupEntry.id, localSignPK);
+    if (!localSenderState) {
+      await saveSenderKeyState(groupEntry.id, localSignPK, groupEntry.senderKey);
+    }
 
     await window.refreshGroups();
-    /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value = parsed.id;
+    /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value = groupEntry.id;
     await renderSelectedGroup();
-    setStatus(true, `Joined group: ${parsed.name || parsed.id}`);
+    const sharedStatesCount = (onboardingPayload.senderStates || []).length;
+    setStatus(true, `Joined group: ${groupEntry.name || groupEntry.id} (sender states: ${sharedStatesCount})`);
   } catch (e) {
     setStatus(false, 'Join group failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
+};
+
+window.copyGroupOnboardingPayload = async function() {
+  try {
+    const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
+    if (!groupId) {
+      throw new Error('Select a group');
+    }
+    const group = await getGroup(groupId);
+    if (!group) {
+      throw new Error('Group not found');
+    }
+    const members = await getGroupMembers(groupId);
+    const senderStates = await getSenderKeysForGroup(groupId);
+    const payload = {
+      type: 'lifeline-group-onboarding-v1',
+      exportedAt: Date.now(),
+      group: {
+        ...group,
+        members
+      },
+      senderStates: senderStates.map((entry) => ({
+        senderSignPK: entry.senderSignPK,
+        senderKeyState: entry.senderKeyState
+      }))
+    };
+    const payloadText = JSON.stringify(payload, null, 2);
+    const copied = await copyTextAndFillGroupTextarea(payloadText);
+    setStatus(true, copied
+      ? `Onboarding payload copied for ${group.name || group.id}`
+      : `Onboarding payload prepared in Group JSON for ${group.name || group.id}`);
+  } catch (e) {
+    setStatus(false, 'Copy onboarding payload failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
+};
+
+window.copySenderStateSyncPayload = async function() {
+  try {
+    const groupId = /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value;
+    if (!groupId) {
+      throw new Error('Select a group');
+    }
+    const my = await ensureMyKeys();
+    const senderSignPK = getLocalSignPKB64(my);
+    const senderKeyState = await getSenderKeyState(groupId, senderSignPK);
+    if (!senderKeyState) {
+      throw new Error('Local sender state not found');
+    }
+    const payload = {
+      type: 'lifeline-sender-state-sync-v1',
+      exportedAt: Date.now(),
+      groupId,
+      senderSignPK,
+      senderKeyState
+    };
+    const payloadText = JSON.stringify(payload, null, 2);
+    const copied = await copyTextAndFillGroupTextarea(payloadText);
+    setStatus(true, copied
+      ? 'Sender-state sync payload copied'
+      : 'Sender-state sync payload prepared in Group JSON');
+  } catch (e) {
+    setStatus(false, 'Copy sender-state payload failed: ' + (e instanceof Error ? e.message : String(e)));
   }
 };
 
@@ -1694,7 +1833,7 @@ window.decryptMsg = async function() {
       } else if (senderState.prevVersion === message.senderKeyVersion && senderState.prevChainKey) {
         activeSenderKey = hydrateLocalSenderState({ version: senderState.prevVersion, chainKey: senderState.prevChainKey });
       } else {
-        throw new Error('SenderKey version mismatch. Re-sync group state required.');
+        throw new Error('SenderKey version mismatch. Import onboarding/sender-state sync payload from sender and retry.');
       }
 
       const decrypted = GroupMesh.decryptGroupMessage({
