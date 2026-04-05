@@ -176,3 +176,14 @@ All contributors are acknowledged in:
 - Release notes
 
 **Thank you for helping make emergency communication accessible to everyone!**
+
+
+## Maintenance Note (2026-04-05)
+
+The following historical items are already implemented in the current codebase and should not be opened as new issues: 
+- Dark mode support (task 8)
+- Keyboard shortcuts (task 9)
+- Web Bluetooth support document (task 11)
+- Emergency mode UI is implemented (task 14 as MVP)
+
+Prefer filing tasks around current gaps: browser/mobile BLE peripheral adapters, docs drift checks, and broader real-device validation coverage.

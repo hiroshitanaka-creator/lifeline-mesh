@@ -1,4 +1,7 @@
 # Technical Roadmap - Implementation Details
+
+> **⚠️ Planning document notice**: This file contains strategy/roadmap analysis and may include historical gaps that have since been implemented. For current implementation truth, prioritize `README.md`, `docs/PHASE_PROGRESS.md`, and `docs/ISSUE_SYNC_REPORT.md`.
+
 ## 技術的実装ロードマップ詳細
 
 ---

@@ -5,7 +5,7 @@
 | Chrome (Desktop) | ✅ | ✅ Supported | Primary target |
 | Edge (Desktop) | ✅ | ✅ Supported | Primary target |
 | Chrome (Android) | ✅ | ✅ Supported | Field usage target |
-| Safari (macOS/iOS) | ⚠️ Partial/Experimental | ⚠️ Limited | Behavior can vary by version |
+| Safari (macOS/iOS) | ❌ | ❌ Unsupported | No practical production Web Bluetooth support in this project |
 | Firefox | ❌ | ❌ Unsupported | Use fallback transports |
 
 ## Verification method

@@ -36,7 +36,7 @@ The following work was completed after the 20-phase roadmap:
 | MeshRouter Phase 1 (1-hop relay) | ✅ completed | bluetooth/mesh-router.js + 14 integration tests (tests/integration/mesh-router.test.js) |
 | Validation gate honesty (PR2) | ✅ completed | `test:e2e:smoke` / `test:e2e:playwright` separated; smoke fallback removed from playwright script; `tsconfig.runtime.json` added |
 | Docs sync to runtime truth (PR3) | ✅ completed | README, RELEASE_READINESS_REPORT, SECURITY_AUDIT_REPORT, REPO_ANALYSIS, PHASE_PROGRESS, PROTOCOL.md updated |
-| MeshRouter BLE runtime integration (PR4) | ✅ completed | `BLEManager` accepts `router` option; `_maybeForward` called in receive path; `onForward` callback for egress; 5 new integration tests in tests/integration/ble-mesh-relay.test.js; total 89 tests passing |
+| MeshRouter BLE runtime integration (PR4) | ✅ completed | `BLEManager` accepts `router` option; `_maybeForward` called in receive path; `onForward` callback for egress; 5 new integration tests in tests/integration/ble-mesh-relay.test.js |
 
 **MeshRouter runtime integration status (updated PR4):**
 - `bluetooth/mesh-router.js` is now **wired into `BLEManager._handleIncomingData`** via `_maybeForward`.
@@ -45,6 +45,6 @@ The following work was completed after the 20-phase roadmap:
 - **Egress peer selection** (which connected BLEManager instances to send to) remains the caller's
   responsibility (`onForward` callback). This is intentional: BLEManager is single-peer; an
   application-layer coordinator owns the peer list.
-- **`app/src/main.js`** does not yet set `router` or `onForward` on its BLEManager instance.
-  Wiring the app UI is a follow-up task.
-- GATT server (peripheral/relay mode) remains not implemented.
+- **`app/src/main.js` now sets both `router` and `onForward`** when creating BLEManager instances, and forwards through `runtime-mesh.js` in multi-link mode.
+- **Node-side GATT peripheral/relay mode is implemented** via `bluetooth/gatt-server.js` + `bluetooth/backends/node-bleno.js` + `node-server/` runtime.
+- Browser/mobile peripheral adapters are still pending (Web Bluetooth central/client limitation remains).
