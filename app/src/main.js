@@ -52,6 +52,7 @@ import {
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
+import { resolveShareTargetIntake } from './share-target-intake.js';
 import { createTransportManager } from '../../crypto/transport.js';
 import { createMeshRuntime } from './runtime-mesh.js';
 import { mountOperatorPanel } from './operator-panel.js';
@@ -644,39 +645,6 @@ function getFirstReceivedMessage(messages = []) {
   return candidate;
 }
 
-function parseSharedEncryptedPayload(text) {
-  if (typeof text !== 'string') {
-    return null;
-  }
-
-  const trimmed = text.trim();
-  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (!parsed || typeof parsed !== 'object') {
-      return null;
-    }
-    if (parsed.kind === 'dmesh-msg' || parsed.kind === 'dmesh-group-msg') {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeShareTargetText({ title, text }) {
-  const cleanedTitle = (title || '').trim();
-  const cleanedText = (text || '').trim();
-  if (cleanedTitle && cleanedText) {
-    return `${cleanedTitle}\n${cleanedText}`;
-  }
-  return cleanedText || cleanedTitle || '';
-}
-
 function applyShortcutDeepLink(hash, { silent = false } = {}) {
   const normalized = (hash || '').trim().toLowerCase();
   const contentEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('content'));
@@ -711,13 +679,12 @@ function handleStartupIntakeFromUrl() {
   const hash = window.location.hash || '';
 
   if (hasSharePayload) {
-    const merged = normalizeShareTargetText({ title: sharedTitle, text: sharedText });
-    const encryptedPayload = parseSharedEncryptedPayload(merged);
-    if (encryptedPayload) {
-      loadReceivedPayloadIntoDecryptInput(encryptedPayload, 'share target');
+    const intake = resolveShareTargetIntake({ title: sharedTitle, text: sharedText });
+    if (intake.route === 'decrypt') {
+      loadReceivedPayloadIntoDecryptInput(intake.encryptedPayload, 'share target');
       applyShortcutDeepLink('#decrypt', { silent: true });
     } else {
-      loadDraftIntoEncryptInput(merged, 'share target');
+      loadDraftIntoEncryptInput(intake.draftText, 'share target');
       applyShortcutDeepLink('#encrypt', { silent: true });
     }
 

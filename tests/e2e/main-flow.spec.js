@@ -81,6 +81,7 @@ test("PWA intake: share_target query and shortcut deep-link route to encrypt/dec
   const encryptedQuery = encodeURIComponent(JSON.stringify(encryptedPayload));
   await page.goto(`/?title=From%20Alice&text=${encryptedQuery}#decrypt`);
   await expect(page.locator("#input")).toContainText("dmesh-msg");
+  await expect(page.locator("#content")).toHaveValue("");
   await expect(page.locator("#status")).toContainText("share target");
   await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("input");
 
