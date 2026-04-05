@@ -173,7 +173,7 @@ async function refreshSelectedContactDetails() {
     return;
   }
 
-  const myFp = DMesh.fingerprintFromSignPK(mySignPK, nacl);
+  const myFp = DMesh.fingerprintFromSignPK(naclUtil.decodeBase64(mySignPK), nacl);
   const contactFp = naclUtil.decodeBase64(contact.fp);
   const safetyNumber = DMesh.generateSafetyNumber(myFp, contactFp);
 
