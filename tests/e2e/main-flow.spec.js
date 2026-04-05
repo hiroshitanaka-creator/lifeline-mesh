@@ -309,6 +309,99 @@ test("e2e: group create -> encrypt -> decrypt roundtrip", async ({ page }) => {
   await expect(page.locator("#decrypted")).toHaveText("GROUP_ROUNDTRIP_MESSAGE");
 });
 
+test("e2e: multi-device group onboarding + sender-state mismatch recovery", async ({ browser }) => {
+  const contextA = await browser.newContext();
+  const contextB = await browser.newContext();
+  const deviceA = await contextA.newPage();
+  const deviceB = await contextB.newPage();
+
+  await boot(deviceA);
+  await boot(deviceB);
+
+  // A creates group and exports onboarding payload.
+  await deviceA.getByLabel("Group").check();
+  await deviceA.locator("#group-name").fill("Ops-Multi-Device");
+  await deviceA.getByRole("button", { name: "👥 Create Group" }).click();
+  await expect(deviceA.locator("#status")).toContainText("Group created");
+  await deviceA.locator("#group-select").selectOption({ index: 1 });
+  await deviceA.getByRole("button", { name: "📋 Copy Onboarding Payload" }).click();
+  const onboardingPayload = await deviceA.locator("#group-json").inputValue();
+  expect(onboardingPayload).toContain("lifeline-group-onboarding-v1");
+
+  // B joins from onboarding payload.
+  await deviceB.getByLabel("Group").check();
+  await deviceB.locator("#group-json").fill(onboardingPayload);
+  await deviceB.getByRole("button", { name: "📥 Join Group" }).click();
+  await expect(deviceB.locator("#status")).toContainText("Joined group");
+  await deviceB.locator("#group-select").selectOption({ index: 1 });
+
+  // A sends, B decrypts.
+  await deviceA.locator("#content").fill("A_TO_B_GROUP_MESSAGE_1");
+  await deviceA.getByRole("button", { name: "🔒 Encrypt" }).click();
+  const firstEncrypted = (await deviceA.locator("#encrypted").textContent()) || "";
+  await deviceB.locator("#input").fill(firstEncrypted);
+  await deviceB.getByRole("button", { name: "🔓 Decrypt" }).click();
+  await expect(deviceB.locator("#decrypted")).toHaveText("A_TO_B_GROUP_MESSAGE_1");
+
+  // A sends second message.
+  await deviceA.locator("#content").fill("A_TO_B_GROUP_MESSAGE_2");
+  await deviceA.getByRole("button", { name: "🔒 Encrypt" }).click();
+  const secondEncrypted = (await deviceA.locator("#encrypted").textContent()) || "";
+  const secondParsed = JSON.parse(secondEncrypted);
+
+  // B gets stale sender-state on purpose and fails.
+  const staleSyncPayload = {
+    type: "lifeline-sender-state-sync-v1",
+    groupId: secondParsed.groupId,
+    senderSignPK: secondParsed.senderSignPK,
+    senderKeyState: {
+      version: 1,
+      chainKey: JSON.parse(onboardingPayload).group.senderKey.chainKey
+    }
+  };
+  await deviceB.locator("#group-json").fill(JSON.stringify(staleSyncPayload, null, 2));
+  await deviceB.getByRole("button", { name: "📥 Join Group" }).click();
+  await expect(deviceB.locator("#status")).toContainText("Sender state sync skipped");
+
+  // Skip means newer state is preserved, so decrypt should still succeed.
+  await deviceB.locator("#input").fill(secondEncrypted);
+  await deviceB.getByRole("button", { name: "🔓 Decrypt" }).click();
+  await expect(deviceB.locator("#decrypted")).toHaveText("A_TO_B_GROUP_MESSAGE_2");
+
+  // Realistic mismatch path: fresh late-joining device C imports stale onboarding only.
+  const contextC = await browser.newContext();
+  const deviceC = await contextC.newPage();
+  await boot(deviceC);
+  await deviceC.getByLabel("Group").check();
+  await deviceC.locator("#group-json").fill(onboardingPayload);
+  await deviceC.getByRole("button", { name: "📥 Join Group" }).click();
+  await expect(deviceC.locator("#status")).toContainText("Joined group");
+  await deviceC.locator("#group-select").selectOption({ index: 1 });
+
+  await deviceA.locator("#content").fill("A_TO_LATE_JOINER_MESSAGE");
+  await deviceA.getByRole("button", { name: "🔒 Encrypt" }).click();
+  const lateJoinerEncrypted = (await deviceA.locator("#encrypted").textContent()) || "";
+
+  await deviceC.locator("#input").fill(lateJoinerEncrypted);
+  await deviceC.getByRole("button", { name: "🔓 Decrypt" }).click();
+  await expect(deviceC.locator("#status")).toContainText("SenderKey version mismatch");
+
+  // A exports current sender-state sync payload for recovery, C imports and decrypts again.
+  await deviceA.getByRole("button", { name: "🔁 Copy Sender-State Sync" }).click();
+  const freshSyncPayload = await deviceA.locator("#group-json").inputValue();
+  await deviceC.locator("#group-json").fill(freshSyncPayload);
+  await deviceC.getByRole("button", { name: "📥 Join Group" }).click();
+  await expect(deviceC.locator("#status")).toContainText("Sender state synced");
+
+  await deviceC.locator("#input").fill(lateJoinerEncrypted);
+  await deviceC.getByRole("button", { name: "🔓 Decrypt" }).click();
+  await expect(deviceC.locator("#decrypted")).toHaveText("A_TO_LATE_JOINER_MESSAGE");
+
+  await contextA.close();
+  await contextB.close();
+  await contextC.close();
+});
+
 test("emergency mode: simplified template flow + mode persistence", async ({ page }) => {
   await boot(page);
   const myIdentity = await getMyIdentity(page);

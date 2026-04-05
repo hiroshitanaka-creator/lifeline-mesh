@@ -1,6 +1,8 @@
 import nacl from "../../crypto/node_modules/tweetnacl/nacl-fast.js";
 import naclUtil from "../../crypto/node_modules/tweetnacl-util/nacl-util.js";
 import * as GroupMesh from "../../crypto/group.js";
+import * as DMesh from "../../crypto/core.js";
+import { shouldAcceptIncomingSenderState, filterSenderStateEntriesByMembers } from "../../app/src/group-sender-state.js";
 
 const tests = [];
 let passed = 0;
@@ -134,6 +136,202 @@ test("integration: group decrypt rejects wrong sender key state", () => {
 
   if (!threw) {
     throw new Error("Expected decryption failure for wrong sender key state");
+  }
+});
+
+test("integration: sender-state resync payload enables mismatch recovery", () => {
+  const alice = nacl.sign.keyPair();
+  const bob = nacl.sign.keyPair();
+  const group = GroupMesh.createGroup({
+    name: "Resync-Team",
+    createdBy: naclUtil.encodeBase64(alice.publicKey),
+    members: [naclUtil.encodeBase64(alice.publicKey), naclUtil.encodeBase64(bob.publicKey)]
+  }, nacl, naclUtil);
+
+  let aliceSenderState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+  let bobViewOfAliceState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+
+  const firstEncrypted = GroupMesh.encryptGroupMessage({
+    content: "phase-1",
+    groupId: group.id,
+    senderKey: aliceSenderState,
+    senderSignPK: alice.publicKey,
+    senderSignSK: alice.secretKey
+  }, nacl, naclUtil);
+  aliceSenderState = cloneSenderKeyState(firstEncrypted.nextSenderKey);
+  const firstDecrypted = GroupMesh.decryptGroupMessage({
+    message: firstEncrypted.message,
+    senderKey: bobViewOfAliceState,
+    expectedSenderSignPK: alice.publicKey
+  }, nacl, naclUtil);
+  bobViewOfAliceState = cloneSenderKeyState(firstDecrypted.nextSenderKey);
+
+  const secondEncrypted = GroupMesh.encryptGroupMessage({
+    content: "phase-2",
+    groupId: group.id,
+    senderKey: aliceSenderState,
+    senderSignPK: alice.publicKey,
+    senderSignSK: alice.secretKey
+  }, nacl, naclUtil);
+  const secondMessageSenderState = cloneSenderKeyState(aliceSenderState);
+  aliceSenderState = cloneSenderKeyState(secondEncrypted.nextSenderKey);
+
+  // Bob gets stale/mismatched state (simulates drift across devices).
+  bobViewOfAliceState = GroupMesh.hydrateSenderKey(group.senderKey, naclUtil);
+
+  let mismatchThrown = false;
+  try {
+    GroupMesh.decryptGroupMessage({
+      message: secondEncrypted.message,
+      senderKey: bobViewOfAliceState,
+      expectedSenderSignPK: alice.publicKey
+    }, nacl, naclUtil);
+  } catch {
+    mismatchThrown = true;
+  }
+
+  if (!mismatchThrown) {
+    throw new Error("Expected mismatch with stale sender state");
+  }
+
+  // Resync payload shares sender state for the senderSignPK from Alice device.
+  const resyncedSenderState = cloneSenderKeyState({
+    version: secondEncrypted.message.senderKeyVersion,
+    chainKey: secondMessageSenderState.chainKey
+  });
+
+  const recovered = GroupMesh.decryptGroupMessage({
+    message: secondEncrypted.message,
+    senderKey: resyncedSenderState,
+    expectedSenderSignPK: alice.publicKey
+  }, nacl, naclUtil);
+
+  if (recovered.payload.content !== "phase-2") {
+    throw new Error("Resync recovery failed to decrypt expected content");
+  }
+});
+
+test("integration: stale sender-state import does not downgrade newer state", () => {
+  const existing = {
+    version: 5,
+    chainKey: "newer-chain",
+    prevVersion: 4,
+    prevChainKey: "prev-chain"
+  };
+  const incomingStale = {
+    version: 3,
+    chainKey: "stale-chain"
+  };
+
+  if (shouldAcceptIncomingSenderState(existing, incomingStale)) {
+    throw new Error("Stale sender-state should not be accepted");
+  }
+});
+
+test("integration: same-version import preserves richer recovery metadata", () => {
+  const existingRicher = {
+    version: 7,
+    chainKey: "same-version-chain",
+    prevVersion: 6,
+    prevChainKey: "rich-prev"
+  };
+  const incomingPoor = {
+    version: 7,
+    chainKey: "same-version-chain"
+  };
+
+  if (shouldAcceptIncomingSenderState(existingRicher, incomingPoor)) {
+    throw new Error("Same-version import should not overwrite richer recovery metadata");
+  }
+});
+
+test("integration: same-version conflicting chainKey is rejected", () => {
+  const existing = {
+    version: 9,
+    chainKey: "chain-A",
+    prevVersion: 8,
+    prevChainKey: "prev-A"
+  };
+  const incomingConflicting = {
+    version: 9,
+    chainKey: "chain-B",
+    prevVersion: 8,
+    prevChainKey: "prev-B"
+  };
+
+  if (shouldAcceptIncomingSenderState(existing, incomingConflicting)) {
+    throw new Error("Same-version conflicting chainKey must be rejected");
+  }
+});
+
+test("integration: same-version exact or poorer metadata does not overwrite", () => {
+  const existing = {
+    version: 6,
+    chainKey: "chain-same",
+    prevVersion: 5,
+    prevChainKey: "prev-same"
+  };
+
+  const incomingExact = {
+    version: 6,
+    chainKey: "chain-same",
+    prevVersion: 5,
+    prevChainKey: "prev-same"
+  };
+  const incomingPoorer = {
+    version: 6,
+    chainKey: "chain-same"
+  };
+
+  if (shouldAcceptIncomingSenderState(existing, incomingExact)) {
+    throw new Error("Exact same state should be treated as no-op/skip");
+  }
+  if (shouldAcceptIncomingSenderState(existing, incomingPoorer)) {
+    throw new Error("Poorer same-version metadata should not overwrite");
+  }
+});
+
+test("integration: removed member sender state is not exported in onboarding payload filter", () => {
+  const alice = nacl.sign.keyPair();
+  const bob = nacl.sign.keyPair();
+  const removed = nacl.sign.keyPair();
+
+  const resolveMemberFp = (senderSignPK) => {
+    try {
+      const senderSignPKu8 = naclUtil.decodeBase64(senderSignPK);
+      return naclUtil.encodeBase64(DMesh.fingerprintFromSignPK(senderSignPKu8, nacl));
+    } catch {
+      return null;
+    }
+  };
+
+  const aliceFp = resolveMemberFp(naclUtil.encodeBase64(alice.publicKey));
+  const bobFp = resolveMemberFp(naclUtil.encodeBase64(bob.publicKey));
+  const removedFp = resolveMemberFp(naclUtil.encodeBase64(removed.publicKey));
+
+  const currentMembers = [aliceFp, bobFp];
+  const senderStateEntries = [
+    {
+      senderSignPK: naclUtil.encodeBase64(alice.publicKey),
+      senderKeyState: { version: 10, chainKey: "alice-chain" }
+    },
+    {
+      senderSignPK: naclUtil.encodeBase64(bob.publicKey),
+      senderKeyState: { version: 11, chainKey: "bob-chain" }
+    },
+    {
+      senderSignPK: naclUtil.encodeBase64(removed.publicKey),
+      senderKeyState: { version: 12, chainKey: "removed-chain" }
+    }
+  ];
+
+  const filtered = filterSenderStateEntriesByMembers(senderStateEntries, currentMembers, resolveMemberFp);
+  if (filtered.length !== 2) {
+    throw new Error("Expected removed member sender state to be excluded from export filter");
+  }
+  const filteredFps = filtered.map((entry) => resolveMemberFp(entry.senderSignPK));
+  if (filteredFps.includes(removedFp)) {
+    throw new Error("Removed member sender state leaked into onboarding export");
   }
 });
 
