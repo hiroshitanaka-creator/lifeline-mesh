@@ -83,6 +83,7 @@ try {
 async function shutdown(signal) {
   console.log(`\n[Server] ${signal} received — shutting down...`);
   try {
+    relayNode.close();
     if (server.isAdvertising) await server.stopAdvertising();
   } catch {
     // ignore

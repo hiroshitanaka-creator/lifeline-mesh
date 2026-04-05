@@ -38,10 +38,10 @@ function makeDirectPacket(message, transferId) {
   return buildPacket(MSG_TYPE.DIRECT, 0, 1, payload);
 }
 
-async function setupHarness(storePath) {
+async function setupHarness(storePath, storeOptions = {}) {
   const backend = new MockGATTBackend();
   const server = new GATTServer({ backend, localName: "RelayHarness" });
-  const store = new FileRelayStore({ filePath: storePath });
+  const store = new FileRelayStore({ filePath: storePath, ...storeOptions });
   const relayNode = new SingleClientRelayNode({
     server,
     store,
@@ -135,6 +135,66 @@ test("node relay: pending message survives process restart and replays", async (
     const pending = await store.listPending();
     assert(pending.length === 0, "pending message marked delivered after replay");
   }
+});
+
+test("node relay: duplicate inbound msgId is suppressed within dedupe window", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+
+  const { backend, store, relayNode } = await setupHarness(storePath, {
+    dedupeWindowMs: 60 * 1000
+  });
+
+  backend.simulateClientConnect("client-1");
+
+  const duplicateMsgId = "relay-dup-1";
+  const first = { kind: "dmesh-msg", msgId: duplicateMsgId, payload: "first payload" };
+  const duplicate = { kind: "dmesh-msg", msgId: duplicateMsgId, payload: "duplicate payload" };
+
+  backend.simulateWrite("client-1", CHARACTERISTICS.MESSAGE_TX, makeDirectPacket(first, first.msgId));
+  backend.simulateWrite("client-1", CHARACTERISTICS.MESSAGE_TX, makeDirectPacket(duplicate, duplicate.msgId));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  const pending = await store.listPending();
+  assert(pending.length === 1, "duplicate inbound packet should not create a second pending entry");
+  assert(pending[0].message.payload === "first payload", "original pending payload remains unchanged");
+
+  await relayNode.flushPending("client-1");
+  const pendingAfterReplay = await store.listPending();
+  assert(pendingAfterReplay.length === 0, "message delivered after replay");
+
+  backend.notifications.length = 0;
+  backend.simulateWrite("client-1", CHARACTERISTICS.MESSAGE_TX, makeDirectPacket(duplicate, duplicate.msgId));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const pendingAfterDeliveredDuplicate = await store.listPending();
+  assert(pendingAfterDeliveredDuplicate.length === 0, "recent delivered duplicate should remain suppressed");
+});
+
+test("node relay: cleanup evicts retained delivered entries and reports counts", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+
+  const { backend, store, relayNode } = await setupHarness(storePath, {
+    deliveredRetentionMs: 30,
+    pendingRetentionMs: 30 * 60 * 1000,
+    dedupeWindowMs: 10
+  });
+
+  backend.simulateClientConnect("client-cleanup");
+  const message = { kind: "dmesh-msg", msgId: "relay-cleanup-1", payload: "cleanup me later" };
+  backend.simulateWrite("client-cleanup", CHARACTERISTICS.MESSAGE_TX, makeDirectPacket(message, message.msgId));
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  await relayNode.flushPending("client-cleanup");
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  await store.cleanup();
+
+  const snapshot = await relayNode.getSnapshot();
+  assert(snapshot.store.pendingCount === 0, "no pending entries after cleanup");
+  assert(snapshot.store.deliveredCount === 0, "delivered entries evicted by retention");
+  assert(snapshot.store.cleanup.removedDelivered >= 1, "cleanup stats include delivered removals");
+  assert(snapshot.store.retention.deliveredRetentionMs === 30, "snapshot exposes delivered retention window");
 });
 
 (async () => {
