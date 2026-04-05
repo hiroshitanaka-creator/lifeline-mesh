@@ -19,10 +19,14 @@ export class SingleClientRelayNode {
     this.store = store;
     this.logger = logger;
     this.flushPromise = null;
+    this.cleanupIntervalMs = 60 * 1000;
+    this.cleanupTimer = null;
   }
 
   async init() {
     await this.store.init();
+    await this.runCleanup("startup");
+    this.startCleanupLoop();
   }
 
   async onInboundMessage(message, clientId) {
@@ -77,6 +81,40 @@ export class SingleClientRelayNode {
       server: serverSnap,
       store: storeSnap
     };
+  }
+
+  startCleanupLoop() {
+    if (this.cleanupTimer || !this.cleanupIntervalMs || this.cleanupIntervalMs <= 0) {
+      return;
+    }
+    this.cleanupTimer = globalThis.setInterval(() => {
+      this.runCleanup("interval").catch((error) => {
+        this.logger.warn(`[RelayNode] cleanup interval failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }, this.cleanupIntervalMs);
+    if (typeof this.cleanupTimer.unref === "function") {
+      this.cleanupTimer.unref();
+    }
+  }
+
+  async runCleanup(reason = "manual") {
+    if (!this.store?.cleanup) {
+      return null;
+    }
+    const result = await this.store.cleanup();
+    if (result.removedPending > 0 || result.removedDelivered > 0) {
+      this.logger.log(
+        `[RelayNode] cleanup(${reason}) removed pending=${result.removedPending}, delivered=${result.removedDelivered}`
+      );
+    }
+    return result;
+  }
+
+  close() {
+    if (this.cleanupTimer) {
+      globalThis.clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
   }
 }
 
