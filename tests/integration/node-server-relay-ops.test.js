@@ -37,6 +37,22 @@ test("relay ops: status output includes source and timestamp context", () => {
   assert(formatted.status.store.pendingCount === 1, "status payload should remain intact");
 });
 
+
+test("relay ops: diagnostics flag parses true values", () => {
+  const parsed = parseRelayAdminArgs(["--relay-diag=true"]);
+  assert(parsed.diagnosticsEnabled === true, "diagnostics should be enabled");
+});
+
+test("relay ops: diagnostics flag parses false values", () => {
+  const parsed = parseRelayAdminArgs(["--diag", "off"]);
+  assert(parsed.diagnosticsEnabled === false, "diagnostics should be disabled");
+});
+
+test("relay ops: manual smoke mode flag is exposed", () => {
+  const parsed = parseRelayAdminArgs(["--manual-smoke"]);
+  assert(parsed.manualSmoke === true, "manual smoke flag should be true");
+});
+
 (async () => {
   let passed = 0;
   let failed = 0;

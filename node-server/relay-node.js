@@ -7,7 +7,7 @@
  * - Pending entries are replayed only when a client connection exists.
  */
 export class SingleClientRelayNode {
-  constructor({ server, store, logger = console } = {}) {
+  constructor({ server, store, logger = console, diagnosticsEnabled = false } = {}) {
     if (!server) {
       throw new Error("SingleClientRelayNode requires a GATTServer instance");
     }
@@ -18,6 +18,7 @@ export class SingleClientRelayNode {
     this.server = server;
     this.store = store;
     this.logger = logger;
+    this.diagnosticsEnabled = diagnosticsEnabled;
     this.flushPromise = null;
     this.cleanupIntervalMs = 60 * 1000;
     this.cleanupTimer = null;
@@ -51,19 +52,23 @@ export class SingleClientRelayNode {
 
     this.flushPromise = (async () => {
       const pending = await this.store.listPending();
+      this._diag(`flush start client=${clientId} pending=${pending.length}`);
       for (const entry of pending) {
         try {
           await this.server.sendMessage(entry.message, clientId);
           await this.store.markDelivered(entry.id, clientId);
           this.logger.log(`[RelayNode] replayed pending message ${entry.msgId} to ${clientId}`);
+          this._diag(`flush delivered msgId=${entry.msgId} client=${clientId}`);
         } catch (error) {
           await this.store.markSendFailed(entry.id, error);
           this.logger.warn(
             `[RelayNode] replay failed for ${entry.msgId} to ${clientId}: ${error instanceof Error ? error.message : String(error)}`
           );
+          this._diag(`flush failed msgId=${entry.msgId} client=${clientId}`);
           break;
         }
       }
+      this._diag(`flush done client=${clientId}`);
     })();
 
     try {
@@ -102,6 +107,7 @@ export class SingleClientRelayNode {
       return null;
     }
     const result = await this.store.cleanup();
+    this._diag(`cleanup reason=${reason} removedPending=${result.removedPending} removedDelivered=${result.removedDelivered}`);
     if (result.removedPending > 0 || result.removedDelivered > 0) {
       this.logger.log(
         `[RelayNode] cleanup(${reason}) removed pending=${result.removedPending}, delivered=${result.removedDelivered}`
@@ -115,6 +121,11 @@ export class SingleClientRelayNode {
       globalThis.clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
+  }
+
+  _diag(message) {
+    if (!this.diagnosticsEnabled) return;
+    this.logger.log(`[RelayNode][diag] ${message}`);
   }
 }
 

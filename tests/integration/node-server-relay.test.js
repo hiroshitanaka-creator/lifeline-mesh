@@ -222,6 +222,43 @@ test("node relay: manual cleanup removes stale pending entries and is observable
   assert(snapshot.cleanup.lastRunAt !== null, "cleanup run timestamp is observable");
 });
 
+
+test("node relay: diagnostics emits flush and cleanup lifecycle", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+
+  const logs = [];
+  const backend = new MockGATTBackend();
+  const server = new GATTServer({ backend, localName: "RelayHarnessDiag" });
+  const store = new FileRelayStore({ filePath: storePath });
+  const relayNode = new SingleClientRelayNode({
+    server,
+    store,
+    diagnosticsEnabled: true,
+    logger: {
+      log: (message) => logs.push(String(message)),
+      warn: () => undefined
+    }
+  });
+
+  await relayNode.init();
+  server.onMessageReceived = (message, clientId) => relayNode.onInboundMessage(message, clientId);
+  server.onClientConnected = (clientId) => relayNode.onClientConnected(clientId);
+
+  await server.startAdvertising();
+  backend.simulateClientConnect("diag-client");
+
+  const message = { kind: "dmesh-msg", msgId: "relay-diag-1", payload: "diag flow" };
+  backend.simulateWrite("diag-client", CHARACTERISTICS.MESSAGE_TX, makeDirectPacket(message, message.msgId));
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  await relayNode.runCleanup("diag-test");
+
+  assert(logs.some((line) => line.includes("[RelayNode][diag] flush start")), "flush start diagnostics are emitted");
+  assert(logs.some((line) => line.includes("[RelayNode][diag] flush done")), "flush done diagnostics are emitted");
+  assert(logs.some((line) => line.includes("[RelayNode][diag] cleanup reason=diag-test")), "cleanup diagnostics are emitted");
+});
+
 (async () => {
   let passed = 0;
   let failed = 0;

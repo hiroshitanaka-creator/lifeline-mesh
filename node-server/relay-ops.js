@@ -6,9 +6,16 @@ export function parseRelayAdminArgs(argv = []) {
 
   const mode = wantsCleanup ? "cleanup" : wantsStatus ? "status" : "serve";
 
+  const diagSource = readOptionValue(args, "--relay-diag")
+    ?? readOptionValue(args, "--diag");
+
+  const manualSmoke = args.includes("--manual-smoke");
+
   return {
     mode,
-    signalsEnabled: !signalsDisabled
+    signalsEnabled: !signalsDisabled,
+    diagnosticsEnabled: parseBooleanFlag(diagSource, false),
+    manualSmoke
   };
 }
 
@@ -21,4 +28,36 @@ export function formatRelayStatus(snapshot, context = {}) {
     },
     status: snapshot
   };
+}
+
+function readOptionValue(args, key) {
+  const directPrefix = `${key}=`;
+  const direct = args.find((arg) => typeof arg === "string" && arg.startsWith(directPrefix));
+  if (direct) {
+    return direct.slice(directPrefix.length);
+  }
+
+  const index = args.indexOf(key);
+  if (index === -1) {
+    return null;
+  }
+
+  const nextValue = args[index + 1];
+  if (typeof nextValue !== "string" || nextValue.startsWith("--")) {
+    return "true";
+  }
+  return nextValue;
+}
+
+function parseBooleanFlag(value, fallback = false) {
+  if (value === null || value === undefined) return fallback;
+
+  const normalised = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on", "debug", "verbose"].includes(normalised)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalised)) {
+    return false;
+  }
+  return fallback;
 }
