@@ -15,21 +15,48 @@
 import path from "path";
 import { fileURLToPath } from "url";
 
+import { FileRelayStore } from "./persistent-relay-store.js";
+import { parseRelayAdminArgs, formatRelayStatus } from "./relay-ops.js";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Resolve bluetooth/ and runtime modules relative to this file
 const bluetoothDir = path.resolve(__dirname, "../bluetooth");
-
-const { GATTServer } = await import(`${bluetoothDir}/gatt-server.js`);
-const { BlenoBackend } = await import(`${bluetoothDir}/backends/node-bleno.js`);
-const { FileRelayStore } = await import("./persistent-relay-store.js");
-const { SingleClientRelayNode } = await import("./relay-node.js");
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
 const LOCAL_NAME = process.env.LIFELINE_NAME ?? "LifelineMesh";
 const RELAY_STORE_PATH = process.env.LIFELINE_RELAY_STORE
   ?? path.resolve(__dirname, "data/relay-store.json");
+
+const relayAdminArgs = parseRelayAdminArgs(process.argv.slice(2));
+
+async function runStoreAdminAction(mode) {
+  const relayStore = new FileRelayStore({ filePath: RELAY_STORE_PATH });
+  await relayStore.init();
+
+  if (mode === "cleanup") {
+    const cleanupResult = await relayStore.cleanup();
+    console.log("[Server] Relay cleanup result:", JSON.stringify(cleanupResult));
+  }
+
+  const storeSnapshot = await relayStore.getSnapshot();
+  console.log("[Server] Relay status:", JSON.stringify(formatRelayStatus({ store: storeSnapshot }, { source: `cli:${mode}` })));
+}
+
+if (relayAdminArgs.mode !== "serve") {
+  try {
+    await runStoreAdminAction(relayAdminArgs.mode);
+    process.exit(0);
+  } catch (error) {
+    console.error("[Server] Relay admin action failed:", error?.message ?? error);
+    process.exit(1);
+  }
+}
+
+const { GATTServer } = await import(`${bluetoothDir}/gatt-server.js`);
+const { BlenoBackend } = await import(`${bluetoothDir}/backends/node-bleno.js`);
+const { SingleClientRelayNode } = await import("./relay-node.js");
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -63,6 +90,17 @@ server.onError = (code, err) => {
 
 server.setBackend(backend);
 
+async function dumpRelayStatus(source) {
+  const snapshot = await relayNode.getSnapshot();
+  console.log("[Server] Relay status:", JSON.stringify(formatRelayStatus(snapshot, { source })));
+}
+
+async function runRelayCleanup(source = "manual") {
+  const cleanupResult = await relayNode.runCleanup(source);
+  console.log("[Server] Relay cleanup result:", JSON.stringify({ source, ...cleanupResult }));
+  await dumpRelayStatus(`${source}:post-cleanup`);
+}
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 console.log(`[Server] Starting Lifeline Mesh peripheral as "${LOCAL_NAME}" ...`);
@@ -70,9 +108,8 @@ console.log(`[Server] Relay store path: ${RELAY_STORE_PATH}`);
 
 try {
   await server.startAdvertising();
-  const snapshot = await relayNode.getSnapshot();
   console.log("[Server] Advertising. Single-client persistent relay mode active.");
-  console.log("[Server] Relay snapshot:", JSON.stringify(snapshot));
+  await dumpRelayStatus("startup");
 } catch (err) {
   console.error("[Server] Failed to start advertising:", err.message);
   process.exit(1);
@@ -93,3 +130,17 @@ async function shutdown(signal) {
 
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+if (relayAdminArgs.signalsEnabled) {
+  process.on("SIGUSR1", () => {
+    dumpRelayStatus("signal:SIGUSR1").catch((error) => {
+      console.error("[Server] Failed to dump relay status:", error?.message ?? error);
+    });
+  });
+
+  process.on("SIGUSR2", () => {
+    runRelayCleanup("signal:SIGUSR2").catch((error) => {
+      console.error("[Server] Failed to run relay cleanup:", error?.message ?? error);
+    });
+  });
+}

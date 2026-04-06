@@ -138,15 +138,33 @@ export class FileRelayStore {
     await this._persist();
   }
 
-  async getSnapshot() {
+  async getSnapshot(now = Date.now()) {
     await this.init();
-    const pendingCount = this._state.entries.filter((entry) => entry.status === "pending").length;
-    const deliveredCount = this._state.entries.filter((entry) => entry.status === "delivered").length;
+
+    const pendingEntries = this._state.entries.filter((entry) => entry.status === "pending");
+    const deliveredEntries = this._state.entries.filter((entry) => entry.status === "delivered");
+
+    const oldestPendingCreatedAt = pendingEntries.length > 0
+      ? Math.min(...pendingEntries.map((entry) => entry.createdAt))
+      : null;
+    const newestPendingCreatedAt = pendingEntries.length > 0
+      ? Math.max(...pendingEntries.map((entry) => entry.createdAt))
+      : null;
+    const newestDeliveredAt = deliveredEntries.length > 0
+      ? Math.max(...deliveredEntries.map((entry) => entry.deliveredAt || 0))
+      : null;
+
     return {
       filePath: this.filePath,
       totalEntries: this._state.entries.length,
-      pendingCount,
-      deliveredCount,
+      pendingCount: pendingEntries.length,
+      deliveredCount: deliveredEntries.length,
+      oldestPendingCreatedAt,
+      newestPendingCreatedAt,
+      pendingOldestAgeMs: oldestPendingCreatedAt ? now - oldestPendingCreatedAt : null,
+      newestDeliveredAt,
+      pendingWithErrors: pendingEntries.filter((entry) => Boolean(entry.lastError)).length,
+      maxPendingAttempts: pendingEntries.reduce((max, entry) => Math.max(max, Number(entry.attempts) || 0), 0),
       retention: {
         dedupeWindowMs: this.dedupeWindowMs,
         deliveredRetentionMs: this.deliveredRetentionMs,
