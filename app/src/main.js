@@ -59,6 +59,7 @@ import { mountOperatorPanel } from './operator-panel.js';
 import { t as tr, setLang, getLang } from './i18n.js';
 import { shouldAcceptIncomingSenderState, filterSenderStateEntriesByMembers } from './group-sender-state.js';
 import { getContactVerificationStatus, buildDecryptVerificationOutcome } from './decrypt-verification-policy.js';
+import { evaluateGroupActorVerification, summarizeGroupVerificationOutcomes } from './group-verification-policy.js';
 
 
 /* =========================
@@ -1237,6 +1238,15 @@ function mergeUniqueMembers(...memberLists) {
   return Array.from(new Set(memberLists.flat().filter(Boolean)));
 }
 
+function shortFp(fp) {
+  return fp ? `${fp.slice(0, 12)}...` : 'unknown';
+}
+
+async function getContactByFp(fp) {
+  if (!fp) return null;
+  return idbGet(STORE_CONTACTS, fp);
+}
+
 function normalizeImportedGroupPayload(rawPayload) {
   if (!rawPayload || typeof rawPayload !== 'object') {
     throw new Error('Invalid group payload');
@@ -1789,6 +1799,34 @@ window.joinGroup = async function() {
       const members = await getGroupMembers(syncPayload.groupId);
       const senderMemberFp = senderSignPKToMemberFp(syncPayload.senderSignPK);
       const signerMemberFp = signerSignPK ? senderSignPKToMemberFp(signerSignPK) : null;
+      const [senderContact, signerContact] = await Promise.all([
+        getContactByFp(senderMemberFp),
+        getContactByFp(signerMemberFp)
+      ]);
+      const syncTrustChecks = [
+        evaluateGroupActorVerification({
+          actorLabel: `sender ${shortFp(senderMemberFp)}`,
+          contact: senderContact
+        })
+      ];
+      if (signerSignPK) {
+        syncTrustChecks.push(evaluateGroupActorVerification({
+          actorLabel: `signer ${shortFp(signerMemberFp)}`,
+          contact: signerContact
+        }));
+      }
+      const syncTrustSummary = summarizeGroupVerificationOutcomes(syncTrustChecks);
+      if (!syncTrustSummary.ok) {
+        setStatus(false, `Sender state sync rejected. ${syncTrustSummary.message}`);
+        return;
+      }
+      if (syncTrustSummary.level === 'unverified') {
+        const proceed = confirm(`${syncTrustSummary.message}\n\nContinue sender-state sync import?`);
+        if (!proceed) {
+          setStatus(false, 'Sender state sync canceled by user due to unverified signer/sender.');
+          return;
+        }
+      }
       if (normalized.authenticity?.signed) {
         if (!signerSignPK || signerSignPK !== syncPayload.senderSignPK) {
           throw new Error('Sender-state sync signature verification failed: signer must match senderSignPK');
@@ -1804,11 +1842,13 @@ window.joinGroup = async function() {
       const accepted = await saveSenderStateMonotonic(syncPayload.groupId, syncPayload.senderSignPK, syncPayload.senderKeyState);
       if (!accepted) {
         const warningSuffix = authenticityWarning ? ` ⚠️ ${authenticityWarning}` : '';
-        setStatus(true, `Sender state sync skipped (kept newer/local richer state) for ${syncPayload.senderSignPK.slice(0, 12)}...${warningSuffix}`);
+        const verificationSuffix = syncTrustSummary.message ? ` ⚠️ ${syncTrustSummary.message}` : '';
+        setStatus(true, `Sender state sync skipped (kept newer/local richer state) for ${syncPayload.senderSignPK.slice(0, 12)}...${warningSuffix}${verificationSuffix}`);
         return;
       }
       const warningSuffix = authenticityWarning ? ` ⚠️ ${authenticityWarning}` : '';
-      setStatus(true, `Sender state synced for group ${syncPayload.groupId.slice(0, 8)}... (${syncPayload.senderSignPK.slice(0, 12)}...)${warningSuffix}`);
+      const verificationSuffix = syncTrustSummary.message ? ` ⚠️ ${syncTrustSummary.message}` : '';
+      setStatus(true, `Sender state synced for group ${syncPayload.groupId.slice(0, 8)}... (${syncPayload.senderSignPK.slice(0, 12)}...)${warningSuffix}${verificationSuffix}`);
       return;
     }
 
@@ -1823,7 +1863,34 @@ window.joinGroup = async function() {
       }
     }
 
-    const mergedMembers = mergeUniqueMembers(onboardingPayload.group.members || [], [myFp]);
+    const onboardingMembers = onboardingPayload.group.members || [];
+    const memberContacts = await Promise.all(onboardingMembers.map((fp) => getContactByFp(fp)));
+    const onboardingTrustChecks = onboardingMembers.map((fp, idx) => evaluateGroupActorVerification({
+      actorLabel: `member ${shortFp(fp)}`,
+      contact: memberContacts[idx]
+    }));
+    if (signerSignPK) {
+      const signerMemberFp = senderSignPKToMemberFp(signerSignPK);
+      const signerContact = await getContactByFp(signerMemberFp);
+      onboardingTrustChecks.push(evaluateGroupActorVerification({
+        actorLabel: `signer ${shortFp(signerMemberFp)}`,
+        contact: signerContact
+      }));
+    }
+    const onboardingTrustSummary = summarizeGroupVerificationOutcomes(onboardingTrustChecks);
+    if (!onboardingTrustSummary.ok) {
+      setStatus(false, `Join group rejected. ${onboardingTrustSummary.message}`);
+      return;
+    }
+    if (onboardingTrustSummary.level === 'unverified') {
+      const proceed = confirm(`${onboardingTrustSummary.message}\n\nContinue onboarding import?`);
+      if (!proceed) {
+        setStatus(false, 'Join group canceled by user due to unverified members/signer.');
+        return;
+      }
+    }
+
+    const mergedMembers = mergeUniqueMembers(onboardingMembers, [myFp]);
     const groupEntry = {
       ...onboardingPayload.group,
       members: mergedMembers
@@ -1855,7 +1922,8 @@ window.joinGroup = async function() {
     await renderSelectedGroup();
     const sharedStatesCount = filteredSenderStates.length;
     const warningSuffix = authenticityWarning ? ` ⚠️ ${authenticityWarning}` : '';
-    setStatus(true, `Joined group: ${groupEntry.name || groupEntry.id} (sender states: ${sharedStatesCount})${warningSuffix}`);
+    const verificationSuffix = onboardingTrustSummary.message ? ` ⚠️ ${onboardingTrustSummary.message}` : '';
+    setStatus(true, `Joined group: ${groupEntry.name || groupEntry.id} (sender states: ${sharedStatesCount})${warningSuffix}${verificationSuffix}`);
   } catch (e) {
     setStatus(false, 'Join group failed: ' + (e instanceof Error ? e.message : String(e)));
   }
@@ -1952,6 +2020,22 @@ window.addSelectedMemberToGroup = async function() {
 
     const group = await getGroup(groupId);
     if (!group) return alert('Group not found');
+    const memberContact = await getContactByFp(memberFp);
+    const memberTrust = evaluateGroupActorVerification({
+      actorLabel: `member ${shortFp(memberFp)}`,
+      contact: memberContact
+    });
+    if (memberTrust.blocked) {
+      setStatus(false, memberTrust.details);
+      return;
+    }
+    if (memberTrust.warning) {
+      const proceed = confirm(`${memberTrust.details}\n\nContinue adding this member to the group?`);
+      if (!proceed) {
+        setStatus(false, 'Add member canceled by user due to unverified contact.');
+        return;
+      }
+    }
 
     const members = new Set(await getGroupMembers(groupId));
     members.add(memberFp);
@@ -1961,7 +2045,8 @@ window.addSelectedMemberToGroup = async function() {
     await forceRotateSenderKey(group);
     await saveGroupMembers(groupId, group.members);
     await renderSelectedGroup();
-    setStatus(true, 'Member added. SenderKey rotated.');
+    const verificationSuffix = memberTrust.warning ? ` ⚠️ ${memberTrust.details}` : '';
+    setStatus(true, `Member added. SenderKey rotated.${verificationSuffix}`);
   } catch (e) {
     setStatus(false, 'Add member failed: ' + (e instanceof Error ? e.message : String(e)));
   }
