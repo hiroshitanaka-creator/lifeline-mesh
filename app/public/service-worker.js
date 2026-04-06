@@ -1,112 +1,205 @@
+/* global self, caches, Request, fetch, Response */
 // Lifeline Mesh Service Worker
-// Enables offline functionality for PWA
+// Hardened offline-first app shell strategy for single-file build.
 
-const CACHE_NAME = 'lifeline-mesh-v1.0.0';
-const CACHE_URLS = [
-  '/lifeline-mesh/',
-  '/lifeline-mesh/index.html',
-  '/lifeline-mesh/manifest.json'
-];
+const CACHE_VERSION = "v1.1.0";
+const CACHE_NAME = `lifeline-mesh-${CACHE_VERSION}`;
 
-// Install event: cache critical assets
-self.addEventListener('install', (event) => {
-  console.log('[ServiceWorker] Installing...');
+function ensureTrailingSlash(pathname) {
+  return pathname.endsWith("/") ? pathname : `${pathname}/`;
+}
+
+function getScopePath() {
+  const scopeUrl = new URL(self.registration.scope);
+  return ensureTrailingSlash(scopeUrl.pathname);
+}
+
+function buildAppShellUrls() {
+  const scopePath = getScopePath();
+  return [
+    scopePath,
+    `${scopePath}index.html`,
+    `${scopePath}manifest.json`,
+    `${scopePath}service-worker.js`
+  ];
+}
+
+const APP_SHELL_URLS = buildAppShellUrls();
+const APP_SHELL_SET = new Set(APP_SHELL_URLS);
+const NAVIGATION_FALLBACK_URL = `${getScopePath()}index.html`;
+
+function isInScope(url) {
+  const scopePath = getScopePath();
+  return url.pathname === scopePath || url.pathname.startsWith(scopePath);
+}
+
+function isCacheableResponse(response) {
+  return Boolean(response) && response.ok && response.type === "basic";
+}
+
+async function warmAppShellCache() {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.all(
+    APP_SHELL_URLS.map(async (url) => {
+      const request = new Request(url, { cache: "reload" });
+      const response = await fetch(request);
+      if (!isCacheableResponse(response)) {
+        throw new Error(`Non-cacheable app-shell response: ${url} (${response?.status})`);
+      }
+      await cache.put(url, response.clone());
+    })
+  );
+}
+
+self.addEventListener("install", (event) => {
+  console.log("[ServiceWorker] Installing...");
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[ServiceWorker] Caching app shell');
-        return cache.addAll(CACHE_URLS);
-      })
+    warmAppShellCache()
       .then(() => {
-        console.log('[ServiceWorker] Install complete');
+        console.log("[ServiceWorker] App shell cached");
         return self.skipWaiting();
       })
       .catch((err) => {
-        console.error('[ServiceWorker] Install failed:', err);
+        console.error("[ServiceWorker] Install failed:", err);
+        throw err;
       })
   );
 });
 
-// Activate event: clean up old caches
-self.addEventListener('activate', (event) => {
-  console.log('[ServiceWorker] Activating...');
+self.addEventListener("activate", (event) => {
+  console.log("[ServiceWorker] Activating...");
   event.waitUntil(
     caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames.map((cacheName) => {
-            if (cacheName !== CACHE_NAME) {
-              console.log('[ServiceWorker] Removing old cache:', cacheName);
-              return caches.delete(cacheName);
-            }
-          })
-        );
-      })
+      .then((cacheNames) => Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log("[ServiceWorker] Removing old cache:", cacheName);
+            return caches.delete(cacheName);
+          }
+          return Promise.resolve(false);
+        })
+      ))
+      .then(() => self.clients.claim())
       .then(() => {
-        console.log('[ServiceWorker] Activate complete');
-        return self.clients.claim();
+        console.log("[ServiceWorker] Activate complete");
       })
   );
 });
 
-// Fetch event: serve from cache, fallback to network
-self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin)) {
+async function handleNavigationRequest(event) {
+  const cache = await caches.open(CACHE_NAME);
+
+  try {
+    const networkResponse = await fetch(event.request);
+    if (isCacheableResponse(networkResponse)) {
+      await cache.put(event.request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch (err) {
+    console.warn("[ServiceWorker] Navigation fetch failed, using offline fallback:", err);
+    return (await cache.match(event.request)) ||
+      (await cache.match(NAVIGATION_FALLBACK_URL)) ||
+      new Response("Offline: Lifeline Mesh app shell is unavailable.", {
+        status: 503,
+        headers: { "Content-Type": "text/plain; charset=utf-8" }
+      });
+  }
+}
+
+async function handleAppShellRequest(event) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(event.request.url);
+
+  const updatePromise = fetch(event.request)
+    .then(async (networkResponse) => {
+      if (isCacheableResponse(networkResponse)) {
+        await cache.put(event.request.url, networkResponse.clone());
+      }
+      return networkResponse;
+    })
+    .catch((err) => {
+      console.warn("[ServiceWorker] App shell refresh failed:", event.request.url, err);
+      return null;
+    });
+
+  if (cached) {
+    event.waitUntil(updatePromise);
+    return cached;
+  }
+
+  const networkResponse = await updatePromise;
+  if (networkResponse) {
+    return networkResponse;
+  }
+
+  return new Response("Offline: Requested app shell resource is unavailable.", {
+    status: 503,
+    headers: { "Content-Type": "text/plain; charset=utf-8" }
+  });
+}
+
+async function handleScopedAssetRequest(event) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(event.request);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const networkResponse = await fetch(event.request);
+    if (isCacheableResponse(networkResponse)) {
+      await cache.put(event.request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch (err) {
+    console.warn("[ServiceWorker] Scoped fetch failed with no cache hit:", event.request.url, err);
+    throw err;
+  }
+}
+
+self.addEventListener("fetch", (event) => {
+  const requestUrl = new URL(event.request.url);
+
+  if (event.request.method !== "GET") {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        if (response) {
-          console.log('[ServiceWorker] Serving from cache:', event.request.url);
-          return response;
-        }
+  if (requestUrl.origin !== self.location.origin) {
+    return;
+  }
 
-        console.log('[ServiceWorker] Fetching from network:', event.request.url);
-        return fetch(event.request)
-          .then((response) => {
-            // Don't cache if not a valid response
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
+  if (!isInScope(requestUrl)) {
+    return;
+  }
 
-            // Clone the response (can only be consumed once)
-            const responseToCache = response.clone();
+  if (event.request.mode === "navigate") {
+    event.respondWith(handleNavigationRequest(event));
+    return;
+  }
 
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(event.request, responseToCache);
-              });
+  if (APP_SHELL_SET.has(requestUrl.pathname)) {
+    event.respondWith(handleAppShellRequest(event));
+    return;
+  }
 
-            return response;
-          })
-          .catch((err) => {
-            console.error('[ServiceWorker] Fetch failed:', err);
-            // Could return offline page here if implemented
-            throw err;
-          });
-      })
-  );
+  event.respondWith(handleScopedAssetRequest(event));
 });
 
-// Message event: handle cache updates
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
 
-  if (event.data && event.data.type === 'CLEAR_CACHE') {
+  if (event.data && event.data.type === "CLEAR_CACHE") {
     event.waitUntil(
       caches.delete(CACHE_NAME)
         .then(() => {
-          console.log('[ServiceWorker] Cache cleared');
+          console.log("[ServiceWorker] Cache cleared");
           return self.clients.matchAll();
         })
         .then((clients) => {
-          clients.forEach(client => client.postMessage({
-            type: 'CACHE_CLEARED'
+          clients.forEach((client) => client.postMessage({
+            type: "CACHE_CLEARED"
           }));
         })
     );
