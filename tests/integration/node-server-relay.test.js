@@ -195,6 +195,31 @@ test("node relay: cleanup evicts retained delivered entries and reports counts",
   assert(snapshot.store.deliveredCount === 0, "delivered entries evicted by retention");
   assert(snapshot.store.cleanup.removedDelivered >= 1, "cleanup stats include delivered removals");
   assert(snapshot.store.retention.deliveredRetentionMs === 30, "snapshot exposes delivered retention window");
+  assert(snapshot.store.oldestPendingCreatedAt === null, "snapshot includes oldestPendingCreatedAt for operators");
+  assert(typeof snapshot.store.newestDeliveredAt === "number" || snapshot.store.newestDeliveredAt === null, "snapshot includes newestDeliveredAt");
+});
+
+test("node relay: manual cleanup removes stale pending entries and is observable", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+
+  const { backend, store, relayNode } = await setupHarness(storePath, {
+    pendingRetentionMs: 1,
+    deliveredRetentionMs: 30 * 60 * 1000,
+    dedupeWindowMs: 10
+  });
+
+  backend.simulateClientConnect("client-manual-cleanup");
+  const message = { kind: "dmesh-msg", msgId: "relay-pending-cleanup-1", payload: "stale pending" };
+  backend.simulateWrite("client-manual-cleanup", CHARACTERISTICS.MESSAGE_TX, makeDirectPacket(message, message.msgId));
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  const cleanupResult = await relayNode.runCleanup("manual-test");
+  assert(cleanupResult.removedPending >= 1, "manual cleanup should remove stale pending entries");
+
+  const snapshot = await store.getSnapshot();
+  assert(snapshot.pendingCount === 0, "pending queue is empty after manual cleanup");
+  assert(snapshot.cleanup.lastRunAt !== null, "cleanup run timestamp is observable");
 });
 
 (async () => {
