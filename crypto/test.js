@@ -105,6 +105,55 @@ test("verifyPublicIdentityPayload accepts signed identity", () => {
 
   const verified = DMesh.verifyPublicIdentityPayload(id, nacl, naclUtil);
   if (!verified.signed) throw new Error("Expected signed identity verification");
+  if (verified.warning !== null) throw new Error("Did not expect warning for signed identity");
+});
+
+test("verifyPublicIdentityPayload accepts raw sender-only contact JSON with warning", () => {
+  const signKP = DMesh.generateSignKeyPair(nacl);
+  const boxKP = DMesh.generateBoxKeyPair(nacl);
+  const senderOnly = {
+    name: "Legacy Bob",
+    signPK: naclUtil.encodeBase64(signKP.publicKey),
+    boxPK: naclUtil.encodeBase64(boxKP.publicKey)
+  };
+
+  const verified = DMesh.verifyPublicIdentityPayload(senderOnly, nacl, naclUtil);
+  if (verified.signed) throw new Error("Expected unsigned verification for sender-only contact");
+  if (!verified.warning || !verified.warning.includes("sender-only")) {
+    throw new Error("Expected sender-only compatibility warning");
+  }
+  if (!verified.identity.fp) throw new Error("Expected normalized fingerprint");
+});
+
+test("verifyPublicIdentityPayload accepts unsigned legacy dmesh-id with warning", () => {
+  const signKP = DMesh.generateSignKeyPair(nacl);
+  const boxKP = DMesh.generateBoxKeyPair(nacl);
+  const legacy = DMesh.createPublicIdentity({
+    name: "Legacy Alice",
+    signPK: signKP.publicKey,
+    boxPK: boxKP.publicKey
+  }, nacl, naclUtil);
+
+  const verified = DMesh.verifyPublicIdentityPayload(legacy, nacl, naclUtil);
+  if (verified.signed) throw new Error("Expected unsigned verification for legacy identity");
+  if (!verified.warning || !verified.warning.includes("Legacy unsigned dmesh-id")) {
+    throw new Error("Expected legacy unsigned warning");
+  }
+});
+
+test("verifyPublicIdentityPayload accepts signed identity with empty-string name", () => {
+  const signKP = DMesh.generateSignKeyPair(nacl);
+  const boxKP = DMesh.generateBoxKeyPair(nacl);
+  const id = DMesh.createSignedPublicIdentity({
+    name: "",
+    signPK: signKP.publicKey,
+    signSK: signKP.secretKey,
+    boxPK: boxKP.publicKey
+  }, nacl, naclUtil);
+
+  const verified = DMesh.verifyPublicIdentityPayload(id, nacl, naclUtil);
+  if (!verified.signed) throw new Error("Expected empty-string name signed identity to verify");
+  if (verified.identity.name !== "") throw new Error("Expected empty-string name to be preserved");
 });
 
 test("verifyPublicIdentityPayload rejects tampered name", () => {
