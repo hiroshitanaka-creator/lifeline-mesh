@@ -1242,13 +1242,57 @@ function normalizeImportedGroupPayload(rawPayload) {
     throw new Error('Invalid group payload');
   }
 
+  if (rawPayload.type === 'lifeline-signed-envelope-v1') {
+    GroupMesh.verifySignedGroupPayloadEnvelope(rawPayload, nacl, naclUtil);
+    const payloadType = rawPayload.payloadType;
+    if (payloadType === 'lifeline-sender-state-sync-v1') {
+      if (!rawPayload.payload?.groupId || !rawPayload.payload?.senderSignPK || !rawPayload.payload?.senderKeyState) {
+        throw new Error('Invalid signed sender-state sync payload');
+      }
+      return {
+        mode: 'sender-sync',
+        payload: rawPayload.payload,
+        authenticity: {
+          envelopeVersion: rawPayload.type,
+          signed: true,
+          signerSignPK: rawPayload.exportedBySignPK,
+          warning: null
+        }
+      };
+    }
+
+    if (payloadType === 'lifeline-group-onboarding-v1') {
+      if (!rawPayload.payload?.group?.id || !rawPayload.payload?.group?.senderKey) {
+        throw new Error('Invalid signed onboarding payload');
+      }
+      return {
+        mode: 'onboarding',
+        payload: rawPayload.payload,
+        authenticity: {
+          envelopeVersion: rawPayload.type,
+          signed: true,
+          signerSignPK: rawPayload.exportedBySignPK,
+          warning: null
+        }
+      };
+    }
+
+    throw new Error(`Unsupported signed payload type: ${String(payloadType)}`);
+  }
+
   if (rawPayload.type === 'lifeline-sender-state-sync-v1') {
     if (!rawPayload.groupId || !rawPayload.senderSignPK || !rawPayload.senderKeyState) {
       throw new Error('Invalid sender-state sync payload');
     }
     return {
       mode: 'sender-sync',
-      payload: rawPayload
+      payload: rawPayload,
+      authenticity: {
+        envelopeVersion: 'legacy-unsigned',
+        signed: false,
+        signerSignPK: rawPayload.senderSignPK || null,
+        warning: 'Unsigned legacy sender-state sync payload accepted'
+      }
     };
   }
 
@@ -1258,7 +1302,13 @@ function normalizeImportedGroupPayload(rawPayload) {
     }
     return {
       mode: 'onboarding',
-      payload: rawPayload
+      payload: rawPayload,
+      authenticity: {
+        envelopeVersion: 'legacy-unsigned',
+        signed: false,
+        signerSignPK: null,
+        warning: 'Unsigned legacy onboarding payload accepted'
+      }
     };
   }
 
@@ -1268,7 +1318,13 @@ function normalizeImportedGroupPayload(rawPayload) {
 
   return {
     mode: 'legacy',
-    payload: rawPayload
+    payload: rawPayload,
+    authenticity: {
+      envelopeVersion: 'legacy-group-json',
+      signed: false,
+      signerSignPK: null,
+      warning: 'Legacy raw group JSON accepted without authenticity proof'
+    }
   };
 }
 
@@ -1724,6 +1780,8 @@ window.joinGroup = async function() {
     const raw = /** @type {HTMLInputElement} */ (document.getElementById('group-json')).value.trim();
     const parsed = JSON.parse(raw);
     const normalized = normalizeImportedGroupPayload(parsed);
+    const authenticityWarning = normalized.authenticity?.warning || null;
+    const signerSignPK = normalized.authenticity?.signerSignPK || null;
 
     const my = await ensureMyKeys();
     const myFp = naclUtil.encodeBase64(DMesh.fingerprintFromSignPK(my.signPKu8, nacl));
@@ -1731,22 +1789,40 @@ window.joinGroup = async function() {
       const syncPayload = normalized.payload;
       const members = await getGroupMembers(syncPayload.groupId);
       const senderMemberFp = senderSignPKToMemberFp(syncPayload.senderSignPK);
+      const signerMemberFp = signerSignPK ? senderSignPKToMemberFp(signerSignPK) : null;
+      if (normalized.authenticity?.signed) {
+        if (!signerSignPK || signerSignPK !== syncPayload.senderSignPK) {
+          throw new Error('Sender-state sync signature verification failed: signer must match senderSignPK');
+        }
+        if (members.length && (!signerMemberFp || !members.includes(signerMemberFp))) {
+          throw new Error('Sender-state sync signature verification failed: signer is not a current group member');
+        }
+      }
       if (members.length && (!senderMemberFp || !members.includes(senderMemberFp))) {
         throw new Error('Sender state sync rejected: sender is not a current group member');
       }
 
       const accepted = await saveSenderStateMonotonic(syncPayload.groupId, syncPayload.senderSignPK, syncPayload.senderKeyState);
       if (!accepted) {
-        setStatus(true, `Sender state sync skipped (kept newer/local richer state) for ${syncPayload.senderSignPK.slice(0, 12)}...`);
+        const warningSuffix = authenticityWarning ? ` ⚠️ ${authenticityWarning}` : '';
+        setStatus(true, `Sender state sync skipped (kept newer/local richer state) for ${syncPayload.senderSignPK.slice(0, 12)}...${warningSuffix}`);
         return;
       }
-      setStatus(true, `Sender state synced for group ${syncPayload.groupId.slice(0, 8)}... (${syncPayload.senderSignPK.slice(0, 12)}...)`);
+      const warningSuffix = authenticityWarning ? ` ⚠️ ${authenticityWarning}` : '';
+      setStatus(true, `Sender state synced for group ${syncPayload.groupId.slice(0, 8)}... (${syncPayload.senderSignPK.slice(0, 12)}...)${warningSuffix}`);
       return;
     }
 
     const onboardingPayload = normalized.mode === 'onboarding'
       ? normalized.payload
       : { group: normalized.payload, senderStates: [] };
+    if (normalized.authenticity?.signed) {
+      const signerMemberFp = signerSignPK ? senderSignPKToMemberFp(signerSignPK) : null;
+      const onboardingMembers = onboardingPayload.group.members || [];
+      if (!signerMemberFp || !onboardingMembers.includes(signerMemberFp)) {
+        throw new Error('Onboarding payload signature verification failed: signer is not in onboarding members');
+      }
+    }
 
     const mergedMembers = mergeUniqueMembers(onboardingPayload.group.members || [], [myFp]);
     const groupEntry = {
@@ -1779,7 +1855,8 @@ window.joinGroup = async function() {
     /** @type {HTMLInputElement} */ (document.getElementById('group-select')).value = groupEntry.id;
     await renderSelectedGroup();
     const sharedStatesCount = filteredSenderStates.length;
-    setStatus(true, `Joined group: ${groupEntry.name || groupEntry.id} (sender states: ${sharedStatesCount})`);
+    const warningSuffix = authenticityWarning ? ` ⚠️ ${authenticityWarning}` : '';
+    setStatus(true, `Joined group: ${groupEntry.name || groupEntry.id} (sender states: ${sharedStatesCount})${warningSuffix}`);
   } catch (e) {
     setStatus(false, 'Join group failed: ' + (e instanceof Error ? e.message : String(e)));
   }
@@ -1814,7 +1891,15 @@ window.copyGroupOnboardingPayload = async function() {
         senderKeyState: entry.senderKeyState
       }))
     };
-    const payloadText = JSON.stringify(payload, null, 2);
+    const my = await ensureMyKeys();
+    const signedPayload = GroupMesh.createSignedGroupPayloadEnvelope({
+      payloadType: payload.type,
+      payloadBody: payload,
+      exportedAt: payload.exportedAt,
+      exportedBySignPK: naclUtil.encodeBase64(my.signPKu8),
+      signerSignSK: my.signSKu8
+    }, nacl, naclUtil);
+    const payloadText = JSON.stringify(signedPayload, null, 2);
     const copied = await copyTextAndFillGroupTextarea(payloadText);
     setStatus(true, copied
       ? `Onboarding payload copied for ${group.name || group.id}`
@@ -1843,7 +1928,14 @@ window.copySenderStateSyncPayload = async function() {
       senderSignPK,
       senderKeyState
     };
-    const payloadText = JSON.stringify(payload, null, 2);
+    const signedPayload = GroupMesh.createSignedGroupPayloadEnvelope({
+      payloadType: payload.type,
+      payloadBody: payload,
+      exportedAt: payload.exportedAt,
+      exportedBySignPK: senderSignPK,
+      signerSignSK: my.signSKu8
+    }, nacl, naclUtil);
+    const payloadText = JSON.stringify(signedPayload, null, 2);
     const copied = await copyTextAndFillGroupTextarea(payloadText);
     setStatus(true, copied
       ? 'Sender-state sync payload copied'

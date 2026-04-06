@@ -400,10 +400,17 @@ test("e2e: multi-device group onboarding + sender-state mismatch recovery", asyn
   await deviceA.locator("#group-select").selectOption({ index: 1 });
   await deviceA.getByRole("button", { name: "📋 Copy Onboarding Payload" }).click();
   const onboardingPayload = await deviceA.locator("#group-json").inputValue();
+  expect(onboardingPayload).toContain("lifeline-signed-envelope-v1");
   expect(onboardingPayload).toContain("lifeline-group-onboarding-v1");
 
-  // B joins from onboarding payload.
+  const tamperedOnboarding = JSON.parse(onboardingPayload);
+  tamperedOnboarding.payload.group.members.push("tampered-member");
   await deviceB.getByLabel("Group").check();
+  await deviceB.locator("#group-json").fill(JSON.stringify(tamperedOnboarding, null, 2));
+  await deviceB.getByRole("button", { name: "📥 Join Group" }).click();
+  await expect(deviceB.locator("#status")).toContainText("signature");
+
+  // B joins from onboarding payload.
   await deviceB.locator("#group-json").fill(onboardingPayload);
   await deviceB.getByRole("button", { name: "📥 Join Group" }).click();
   await expect(deviceB.locator("#status")).toContainText("Joined group");
@@ -430,7 +437,7 @@ test("e2e: multi-device group onboarding + sender-state mismatch recovery", asyn
     senderSignPK: secondParsed.senderSignPK,
     senderKeyState: {
       version: 1,
-      chainKey: JSON.parse(onboardingPayload).group.senderKey.chainKey
+      chainKey: JSON.parse(onboardingPayload).payload.group.senderKey.chainKey
     }
   };
   await deviceB.locator("#group-json").fill(JSON.stringify(staleSyncPayload, null, 2));
@@ -463,6 +470,12 @@ test("e2e: multi-device group onboarding + sender-state mismatch recovery", asyn
   // A exports current sender-state sync payload for recovery, C imports and decrypts again.
   await deviceA.getByRole("button", { name: "🔁 Copy Sender-State Sync" }).click();
   const freshSyncPayload = await deviceA.locator("#group-json").inputValue();
+  const tamperedSyncPayload = JSON.parse(freshSyncPayload);
+  tamperedSyncPayload.payload.senderKeyState.version += 1;
+  await deviceC.locator("#group-json").fill(JSON.stringify(tamperedSyncPayload, null, 2));
+  await deviceC.getByRole("button", { name: "📥 Join Group" }).click();
+  await expect(deviceC.locator("#status")).toContainText("signature");
+
   await deviceC.locator("#group-json").fill(freshSyncPayload);
   await deviceC.getByRole("button", { name: "📥 Join Group" }).click();
   await expect(deviceC.locator("#status")).toContainText("Sender state synced");

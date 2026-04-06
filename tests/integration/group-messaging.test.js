@@ -211,6 +211,85 @@ test("integration: sender-state resync payload enables mismatch recovery", () =>
   }
 });
 
+test("integration: signed onboarding payload verifies and tamper is rejected", () => {
+  const alice = nacl.sign.keyPair();
+  const group = GroupMesh.createGroup({
+    name: "Signed-Onboarding",
+    createdBy: naclUtil.encodeBase64(alice.publicKey),
+    members: [naclUtil.encodeBase64(alice.publicKey)]
+  }, nacl, naclUtil);
+
+  const payload = {
+    type: "lifeline-group-onboarding-v1",
+    exportedAt: Date.now(),
+    group,
+    senderStates: []
+  };
+
+  const signedEnvelope = GroupMesh.createSignedGroupPayloadEnvelope({
+    payloadType: payload.type,
+    payloadBody: payload,
+    exportedAt: payload.exportedAt,
+    exportedBySignPK: naclUtil.encodeBase64(alice.publicKey),
+    signerSignSK: alice.secretKey
+  }, nacl, naclUtil);
+
+  GroupMesh.verifySignedGroupPayloadEnvelope(signedEnvelope, nacl, naclUtil);
+
+  const tampered = JSON.parse(JSON.stringify(signedEnvelope));
+  tampered.payload.group.members.push("tampered-member");
+
+  let tamperRejected = false;
+  try {
+    GroupMesh.verifySignedGroupPayloadEnvelope(tampered, nacl, naclUtil);
+  } catch {
+    tamperRejected = true;
+  }
+
+  if (!tamperRejected) {
+    throw new Error("Tampered onboarding payload should fail signature verification");
+  }
+});
+
+test("integration: signed sender-state sync payload verifies and signer mismatch is detectable", () => {
+  const alice = nacl.sign.keyPair();
+  const bob = nacl.sign.keyPair();
+  const payload = {
+    type: "lifeline-sender-state-sync-v1",
+    exportedAt: Date.now(),
+    groupId: "group-1",
+    senderSignPK: naclUtil.encodeBase64(alice.publicKey),
+    senderKeyState: {
+      version: 2,
+      chainKey: naclUtil.encodeBase64(nacl.randomBytes(32))
+    }
+  };
+
+  const signedEnvelope = GroupMesh.createSignedGroupPayloadEnvelope({
+    payloadType: payload.type,
+    payloadBody: payload,
+    exportedAt: payload.exportedAt,
+    exportedBySignPK: naclUtil.encodeBase64(alice.publicKey),
+    signerSignSK: alice.secretKey
+  }, nacl, naclUtil);
+
+  GroupMesh.verifySignedGroupPayloadEnvelope(signedEnvelope, nacl, naclUtil);
+
+  const signerMismatchEnvelope = JSON.parse(JSON.stringify(signedEnvelope));
+  signerMismatchEnvelope.exportedBySignPK = naclUtil.encodeBase64(bob.publicKey);
+
+  let signerMismatchRejected = false;
+  try {
+    GroupMesh.verifySignedGroupPayloadEnvelope(signerMismatchEnvelope, nacl, naclUtil);
+  } catch {
+    signerMismatchRejected = true;
+  }
+
+  if (!signerMismatchRejected) {
+    throw new Error("Signer mismatch must be rejected due to signature mismatch");
+  }
+});
+
 test("integration: stale sender-state import does not downgrade newer state", () => {
   const existing = {
     version: 5,
