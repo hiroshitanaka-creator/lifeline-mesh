@@ -52,7 +52,7 @@ import {
 } from './db.js';
 import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
-import { resolveShareTargetIntake } from './share-target-intake.js';
+import { resolveStartupShareTargetIntake } from './share-target-intake.js';
 import { createTransportManager } from '../../crypto/transport.js';
 import { createMeshRuntime } from './runtime-mesh.js';
 import { mountOperatorPanel } from './operator-panel.js';
@@ -635,6 +635,36 @@ function loadDraftIntoEncryptInput(text, sourceLabel) {
   setStatus(true, `Received share text from ${sourceLabel}. Ready to encrypt.`);
 }
 
+function loadContactPayloadIntoImportInput(contactPayloadText, sourceLabel) {
+  const contactEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('contact-input'));
+  if (!contactEl) {
+    throw new Error('Contact input is unavailable');
+  }
+  contactEl.value = contactPayloadText;
+  contactEl.textContent = contactPayloadText;
+  contactEl.focus();
+  contactEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  setStatus(true, `Received contact payload from ${sourceLabel}. Review then tap Add Contact.`);
+}
+
+function loadGroupPayloadIntoImportInput(groupPayloadText, sourceLabel) {
+  const groupJsonEl = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('group-json'));
+  const groupModeRadio = /** @type {HTMLInputElement|null} */ (
+    document.querySelector('input[name="message-mode"][value="group"]')
+  );
+  if (!groupJsonEl || !groupModeRadio) {
+    throw new Error('Group import UI is unavailable');
+  }
+
+  groupModeRadio.checked = true;
+  window.setMessageMode('group');
+  groupJsonEl.value = groupPayloadText;
+  groupJsonEl.textContent = groupPayloadText;
+  groupJsonEl.focus();
+  groupJsonEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  setStatus(true, `Received group payload from ${sourceLabel}. Review then tap Join Group.`);
+}
+
 function getFirstReceivedMessage(messages = []) {
   if (!messages.length) {
     throw new Error('No receivable payload found');
@@ -672,20 +702,53 @@ function applyShortcutDeepLink(hash, { silent = false } = {}) {
   return false;
 }
 
-function handleStartupIntakeFromUrl() {
+async function consumePendingShareTargetFromServiceWorker() {
   const params = new window.URLSearchParams(window.location.search);
-  const sharedText = params.get('text') || '';
-  const sharedTitle = params.get('title') || '';
-  const hasSharePayload = Boolean(sharedText || sharedTitle);
+  if (params.get('share-target') !== '1') {
+    return null;
+  }
+
+  try {
+    const response = await fetch('share-target-pending', { cache: 'no-store' });
+    if (response.status === 204 || !response.ok) {
+      return null;
+    }
+    const payload = await response.json();
+    return {
+      title: payload?.title || '',
+      text: payload?.text || '',
+      files: Array.isArray(payload?.files) ? payload.files : []
+    };
+  } catch (error) {
+    console.warn('[Startup Intake] Could not consume pending share-target payload:', error);
+    return null;
+  }
+}
+
+async function handleStartupIntakeFromUrl() {
+  const params = new window.URLSearchParams(window.location.search);
+  const pendingSharePayload = await consumePendingShareTargetFromServiceWorker();
+  const sharedText = pendingSharePayload?.text || params.get('text') || '';
+  const sharedTitle = pendingSharePayload?.title || params.get('title') || '';
+  const sharedFiles = pendingSharePayload?.files || [];
+  const hasSharePayload = Boolean(sharedText || sharedTitle || sharedFiles.length);
   const hash = window.location.hash || '';
 
   if (hasSharePayload) {
-    const intake = resolveShareTargetIntake({ title: sharedTitle, text: sharedText });
+    const intake = resolveStartupShareTargetIntake({
+      title: sharedTitle,
+      text: sharedText,
+      files: sharedFiles
+    });
     if (intake.route === 'decrypt') {
-      loadReceivedPayloadIntoDecryptInput(intake.encryptedPayload, 'share target');
+      loadReceivedPayloadIntoDecryptInput(intake.encryptedPayload, `share target ${intake.source || 'text'}`);
       applyShortcutDeepLink('#decrypt', { silent: true });
+    } else if (intake.route === 'group-import') {
+      loadGroupPayloadIntoImportInput(intake.groupPayloadText, `share target ${intake.source || 'text'}`);
+    } else if (intake.route === 'contact-import') {
+      loadContactPayloadIntoImportInput(intake.contactPayloadText, `share target ${intake.source || 'text'}`);
     } else {
-      loadDraftIntoEncryptInput(intake.draftText, 'share target');
+      loadDraftIntoEncryptInput(intake.draftText, `share target ${intake.source || 'text'}`);
       applyShortcutDeepLink('#encrypt', { silent: true });
     }
 
@@ -2560,7 +2623,7 @@ function updateKdfStatus() {
     await refreshInboxSnapshot();
     await runAndRecordMaintenance('startup');
     updateMessageDraftMetrics();
-    handleStartupIntakeFromUrl();
+    await handleStartupIntakeFromUrl();
     setInterval(() => {
       refreshOutboxSnapshot();
       refreshInboxSnapshot();
