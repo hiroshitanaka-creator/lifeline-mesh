@@ -1,8 +1,8 @@
-# Issue / Docs Sync Report (PR-11)
+# Issue / Docs Sync Report (PR-17)
 
-- Date: 2026-04-05
+- Date: 2026-04-06
 - Repository: `hiroshitanaka-creator/lifeline-mesh`
-- Scope: Sync README/docs/spec/issues with **current codebase truth** (no feature implementation).
+- Scope: Re-sync README/docs/spec/issues with **current codebase truth** after PR-12 to PR-16 (sync-only; no feature implementation).
 
 ## Issue Editing Permission Check
 
@@ -12,35 +12,31 @@ Attempted command:
 gh issue list -R hiroshitanaka-creator/lifeline-mesh --state open --limit 50
 ```
 
-Result: `gh unavailable or unauthenticated` in this environment, so direct GitHub issue edits were **not possible**.
+Result: `gh` command is unavailable in this environment, so direct GitHub issue edits were **not possible**.
 
-## Drift Matrix
+## Drift Matrix (PR-17)
 
 | Area | Codebase truth (source of truth) | Previous docs/issues claim | Drift | Action in this PR |
 |---|---|---|---|---|
-| App mesh runtime wiring | `app/src/main.js` wires `router` + `onForward` into `BLEManager` and forwards via `runtime-mesh.js` | `docs/PHASE_PROGRESS.md` + `spec/PROTOCOL.md` still said app wiring was not done | High | Updated docs to match implemented wiring |
-| Routing phase status | `runtime-mesh.js` and `mesh-router-phase2` tests show route adv + next-hop routing active | `spec/PROTOCOL.md` said Phase 2 not implemented | High | Updated spec status text |
-| BLE peripheral/relay | Node-side peripheral exists: `bluetooth/gatt-server.js` + `bluetooth/backends/node-bleno.js` + `node-server/server.js` | Multiple docs framed peripheral as entirely unimplemented | High | Reworded to distinguish Node implemented vs browser/mobile adapter gap |
-| Test totals | Current passing counts are 195 total from unit+integration runs | README badges/tables still said 184 | High | Updated README badge, total, and related summary lines |
-| Node relay integration count | `tests/integration/node-server-relay.test.js` now has 5 tests | README said 3 tests | Medium | Updated README count |
-| Pages deployment branch | `.github/workflows/pages.yml` deploys on `main` | README said `master` | Medium | Updated README branch note |
-| Browser matrix consistency | `docs/WEB_BLUETOOTH_SUPPORT.md` says Safari unsupported for production, while `docs/BLE_SUPPORT_MATRIX.md` said partial/experimental | Intra-doc inconsistency | Medium | Normalized BLE support matrix wording |
-| Good first issues | Several listed “first issues” are already implemented in code | Stale tracked work candidates | Medium | Added maintenance note marking completed items and current gap focus |
+| Integration totals | Current test output is 217/217 (unit 49 + integration 168) | README test badge/table still 195/195 | High | Updated README badge/table/checklist/summary to 217 |
+| Group integration count | `tests/integration/group-messaging.test.js` has 11 tests | README table still listed 9 | High | Updated README count to 11 |
+| Node relay integration count | `tests/integration/node-server-relay.test.js` has 7 tests and includes cleanup/diagnostics observability cases | README table still listed 5 | High | Updated README count to 7 |
+| Node relay ops coverage | `tests/integration/node-server-relay-ops.test.js` has 14 tests | README table omitted this suite | Medium | Added explicit Node relay ops row |
+| Share-target intake coverage | `tests/integration/share-target-intake-routing.test.js` has 4 checks | README table omitted this suite | Medium | Added explicit share-target intake row |
+| Multi-link runtime vs node relay model | `app/src/runtime-mesh.js` uses `Map<peerId, BLEManager>`; `node-server/relay-node.js` is single-client relay | README topology paragraph conflated app runtime topology and node relay mode | High | Reworded architecture section to separate app multi-link runtime and node single-client persistent relay |
+| PWA/offline/share-target semantics | `manifest.json` has `/lifeline-mesh/` scope + GET share_target (`title`,`text`); `service-worker.js` caches app shell and has offline navigation fallback | README features did not explicitly describe these current PWA specifics | Medium | Added explicit PWA manifest/share-target/app-shell cache summary |
+| validate local vs CI semantics | `package.json` + `.github/workflows/ci.yml` separate `validate:local` and `validate:ci` (runtime typecheck + Playwright critical path in CI) | Ops docs still used generic e2e wording | Medium | Updated README CI note and operations runbook release flow text |
 
 ## Proposed GitHub Issue Updates (to apply when permissions are available)
 
-1. **Close/replace stale issue candidates tied to already-implemented work**
-   - Dark mode support
-   - Keyboard shortcuts
-   - Web Bluetooth support documentation
-   - Emergency mode basic UI
+1. **Open issue: Automated docs drift check for test inventory**
+   - Ensure README test totals and per-suite counts are generated or linted against integration outputs.
 
-2. **Create/update issue: Browser/mobile peripheral adapter gap**
-   - Clarify that Node backend exists (`node-bleno`) but browser/mobile peripheral adapter is still open.
+2. **Open issue: Docs consistency check for app runtime vs node relay topology**
+   - Prevent future conflation of multi-link app runtime and single-client node relay behavior.
 
-3. **Create/update issue: Continuous docs drift audit**
-   - Add periodic check for README/spec status lines versus integration test inventory and runtime wiring.
+3. **Open issue: PWA behavior documentation guardrail**
+   - Track manifest scope/share-target/service-worker cache changes and require doc sync in same PR.
 
-4. **Create/update issue: Real-device BLE validation expansion**
-   - Extend hardware validation coverage (beyond simulated/back-end tests) and attach reproducible runbook evidence.
-
+4. **Refresh stale issue labels and pointers**
+   - Reconfirm that already-shipped tasks (dark mode, keyboard shortcuts, emergency mode MVP, BLE support doc) remain marked as historical/completed and redirect to active gaps (browser/mobile peripheral adapter, real-device validation expansion).
