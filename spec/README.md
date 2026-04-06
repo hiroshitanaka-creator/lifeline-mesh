@@ -33,3 +33,9 @@ Detailed protocol specification including:
 - ✅ Recipient binding (message tied to specific recipient)
 - ✅ Replay resistance (30-day window)
 - ✅ Forward secrecy approximation (ephemeral encryption keys)
+
+## Conformance References
+
+- Protocol and runtime behavior are verified via `npm run test:unit && npm run test:integration` (current aggregate: 217 tests).
+- Local validation command: `npm run validate` (`validate:local`).
+- CI validation command: `npm run ci` (`validate:ci`, includes `typecheck:runtime` and Playwright critical path).

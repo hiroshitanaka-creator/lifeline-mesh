@@ -51,7 +51,7 @@ Execution checklist for Phase A-E (Japanese) covering:
 
 
 ### [ISSUE_SYNC_REPORT.md](./ISSUE_SYNC_REPORT.md)
-PR-11 synchronization report covering:
+PR-17 synchronization report covering:
 - code-vs-doc drift matrix
 - issue edit permission status
 - per-issue update proposals when direct GitHub edits are unavailable

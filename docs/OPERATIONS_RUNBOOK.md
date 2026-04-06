@@ -5,13 +5,14 @@
 - Applies to browser app (`app/`), crypto modules (`crypto/`), BLE transport (`bluetooth/`), and test/CI gates.
 
 ## 1) Release flow
-1. Run: `npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run test:e2e`
-2. Run Playwright on CI environment with browser install.
-3. Confirm [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) items are all complete.
-4. Execute Go/No-Go meeting agenda.
+1. Local gate: `npm run validate` (`validate:local` = lint + typecheck + unit + integration + compat + smoke E2E).
+2. CI gate: `npm run ci` (`validate:ci` = local gates + `typecheck:runtime` + Playwright critical path).
+3. For full browser coverage, run `npm run test:e2e:real-browser` in a Playwright-capable environment.
+4. Confirm [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) items are all complete.
+5. Execute Go/No-Go meeting agenda.
 
 ### Release exit criteria (must-pass)
-- Lint/typecheck/unit/integration/e2e all green.
+- Local and CI gate semantics both green (`validate:local`, `validate:ci`).
 - No unresolved high/critical security findings.
 - Migration test completed against existing IndexedDB data.
 - BLE offline queue path validated (offline enqueue → reconnect → flush).
@@ -28,8 +29,9 @@
 
 ## 3) Incident response (message delivery degradation)
 1. Check integration logs (`artifacts/integration-test.log`) from CI.
-2. Verify BLE retry/fallback behavior with integration test suite.
-3. If BLE unstable in environment, switch operation guidance to clipboard/file transport.
+2. Verify BLE retry/fallback behavior with integration suite (`ble-crypto`, `mesh-router`, `app-runtime-mesh`).
+3. Check node relay observability snapshot/cleanup behavior (`node-server-relay.test.js`, `node-server-relay-ops.test.js`).
+4. If BLE unstable in environment, switch operation guidance to clipboard/file transport.
 
 ### Triage checklist
 1. Confirm browser capability (Web Bluetooth available or not).

@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-195%2F195%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-217%2F217%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -88,6 +88,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ### User Experience
 - 📱 Offline-first (works without internet)
+- 📦 PWA manifest + share target (`title`/`text` GET params) + app-shell service worker caching for scope `/lifeline-mesh/`
 - 🆘 Emergency Mode (simplified, form-based disaster messaging)
 - 📋 Copy/paste encrypted messages; keyboard shortcuts (Ctrl+K/E/D)
 - 📚 Embedded documentation
@@ -118,14 +119,14 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ## 🔬 Testing
 
-All tests passing: **195/195 ✓**
+All tests passing: **217/217 ✓**
 
 | Suite | Count | Command |
 |---|---|---|
 | Crypto core unit | 22 | `npm run test:crypto` |
 | Test vectors | 27 | `npm run test:vectors` |
 | BLE + transport integration | 24 | `npm run test:integration` |
-| Group messaging integration | 9 | `npm run test:integration` |
+| Group messaging integration | 11 | `npm run test:integration` |
 | Contact verification integration | 7 | `npm run test:integration` |
 | Store maintenance integration | 1 | `npm run test:integration` |
 | Mesh router Phase 1 integration | 14 | `npm run test:integration` |
@@ -133,10 +134,12 @@ All tests passing: **195/195 ✓**
 | Mesh router Phase 2 integration | 27 | `npm run test:integration` |
 | App runtime mesh integration | 12 | `npm run test:integration` |
 | GATT server integration | 19 | `npm run test:integration` |
-| Node-server relay integration | 5 | `npm run test:integration` |
+| Node-server relay integration | 7 | `npm run test:integration` |
+| Node-server relay ops integration | 14 | `npm run test:integration` |
+| Share-target intake routing integration | 4 | `npm run test:integration` |
 | Operator panel unit | 21 | `npm run test:integration` |
 | DB migration integration | 1 | `npm run test:integration` |
-| **Total** | **195** | `npm run test:unit && npm run test:integration` |
+| **Total** | **217** | `npm run test:unit && npm run test:integration` |
 
 ```bash
 # Run everything
@@ -161,6 +164,7 @@ npm run test:e2e:real-browser
 CI note:
 - Fast PR gate (`e2e_browser_smoke` job in CI) runs the Playwright **critical-path spec** (`main-ci-critical-path.spec.js`) — full key-gen → encrypt → decrypt → verify → compromised flow.
 - Full Playwright suite runs in `.github/workflows/e2e-real-browser.yml` (nightly, manual dispatch, and pushes to main/master).
+- `npm run validate` maps to `validate:local` (smoke E2E for faster local iteration), while CI uses `validate:ci` (adds `typecheck:runtime` + Playwright critical path gate).
 
 ---
 
@@ -215,7 +219,9 @@ Alice                  Relay Network              Bob
                          MeshRouter (Phase 1+2)
                          route adv broadcast (30 s interval)
 ```
-The relay node maintains a `Map<peerId, BLEManager>`. Incoming messages on link-A are forwarded to all other links (egress loop). Route advertisements propagate the topology automatically when ≥2 links are active.
+The app runtime (`app/src/runtime-mesh.js`) maintains a `Map<peerId, BLEManager>` for concurrent links. Incoming messages on link-A are forwarded to other links (egress loop), and route advertisements propagate topology automatically when ≥2 links are active.
+
+The Node relay (`node-server/`) is intentionally **single-client** per active BLE session, with durable pending/delivered store state and observable cleanup/snapshot counters exposed via `relay-ops.js` and `FileRelayStore#getSnapshot()`.
 
 ---
 
@@ -281,7 +287,7 @@ The workflow runs `npm install --prefix app && npm run build --prefix app` and d
 
 ### Production Checklist
 - [x] SRI added to all CDN scripts
-- [x] All tests passing (195/195)
+- [x] All tests passing (217/217)
 - [x] Documentation complete
 - [ ] Consider self-hosting TweetNaCl (avoid CDN dependency)
 - [x] Add Content Security Policy headers
@@ -362,7 +368,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 **Current Version**: 0.1.0 (v0.1.0 release gate passed; prototype quality)
 
 ### Implemented ✅
-- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 195/195 tests passing
+- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 217/217 tests passing
 - Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
 - Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
 - **Multi-link BLE runtime**: concurrent links via `Map<peerId, BLEManager>`, egress relay loop, route-adv broadcast
