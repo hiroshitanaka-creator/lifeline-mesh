@@ -4,6 +4,7 @@
 
 const GROUP_DOMAIN = "DMESH_GROUP_V1";
 const GROUP_MSG_KEY_INFO = "DMESH_GROUP_MSG_KEY";
+const GROUP_PAYLOAD_ENVELOPE_DOMAIN = "DMESH_GROUP_PAYLOAD_ENVELOPE_V1";
 
 function buildGroupSignBytes({ groupId, senderKeyVersion, nonce, ciphertext }, naclUtil) {
   const domain = naclUtil.decodeUTF8(GROUP_DOMAIN);
@@ -16,6 +17,92 @@ function buildGroupSignBytes({ groupId, senderKeyVersion, nonce, ciphertext }, n
     ...nonce,
     ...ciphertext
   ]);
+}
+
+function canonicalizeValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => canonicalizeValue(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const sorted = {};
+  for (const key of Object.keys(value).sort()) {
+    sorted[key] = canonicalizeValue(value[key]);
+  }
+  return sorted;
+}
+
+function canonicalizeJson(value) {
+  return JSON.stringify(canonicalizeValue(value));
+}
+
+function buildPayloadEnvelopeSignBytes(
+  { payloadType, payloadVersion, payloadBody, exportedAt, exportedBySignPK },
+  naclUtil
+) {
+  const signMaterial = {
+    domain: GROUP_PAYLOAD_ENVELOPE_DOMAIN,
+    payloadType,
+    payloadVersion,
+    exportedAt,
+    exportedBySignPK,
+    payload: payloadBody
+  };
+  return naclUtil.decodeUTF8(canonicalizeJson(signMaterial));
+}
+
+export function createSignedGroupPayloadEnvelope(
+  { payloadType, payloadVersion = 1, payloadBody, exportedAt = Date.now(), exportedBySignPK, signerSignSK },
+  nacl,
+  naclUtil
+) {
+  if (!payloadType || !payloadBody || !exportedBySignPK || !signerSignSK) {
+    throw new Error("Invalid signed payload envelope inputs");
+  }
+
+  const signBytes = buildPayloadEnvelopeSignBytes({
+    payloadType,
+    payloadVersion,
+    payloadBody,
+    exportedAt,
+    exportedBySignPK
+  }, naclUtil);
+
+  const signature = nacl.sign.detached(signBytes, signerSignSK);
+
+  return {
+    type: "lifeline-signed-envelope-v1",
+    payloadType,
+    payloadVersion,
+    exportedAt,
+    exportedBySignPK,
+    payload: payloadBody,
+    signature: naclUtil.encodeBase64(signature)
+  };
+}
+
+export function verifySignedGroupPayloadEnvelope(envelope, nacl, naclUtil) {
+  if (!envelope || envelope.type !== "lifeline-signed-envelope-v1") {
+    throw new Error("Signed payload envelope required");
+  }
+
+  const signerSignPK = naclUtil.decodeBase64(envelope.exportedBySignPK);
+  const signature = naclUtil.decodeBase64(envelope.signature);
+  const signBytes = buildPayloadEnvelopeSignBytes({
+    payloadType: envelope.payloadType,
+    payloadVersion: envelope.payloadVersion,
+    payloadBody: envelope.payload,
+    exportedAt: envelope.exportedAt,
+    exportedBySignPK: envelope.exportedBySignPK
+  }, naclUtil);
+
+  if (!nacl.sign.detached.verify(signBytes, signature, signerSignPK)) {
+    throw new Error("Invalid group payload signature");
+  }
+
+  return true;
 }
 
 export function createGroup({ name, createdBy, members = [] }, nacl, naclUtil) {
