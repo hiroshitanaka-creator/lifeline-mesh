@@ -79,6 +79,94 @@ test("createPublicIdentity creates valid identity object", () => {
   if (!id.boxPK) throw new Error("Missing boxPK");
 });
 
+test("createSignedPublicIdentity creates signed envelope", () => {
+  const signKP = DMesh.generateSignKeyPair(nacl);
+  const boxKP = DMesh.generateBoxKeyPair(nacl);
+  const id = DMesh.createSignedPublicIdentity({
+    name: "Alice",
+    signPK: signKP.publicKey,
+    signSK: signKP.secretKey,
+    boxPK: boxKP.publicKey
+  }, nacl, naclUtil);
+
+  if (!id.envelope) throw new Error("Missing envelope");
+  if (id.envelope.kind !== "dmesh-id-signed") throw new Error("Invalid envelope kind");
+});
+
+test("verifyPublicIdentityPayload accepts signed identity", () => {
+  const signKP = DMesh.generateSignKeyPair(nacl);
+  const boxKP = DMesh.generateBoxKeyPair(nacl);
+  const id = DMesh.createSignedPublicIdentity({
+    name: "Alice",
+    signPK: signKP.publicKey,
+    signSK: signKP.secretKey,
+    boxPK: boxKP.publicKey
+  }, nacl, naclUtil);
+
+  const verified = DMesh.verifyPublicIdentityPayload(id, nacl, naclUtil);
+  if (!verified.signed) throw new Error("Expected signed identity verification");
+});
+
+test("verifyPublicIdentityPayload rejects tampered name", () => {
+  const signKP = DMesh.generateSignKeyPair(nacl);
+  const boxKP = DMesh.generateBoxKeyPair(nacl);
+  const id = DMesh.createSignedPublicIdentity({
+    name: "Alice",
+    signPK: signKP.publicKey,
+    signSK: signKP.secretKey,
+    boxPK: boxKP.publicKey
+  }, nacl, naclUtil);
+
+  id.name = "Mallory";
+  let rejected = false;
+  try {
+    DMesh.verifyPublicIdentityPayload(id, nacl, naclUtil);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) throw new Error("Expected tampered name to be rejected");
+});
+
+test("verifyPublicIdentityPayload rejects tampered boxPK", () => {
+  const signKP = DMesh.generateSignKeyPair(nacl);
+  const boxKP = DMesh.generateBoxKeyPair(nacl);
+  const id = DMesh.createSignedPublicIdentity({
+    name: "Alice",
+    signPK: signKP.publicKey,
+    signSK: signKP.secretKey,
+    boxPK: boxKP.publicKey
+  }, nacl, naclUtil);
+  id.boxPK = naclUtil.encodeBase64(DMesh.generateBoxKeyPair(nacl).publicKey);
+
+  let rejected = false;
+  try {
+    DMesh.verifyPublicIdentityPayload(id, nacl, naclUtil);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) throw new Error("Expected tampered boxPK to be rejected");
+});
+
+test("verifyPublicIdentityPayload rejects tampered signPK", () => {
+  const signKP = DMesh.generateSignKeyPair(nacl);
+  const boxKP = DMesh.generateBoxKeyPair(nacl);
+  const id = DMesh.createSignedPublicIdentity({
+    name: "Alice",
+    signPK: signKP.publicKey,
+    signSK: signKP.secretKey,
+    boxPK: boxKP.publicKey
+  }, nacl, naclUtil);
+  id.signPK = naclUtil.encodeBase64(DMesh.generateSignKeyPair(nacl).publicKey);
+
+  let rejected = false;
+  try {
+    DMesh.verifyPublicIdentityPayload(id, nacl, naclUtil);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) throw new Error("Expected tampered signPK to be rejected");
+});
+
 test("encryptMessage creates valid encrypted message", () => {
   const aliceSign = DMesh.generateSignKeyPair(nacl);
   const aliceBox = DMesh.generateBoxKeyPair(nacl);
@@ -519,4 +607,3 @@ console.log(`Failed: ${failed}`);
 if (failed > 0) {
   process.exit(1);
 }
-

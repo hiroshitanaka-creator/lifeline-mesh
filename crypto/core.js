@@ -12,6 +12,7 @@
 // ============================================================================
 
 export const DOMAIN = "DMESH_MSG_V1";
+export const IDENTITY_DOMAIN = "DMESH_ID_V1";
 export const MAX_BYTES = 150 * 1024; // 150 KB
 
 // v1.0 (legacy): Strict timestamp skew
@@ -610,4 +611,145 @@ export function createPublicIdentity({ name, signPK, boxPK }, nacl, naclUtil) {
     signPK: naclUtil.encodeBase64(signPK),
     boxPK: naclUtil.encodeBase64(boxPK)
   };
+}
+
+/**
+ * Build signBytes for signed public identity envelope verification
+ * @param {object} params
+ * @param {string} params.name
+ * @param {Uint8Array} params.fp
+ * @param {Uint8Array} params.signPK
+ * @param {Uint8Array} params.boxPK
+ * @param {object} naclUtil - TweetNaCl-util instance
+ * @returns {Uint8Array}
+ */
+export function buildPublicIdentitySignBytes({ name, fp, signPK, boxPK }, naclUtil) {
+  const domainBytes = naclUtil.decodeUTF8(IDENTITY_DOMAIN);
+  const nameBytes = naclUtil.decodeUTF8(name ?? "");
+  return concatU8([
+    domainBytes,
+    u32be(nameBytes.length),
+    nameBytes,
+    fp,
+    signPK,
+    boxPK
+  ]);
+}
+
+/**
+ * Create signed public identity envelope
+ * @param {object} params
+ * @param {string} params.name - Display name
+ * @param {Uint8Array} params.signPK - Ed25519 public key
+ * @param {Uint8Array} params.signSK - Ed25519 secret key
+ * @param {Uint8Array} params.boxPK - X25519 public key
+ * @param {object} nacl - TweetNaCl instance
+ * @param {object} naclUtil - TweetNaCl-util instance
+ * @returns {object} - Public identity envelope
+ */
+export function createSignedPublicIdentity({ name, signPK, signSK, boxPK }, nacl, naclUtil) {
+  const identity = createPublicIdentity({ name, signPK, boxPK }, nacl, naclUtil);
+  const signBytes = buildPublicIdentitySignBytes({
+    name: identity.name,
+    fp: naclUtil.decodeBase64(identity.fp),
+    signPK,
+    boxPK
+  }, naclUtil);
+  const signature = nacl.sign.detached(signBytes, signSK);
+
+  return {
+    ...identity,
+    envelope: {
+      v: 1,
+      kind: "dmesh-id-signed",
+      alg: "ed25519",
+      signerSignPK: identity.signPK,
+      signature: naclUtil.encodeBase64(signature)
+    }
+  };
+}
+
+/**
+ * Verify a public identity payload (signed envelope preferred, legacy accepted with warning)
+ * @param {object} payload - identity JSON from QR/clipboard/input
+ * @param {object} nacl - TweetNaCl instance
+ * @param {object} naclUtil - TweetNaCl-util instance
+ * @returns {{identity: {name: string, fp: string, signPK: string, boxPK: string}, signed: boolean, warning: string|null}}
+ */
+export function verifyPublicIdentityPayload(payload, nacl, naclUtil) {
+  if (!payload || payload.kind !== "dmesh-id" || !payload.signPK || !payload.boxPK) {
+    throw new Error("Invalid identity payload format");
+  }
+
+  let signPKu8;
+  let boxPKu8;
+  let fpu8;
+  try {
+    signPKu8 = naclUtil.decodeBase64(payload.signPK);
+    boxPKu8 = naclUtil.decodeBase64(payload.boxPK);
+    fpu8 = naclUtil.decodeBase64(payload.fp);
+  } catch {
+    throw new Error("Identity payload has invalid base64 fields");
+  }
+
+  if (signPKu8.length !== nacl.sign.publicKeyLength) {
+    throw new Error("Invalid signPK length");
+  }
+  if (boxPKu8.length !== nacl.box.publicKeyLength) {
+    throw new Error("Invalid boxPK length");
+  }
+  if (fpu8.length !== 16) {
+    throw new Error("Invalid fingerprint length");
+  }
+
+  const expectedFp = fingerprintFromSignPK(signPKu8, nacl);
+  if (naclUtil.encodeBase64(expectedFp) !== payload.fp) {
+    throw new Error("Fingerprint/signPK mismatch");
+  }
+
+  const identity = {
+    name: payload.name || `Contact-${payload.fp.slice(0, 8)}`,
+    fp: payload.fp,
+    signPK: payload.signPK,
+    boxPK: payload.boxPK
+  };
+
+  const envelope = payload.envelope;
+  if (!envelope) {
+    return {
+      identity,
+      signed: false,
+      warning: "Legacy unsigned dmesh-id accepted. Verify safety number out-of-band."
+    };
+  }
+
+  if (envelope.kind !== "dmesh-id-signed" || envelope.v !== 1 || envelope.alg !== "ed25519") {
+    throw new Error("Unsupported identity envelope");
+  }
+  if (envelope.signerSignPK !== payload.signPK) {
+    throw new Error("Identity envelope signer does not match signPK");
+  }
+
+  let signature;
+  try {
+    signature = naclUtil.decodeBase64(envelope.signature);
+  } catch {
+    throw new Error("Identity envelope signature is invalid base64");
+  }
+  if (signature.length !== nacl.sign.signatureLength) {
+    throw new Error("Identity envelope signature length invalid");
+  }
+
+  const signBytes = buildPublicIdentitySignBytes({
+    name: identity.name,
+    fp: fpu8,
+    signPK: signPKu8,
+    boxPK: boxPKu8
+  }, naclUtil);
+  const verified = nacl.sign.detached.verify(signBytes, signature, signPKu8);
+  if (!verified) {
+    throw new Error("Identity envelope signature verification failed");
+  }
+
+  return { identity, signed: true, warning: null };
 }
