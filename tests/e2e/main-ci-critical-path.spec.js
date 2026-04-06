@@ -89,3 +89,27 @@ test("main CI critical path: PWA share-target intake routes encrypted to decrypt
   await expect(page.locator("#status")).toContainText("Ready to encrypt");
   await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("content");
 });
+
+
+test("main CI critical path: offline fallback keeps app-shell share/deeplink intake reachable", async ({ page, context }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "🌐 Lifeline Mesh" })).toBeVisible();
+
+  await page.evaluate(async () => {
+    if (!("serviceWorker" in navigator)) {
+      throw new Error("Service Worker API unavailable in this browser context");
+    }
+    await navigator.serviceWorker.ready;
+  });
+
+  await page.reload();
+
+  await context.setOffline(true);
+
+  await page.goto("/?title=Offline%20Share&text=Need%20water%20now#encrypt");
+  await expect(page.locator("#content")).toHaveValue("Offline Share\nNeed water now");
+  await expect(page.locator("#status")).toContainText("Ready to encrypt");
+
+  await page.goto("/?title=Offline%20Payload&text=%7B%22kind%22%3A%22dmesh-msg%22%7D#decrypt");
+  await expect(page.locator("#input")).toContainText("dmesh-msg");
+});
