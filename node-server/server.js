@@ -16,7 +16,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { FileRelayStore } from "./persistent-relay-store.js";
-import { parseRelayAdminArgs, formatRelayStatus } from "./relay-ops.js";
+import { parseRelayAdminArgs, formatRelayStatus, resolveDiagnosticsEnabled } from "./relay-ops.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +30,13 @@ const RELAY_STORE_PATH = process.env.LIFELINE_RELAY_STORE
   ?? path.resolve(__dirname, "data/relay-store.json");
 
 const relayAdminArgs = parseRelayAdminArgs(process.argv.slice(2));
+
+const diagnosticsEnabled = resolveDiagnosticsEnabled({
+  cliSpecified: relayAdminArgs.diagnosticsSpecified,
+  cliEnabled: relayAdminArgs.diagnosticsEnabled,
+  envValue: process.env.LIFELINE_RELAY_DIAG
+});
+const logger = createScopedLogger({ diagnosticsEnabled });
 
 async function runStoreAdminAction(mode) {
   const relayStore = new FileRelayStore({ filePath: RELAY_STORE_PATH });
@@ -54,16 +61,20 @@ if (relayAdminArgs.mode !== "serve") {
   }
 }
 
+if (relayAdminArgs.manualSmoke) {
+  console.log("[Server] --manual-smoke detected. For interactive harness run: node node-server/manual-smoke.js [--diag]");
+}
+
 const { GATTServer } = await import(`${bluetoothDir}/gatt-server.js`);
 const { BlenoBackend } = await import(`${bluetoothDir}/backends/node-bleno.js`);
 const { SingleClientRelayNode } = await import("./relay-node.js");
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
-const backend = new BlenoBackend();
+const backend = new BlenoBackend({ diagnosticsEnabled, logger });
 const server = new GATTServer({ localName: LOCAL_NAME });
 const relayStore = new FileRelayStore({ filePath: RELAY_STORE_PATH });
-const relayNode = new SingleClientRelayNode({ server, store: relayStore });
+const relayNode = new SingleClientRelayNode({ server, store: relayStore, logger, diagnosticsEnabled });
 
 await relayNode.init();
 
@@ -105,6 +116,9 @@ async function runRelayCleanup(source = "manual") {
 
 console.log(`[Server] Starting Lifeline Mesh peripheral as "${LOCAL_NAME}" ...`);
 console.log(`[Server] Relay store path: ${RELAY_STORE_PATH}`);
+if (diagnosticsEnabled) {
+  console.log("[Server] Relay diagnostics: enabled (LIFELINE_RELAY_DIAG or --relay-diag/--diag)");
+}
 
 try {
   await server.startAdvertising();
@@ -143,4 +157,18 @@ if (relayAdminArgs.signalsEnabled) {
       console.error("[Server] Failed to run relay cleanup:", error?.message ?? error);
     });
   });
+}
+
+
+function createScopedLogger({ diagnosticsEnabled: enabled }) {
+  return {
+    log: (...args) => console.log(...args),
+    warn: (...args) => console.warn(...args),
+    error: (...args) => console.error(...args),
+    debug: (...args) => {
+      if (enabled) {
+        console.log("[RelayDiag]", ...args);
+      }
+    }
+  };
 }
