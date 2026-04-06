@@ -12,6 +12,7 @@
 // ============================================================================
 
 export const DOMAIN = "DMESH_MSG_V1";
+export const IDENTITY_DOMAIN = "DMESH_ID_V1";
 export const MAX_BYTES = 150 * 1024; // 150 KB
 
 // v1.0 (legacy): Strict timestamp skew
@@ -609,5 +610,223 @@ export function createPublicIdentity({ name, signPK, boxPK }, nacl, naclUtil) {
     fp: naclUtil.encodeBase64(fp),
     signPK: naclUtil.encodeBase64(signPK),
     boxPK: naclUtil.encodeBase64(boxPK)
+  };
+}
+
+/**
+ * Build signBytes for signed public identity envelope verification
+ * @param {object} params
+ * @param {string} params.name
+ * @param {Uint8Array} params.fp
+ * @param {Uint8Array} params.signPK
+ * @param {Uint8Array} params.boxPK
+ * @param {object} naclUtil - TweetNaCl-util instance
+ * @returns {Uint8Array}
+ */
+export function buildPublicIdentitySignBytes({ name, fp, signPK, boxPK }, naclUtil) {
+  const domainBytes = naclUtil.decodeUTF8(IDENTITY_DOMAIN);
+  const nameBytes = naclUtil.decodeUTF8(name ?? "");
+  return concatU8([
+    domainBytes,
+    u32be(nameBytes.length),
+    nameBytes,
+    fp,
+    signPK,
+    boxPK
+  ]);
+}
+
+/**
+ * Create signed public identity envelope
+ * @param {object} params
+ * @param {string} params.name - Display name
+ * @param {Uint8Array} params.signPK - Ed25519 public key
+ * @param {Uint8Array} params.signSK - Ed25519 secret key
+ * @param {Uint8Array} params.boxPK - X25519 public key
+ * @param {object} nacl - TweetNaCl instance
+ * @param {object} naclUtil - TweetNaCl-util instance
+ * @returns {object} - Public identity envelope
+ */
+export function createSignedPublicIdentity({ name, signPK, signSK, boxPK }, nacl, naclUtil) {
+  const identity = createPublicIdentity({ name, signPK, boxPK }, nacl, naclUtil);
+  const signBytes = buildPublicIdentitySignBytes({
+    name: identity.name,
+    fp: naclUtil.decodeBase64(identity.fp),
+    signPK,
+    boxPK
+  }, naclUtil);
+  const signature = nacl.sign.detached(signBytes, signSK);
+
+  return {
+    ...identity,
+    envelope: {
+      v: 1,
+      kind: "dmesh-id-signed",
+      alg: "ed25519",
+      signerSignPK: identity.signPK,
+      signature: naclUtil.encodeBase64(signature)
+    }
+  };
+}
+
+/**
+ * Verify a public identity payload (signed envelope preferred, legacy accepted with warning)
+ * @param {object} payload - identity JSON from QR/clipboard/input
+ * @param {object} nacl - TweetNaCl instance
+ * @param {object} naclUtil - TweetNaCl-util instance
+ * @returns {{identity: {name: string, fp: string, signPK: string, boxPK: string}, signed: boolean, warning: string|null}}
+ */
+export function verifyPublicIdentityPayload(payload, nacl, naclUtil) {
+  const normalized = normalizePublicIdentityPayload(payload, nacl, naclUtil);
+
+  let signPKu8;
+  let boxPKu8;
+  try {
+    signPKu8 = naclUtil.decodeBase64(normalized.payload.signPK);
+    boxPKu8 = naclUtil.decodeBase64(normalized.payload.boxPK);
+  } catch {
+    throw new Error("Identity payload has invalid base64 fields");
+  }
+
+  if (signPKu8.length !== nacl.sign.publicKeyLength) {
+    throw new Error("Invalid signPK length");
+  }
+  if (boxPKu8.length !== nacl.box.publicKeyLength) {
+    throw new Error("Invalid boxPK length");
+  }
+  const expectedFp = fingerprintFromSignPK(signPKu8, nacl);
+  const expectedFpB64 = naclUtil.encodeBase64(expectedFp);
+  if (expectedFpB64 !== normalized.payload.fp) {
+    throw new Error("Fingerprint/signPK mismatch");
+  }
+
+  const nameForSignature = normalized.payload.name ?? "";
+  const identity = {
+    name: normalized.payload.name ?? `Contact-${normalized.payload.fp.slice(0, 8)}`,
+    fp: normalized.payload.fp,
+    signPK: normalized.payload.signPK,
+    boxPK: normalized.payload.boxPK
+  };
+
+  const envelope = normalized.payload.envelope;
+  if (!envelope) {
+    return {
+      identity,
+      signed: false,
+      warning: normalized.warning
+    };
+  }
+
+  if (envelope.kind !== "dmesh-id-signed" || envelope.v !== 1 || envelope.alg !== "ed25519") {
+    throw new Error("Unsupported identity envelope");
+  }
+  if (envelope.signerSignPK !== normalized.payload.signPK) {
+    throw new Error("Identity envelope signer does not match signPK");
+  }
+
+  let signature;
+  try {
+    signature = naclUtil.decodeBase64(envelope.signature);
+  } catch {
+    throw new Error("Identity envelope signature is invalid base64");
+  }
+  if (signature.length !== nacl.sign.signatureLength) {
+    throw new Error("Identity envelope signature length invalid");
+  }
+
+  const signBytes = buildPublicIdentitySignBytes({
+    name: nameForSignature,
+    fp: expectedFp,
+    signPK: signPKu8,
+    boxPK: boxPKu8
+  }, naclUtil);
+  const verified = nacl.sign.detached.verify(signBytes, signature, signPKu8);
+  if (!verified) {
+    throw new Error("Identity envelope signature verification failed");
+  }
+
+  return { identity, signed: true, warning: null };
+}
+
+/**
+ * Normalize accepted identity payload variants to canonical dmesh-id shape.
+ * Accepted inputs:
+ *   1) signed dmesh-id
+ *   2) unsigned legacy dmesh-id
+ *   3) raw sender-only contact JSON ({ name?, signPK, boxPK })
+ * @param {object} payload
+ * @param {object} nacl
+ * @param {object} naclUtil
+ * @returns {{payload: {v:number, kind:string, name?:string, fp:string, signPK:string, boxPK:string, envelope?:object}, warning: string|null}}
+ */
+export function normalizePublicIdentityPayload(payload, nacl, naclUtil) {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid identity payload format");
+  }
+  if (!payload.signPK || !payload.boxPK) {
+    throw new Error("Invalid identity payload format");
+  }
+
+  let signPKu8;
+  try {
+    signPKu8 = naclUtil.decodeBase64(payload.signPK);
+  } catch {
+    throw new Error("Identity payload has invalid base64 fields");
+  }
+  if (signPKu8.length !== nacl.sign.publicKeyLength) {
+    throw new Error("Invalid signPK length");
+  }
+
+  const computedFp = naclUtil.encodeBase64(fingerprintFromSignPK(signPKu8, nacl));
+  const isDmeshId = payload.kind === "dmesh-id";
+  const fp = payload.fp ?? computedFp;
+
+  if (payload.fp && payload.fp !== computedFp) {
+    throw new Error("Fingerprint/signPK mismatch");
+  }
+
+  if (!isDmeshId && payload.kind !== undefined) {
+    throw new Error("Invalid identity payload format");
+  }
+
+  if (!isDmeshId) {
+    return {
+      payload: {
+        v: 1,
+        kind: "dmesh-id",
+        name: payload.name,
+        fp,
+        signPK: payload.signPK,
+        boxPK: payload.boxPK
+      },
+      warning: "Legacy sender-only contact accepted (unsigned). Verify safety number out-of-band."
+    };
+  }
+
+  if (!payload.envelope) {
+    return {
+      payload: {
+        v: payload.v ?? 1,
+        kind: "dmesh-id",
+        name: payload.name,
+        fp,
+        signPK: payload.signPK,
+        boxPK: payload.boxPK
+      },
+      warning: "Legacy unsigned dmesh-id accepted. Verify safety number out-of-band."
+    };
+  }
+
+  return {
+    payload: {
+      v: payload.v ?? 1,
+      kind: "dmesh-id",
+      name: payload.name,
+      fp,
+      signPK: payload.signPK,
+      boxPK: payload.boxPK,
+      envelope: payload.envelope
+    },
+    warning: null
   };
 }

@@ -1371,15 +1371,20 @@ async function ensureMyKeys() {
   };
 }
 
+async function buildMySignedIdentityPayload() {
+  const my = await ensureMyKeys();
+  return DMesh.createSignedPublicIdentity({
+    name: "(optional)",
+    signPK: my.signPKu8,
+    signSK: my.signSKu8,
+    boxPK: my.boxPKu8
+  }, nacl, naclUtil);
+}
+
 window.initOrLoad = async function() {
   setActionBusy('initOrLoad', true, '🔑 Preparing...');
   try {
-    const my = await ensureMyKeys();
-    const myId = DMesh.createPublicIdentity({
-      name: "(optional)",
-      signPK: my.signPKu8,
-      boxPK: my.boxPKu8
-    }, nacl, naclUtil);
+    const myId = await buildMySignedIdentityPayload();
 
     document.getElementById("my-id").textContent = JSON.stringify(myId, null, 2);
     meshRuntime?.setLocalPeerId(myId.fp);
@@ -1396,10 +1401,11 @@ window.initOrLoad = async function() {
 };
 
 window.copyMyId = async function() {
-  const idText = document.getElementById("my-id").textContent;
-  if (!idText || !idText.trim().startsWith('{')) return alert("Generate keys first");
+  const myId = await buildMySignedIdentityPayload();
+  const idText = JSON.stringify(myId, null, 2);
+  document.getElementById("my-id").textContent = idText;
   await navigator.clipboard.writeText(idText);
-  setStatus(true, "Public ID copied to clipboard");
+  setStatus(true, "Signed public ID copied to clipboard");
 };
 
 window.exportKeys = async function() {
@@ -1588,32 +1594,25 @@ document.addEventListener("keydown", (event) => {
 window.addContact = async function() {
   try {
     const obj = JSON.parse(/** @type {HTMLInputElement} */ (document.getElementById("contact-input")).value.trim());
-
-    if (!obj || !obj.signPK || !obj.boxPK) {
-      return alert("Invalid format. Need: signPK and boxPK");
-    }
-
-    const signPKu8 = naclUtil.decodeBase64(obj.signPK);
-    const boxPKu8 = naclUtil.decodeBase64(obj.boxPK);
-
-    if (signPKu8.length !== 32) return alert("Invalid signPK length");
-    if (boxPKu8.length !== 32) return alert("Invalid boxPK length");
-
-    const fp = DMesh.fingerprintFromSignPK(signPKu8, nacl);
-    const fpB64 = naclUtil.encodeBase64(fp);
+    const verification = DMesh.verifyPublicIdentityPayload(obj, nacl, naclUtil);
+    const fpB64 = verification.identity.fp;
 
     const contact = {
       fp: fpB64,
-      name: obj.name || `Contact-${fpB64.slice(0, 8)}`,
-      signPK: obj.signPK,
-      boxPK: obj.boxPK,
+      name: verification.identity.name,
+      signPK: verification.identity.signPK,
+      boxPK: verification.identity.boxPK,
       addedAt: Date.now(),
       verified: VERIFICATION_STATUS.UNVERIFIED
     };
 
     await saveContact(contact);
     await window.refreshContacts();
-    setStatus(true, `Contact saved: ${contact.name} (fp: ${fpB64.slice(0, 16)}...)`);
+    if (verification.signed) {
+      setStatus(true, `Contact saved: ${contact.name} (fp: ${fpB64.slice(0, 16)}...) • signed identity verified`);
+    } else {
+      setStatus(false, `Contact saved with WARNING: ${contact.name} (fp: ${fpB64.slice(0, 16)}...) • ${verification.warning}`);
+    }
   } catch (e) {
     setStatus(false, "Add contact failed: " + (e instanceof Error ? e.message : String(e)));
   }
@@ -2214,10 +2213,9 @@ window.decryptMsg = async function() {
   QR Code Functions
 ========================= */
 window.showQRCode = async function() {
-  const idText = document.getElementById("my-id").textContent;
-  if (!idText || !idText.trim().startsWith('{')) {
-    return alert("Generate keys first");
-  }
+  const myId = await buildMySignedIdentityPayload();
+  const idText = JSON.stringify(myId, null, 2);
+  document.getElementById("my-id").textContent = idText;
 
   // Clear previous QR code
   const qrContainer = document.getElementById("qr-code");
