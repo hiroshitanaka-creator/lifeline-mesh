@@ -6,13 +6,17 @@ import { fileURLToPath } from "url";
 
 import { GATTServer } from "../bluetooth/gatt-server.js";
 import { FileRelayStore } from "./persistent-relay-store.js";
-import { parseRelayAdminArgs, formatRelayStatus } from "./relay-ops.js";
+import { parseRelayAdminArgs, formatRelayStatus, resolveDiagnosticsEnabled } from "./relay-ops.js";
 import { SingleClientRelayNode } from "./relay-node.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const args = parseRelayAdminArgs(process.argv.slice(2));
-const diagnosticsEnabled = args.diagnosticsEnabled || parseEnvBool(process.env.LIFELINE_RELAY_DIAG);
+const diagnosticsEnabled = resolveDiagnosticsEnabled({
+  cliSpecified: args.diagnosticsSpecified,
+  cliEnabled: args.diagnosticsEnabled,
+  envValue: process.env.LIFELINE_RELAY_DIAG
+});
 const localName = process.env.LIFELINE_NAME ?? "LifelineMesh";
 const relayStorePath = process.env.LIFELINE_RELAY_STORE
   ?? path.resolve(__dirname, "data/relay-store.json");
@@ -175,10 +179,6 @@ async function shutdown(reason) {
   process.exit(0);
 }
 
-function parseEnvBool(value) {
-  if (!value) return false;
-  return ["1", "true", "yes", "on", "debug", "verbose"].includes(String(value).trim().toLowerCase());
-}
 
 function printHelp() {
   console.log(`

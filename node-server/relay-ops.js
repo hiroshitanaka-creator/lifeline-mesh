@@ -10,10 +10,12 @@ export function parseRelayAdminArgs(argv = []) {
     ?? readOptionValue(args, "--diag");
 
   const manualSmoke = args.includes("--manual-smoke");
+  const diagnosticsSpecified = diagSource !== null;
 
   return {
     mode,
     signalsEnabled: !signalsDisabled,
+    diagnosticsSpecified,
     diagnosticsEnabled: parseBooleanFlag(diagSource, false),
     manualSmoke
   };
@@ -28,6 +30,18 @@ export function formatRelayStatus(snapshot, context = {}) {
     },
     status: snapshot
   };
+}
+
+export function resolveDiagnosticsEnabled({ cliSpecified = false, cliEnabled = false, envValue = null } = {}) {
+  if (cliSpecified) {
+    return cliEnabled;
+  }
+
+  const envEnabled = parseBooleanFlag(envValue, null);
+  if (envEnabled === null) {
+    return false;
+  }
+  return envEnabled;
 }
 
 function readOptionValue(args, key) {

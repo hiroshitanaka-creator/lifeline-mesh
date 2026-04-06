@@ -16,7 +16,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { FileRelayStore } from "./persistent-relay-store.js";
-import { parseRelayAdminArgs, formatRelayStatus } from "./relay-ops.js";
+import { parseRelayAdminArgs, formatRelayStatus, resolveDiagnosticsEnabled } from "./relay-ops.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,7 +31,11 @@ const RELAY_STORE_PATH = process.env.LIFELINE_RELAY_STORE
 
 const relayAdminArgs = parseRelayAdminArgs(process.argv.slice(2));
 
-const diagnosticsEnabled = relayAdminArgs.diagnosticsEnabled || parseEnvBool(process.env.LIFELINE_RELAY_DIAG);
+const diagnosticsEnabled = resolveDiagnosticsEnabled({
+  cliSpecified: relayAdminArgs.diagnosticsSpecified,
+  cliEnabled: relayAdminArgs.diagnosticsEnabled,
+  envValue: process.env.LIFELINE_RELAY_DIAG
+});
 const logger = createScopedLogger({ diagnosticsEnabled });
 
 async function runStoreAdminAction(mode) {
@@ -155,10 +159,6 @@ if (relayAdminArgs.signalsEnabled) {
   });
 }
 
-function parseEnvBool(value) {
-  if (!value) return false;
-  return ["1", "true", "yes", "on", "debug", "verbose"].includes(String(value).trim().toLowerCase());
-}
 
 function createScopedLogger({ diagnosticsEnabled: enabled }) {
   return {

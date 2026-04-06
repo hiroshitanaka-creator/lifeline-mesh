@@ -1,4 +1,4 @@
-import { parseRelayAdminArgs, formatRelayStatus } from "../../node-server/relay-ops.js";
+import { parseRelayAdminArgs, formatRelayStatus, resolveDiagnosticsEnabled } from "../../node-server/relay-ops.js";
 
 const tests = [];
 
@@ -37,20 +37,86 @@ test("relay ops: status output includes source and timestamp context", () => {
   assert(formatted.status.store.pendingCount === 1, "status payload should remain intact");
 });
 
-
 test("relay ops: diagnostics flag parses true values", () => {
   const parsed = parseRelayAdminArgs(["--relay-diag=true"]);
+  assert(parsed.diagnosticsSpecified === true, "diagnostics should be marked as specified");
   assert(parsed.diagnosticsEnabled === true, "diagnostics should be enabled");
 });
 
 test("relay ops: diagnostics flag parses false values", () => {
   const parsed = parseRelayAdminArgs(["--diag", "off"]);
+  assert(parsed.diagnosticsSpecified === true, "diagnostics should be marked as specified");
   assert(parsed.diagnosticsEnabled === false, "diagnostics should be disabled");
+});
+
+test("relay ops: diagnostics is unspecified without cli flag", () => {
+  const parsed = parseRelayAdminArgs([]);
+  assert(parsed.diagnosticsSpecified === false, "diagnostics should be unspecified");
+  assert(parsed.diagnosticsEnabled === false, "diagnostics defaults to false");
 });
 
 test("relay ops: manual smoke mode flag is exposed", () => {
   const parsed = parseRelayAdminArgs(["--manual-smoke"]);
   assert(parsed.manualSmoke === true, "manual smoke flag should be true");
+});
+
+test("relay ops: resolve diagnostics false when cli/env are unspecified", () => {
+  const enabled = resolveDiagnosticsEnabled({
+    cliSpecified: false,
+    cliEnabled: false,
+    envValue: undefined
+  });
+  assert(enabled === false, "unspecified diagnostics should default to false");
+});
+
+test("relay ops: resolve diagnostics true for cli --diag", () => {
+  const parsed = parseRelayAdminArgs(["--diag"]);
+  const enabled = resolveDiagnosticsEnabled({
+    cliSpecified: parsed.diagnosticsSpecified,
+    cliEnabled: parsed.diagnosticsEnabled,
+    envValue: undefined
+  });
+  assert(enabled === true, "--diag should resolve true");
+});
+
+test("relay ops: cli false wins over env true", () => {
+  const parsed = parseRelayAdminArgs(["--diag", "off"]);
+  const enabled = resolveDiagnosticsEnabled({
+    cliSpecified: parsed.diagnosticsSpecified,
+    cliEnabled: parsed.diagnosticsEnabled,
+    envValue: "1"
+  });
+  assert(enabled === false, "cli false must override env true");
+});
+
+test("relay ops: cli true wins over env false", () => {
+  const parsed = parseRelayAdminArgs(["--relay-diag=true"]);
+  const enabled = resolveDiagnosticsEnabled({
+    cliSpecified: parsed.diagnosticsSpecified,
+    cliEnabled: parsed.diagnosticsEnabled,
+    envValue: "false"
+  });
+  assert(enabled === true, "cli true must override env false");
+});
+
+test("relay ops: env true applies when cli is unspecified", () => {
+  const parsed = parseRelayAdminArgs([]);
+  const enabled = resolveDiagnosticsEnabled({
+    cliSpecified: parsed.diagnosticsSpecified,
+    cliEnabled: parsed.diagnosticsEnabled,
+    envValue: "true"
+  });
+  assert(enabled === true, "env true should enable diagnostics when cli is unspecified");
+});
+
+test("relay ops: env false applies when cli is unspecified", () => {
+  const parsed = parseRelayAdminArgs([]);
+  const enabled = resolveDiagnosticsEnabled({
+    cliSpecified: parsed.diagnosticsSpecified,
+    cliEnabled: parsed.diagnosticsEnabled,
+    envValue: "off"
+  });
+  assert(enabled === false, "env false should disable diagnostics when cli is unspecified");
 });
 
 (async () => {
