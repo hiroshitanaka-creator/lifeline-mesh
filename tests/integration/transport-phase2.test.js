@@ -9,6 +9,7 @@ import {
   encodeTransportEnvelope,
   decodeTransportEnvelope
 } from "../../transport/index.js";
+import { CHARACTERISTICS, MSG_TYPE } from "../../bluetooth/constants.js";
 
 const tests = [];
 
@@ -20,6 +21,15 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(`Assertion failed: ${message}`);
   }
+}
+
+function makeAckPacket(transferId) {
+  const payload = new TextEncoder().encode(transferId);
+  const header = new Uint8Array([MSG_TYPE.ACK, 0, 1, 0]);
+  const packet = new Uint8Array(header.length + payload.length);
+  packet.set(header, 0);
+  packet.set(payload, header.length);
+  return packet;
 }
 
 class FakeBleManager {
@@ -68,7 +78,10 @@ test("transport boundary: node peripheral adapter works with GATT mock backend",
   await link.server.startAdvertising();
   backend.simulateClientConnect("client-1");
 
-  await link.send({ kind: "dmesh-msg", msgId: "tx-1", payload: "hello" });
+  const sendPromise = link.send({ kind: "dmesh-msg", msgId: "tx-1", payload: "hello" });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  backend.simulateWrite("client-1", CHARACTERISTICS.MESSAGE_TX, makeAckPacket("tx-1"));
+  await sendPromise;
   const metrics = link.linkMetrics();
 
   assert(metrics.sent === 1, "send tracked");
