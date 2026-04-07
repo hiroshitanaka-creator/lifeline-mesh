@@ -1,44 +1,34 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 
-const phaseArg = process.argv.find((arg) => arg.startsWith("--phase="));
-const phase = phaseArg ? phaseArg.split("=")[1].toUpperCase() : "A";
+const seriesGate = [
+  {
+    name: "implementation-series-status",
+    command:
+      "node -e \"import fs from 'node:fs'; const t=fs.readFileSync('docs/IMPLEMENTATION_SERIES_STATUS.md','utf8'); const expected=[1,2,3,4,5].map((n)=>'Phase '+n+' is **complete**'); if(expected.some((line)=>!t.includes(line))) process.exit(1); const idx=expected.map((line)=>t.indexOf(line)); if(idx.some((n)=>n===-1)||idx.some((n,i)=>i>0&&n<=idx[i-1])) process.exit(1);\""
+  },
+  { name: "lint", command: "npm run lint" },
+  { name: "typecheck", command: "npm run typecheck" },
+  { name: "unit", command: "npm run test:unit" },
+  { name: "integration", command: "npm run test:integration" }
+];
 
-const phaseCommands = {
-  A: ["npm run test:integration", "npm run test:e2e"],
-  B: ["npm run test:unit", "npm run lint"],
-  C: ["npm run test:vectors", "npm run test:integration"],
-  D: ["npm run lint", "npm run typecheck"],
-  E: ["npm run validate"]
-};
+console.log("\n[Series Gate] Verifying implementation-series maintenance truth (Phases 1-5 complete)\n");
 
-if (!phaseCommands[phase]) {
-  console.error(`Unsupported phase: ${phase}. Use A, B, C, D, or E.`);
-  process.exit(2);
-}
-
-console.log(`\n[Phase Gate] Checking phase ${phase}\n`);
-
-let failed = false;
-for (const cmd of phaseCommands[phase]) {
-  console.log(`▶ ${cmd}`);
-  const result = spawnSync(cmd, {
+for (const step of seriesGate) {
+  console.log(`▶ ${step.name}: ${step.command}`);
+  const result = spawnSync(step.command, {
     shell: true,
     stdio: "inherit",
     env: process.env
   });
 
   if (result.status !== 0) {
-    failed = true;
-    console.error(`✗ Failed: ${cmd}`);
-    break;
+    console.error(`✗ Failed: ${step.name}`);
+    process.exit(1);
   }
 
-  console.log(`✓ Passed: ${cmd}\n`);
+  console.log(`✓ Passed: ${step.name}\n`);
 }
 
-if (failed) {
-  process.exit(1);
-}
-
-console.log(`[Phase Gate] Phase ${phase} PASSED`);
+console.log("[Series Gate] PASSED");

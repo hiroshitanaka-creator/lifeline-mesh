@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-227%2F227%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -128,28 +128,15 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ## 🔬 Testing
 
-All tests passing: **227/227 ✓**
+Validation gate status: **passing (see commands below) ✓**
 
-| Suite | Count | Command |
-|---|---|---|
-| Crypto core unit | 22 | `npm run test:crypto` |
-| Test vectors | 27 | `npm run test:vectors` |
-| BLE + transport integration | 24 | `npm run test:integration` |
-| Group messaging integration | 11 | `npm run test:integration` |
-| Contact verification integration | 7 | `npm run test:integration` |
-| Store maintenance integration | 1 | `npm run test:integration` |
-| Mesh router Phase 1 integration | 14 | `npm run test:integration` |
-| BLE mesh relay integration | 6 | `npm run test:integration` |
-| Mesh router Phase 2 integration | 27 | `npm run test:integration` |
-| App runtime mesh integration | 12 | `npm run test:integration` |
-| GATT server integration | 19 | `npm run test:integration` |
-| Node-server relay integration | 7 | `npm run test:integration` |
-| Node-server relay ops integration | 14 | `npm run test:integration` |
-| Share-target intake routing integration | 4 | `npm run test:integration` |
-| Operator panel unit | 21 | `npm run test:integration` |
-| DB migration integration | 1 | `npm run test:integration` |
-| Transport Phase 2 boundary integration | 7 | `npm run test:integration` |
-| **Total** | **227** | `npm run test:unit && npm run test:integration` |
+| Validation Gate | Command |
+|---|---|
+| Lint | `npm run lint` |
+| Typecheck | `npm run typecheck` |
+| Unit (crypto + vectors) | `npm run test:unit` |
+| Integration | `npm run test:integration` |
+| Local aggregate | `npm run validate` |
 
 ```bash
 # Run everything
@@ -301,7 +288,7 @@ The workflow runs `npm install --prefix app && npm run build --prefix app` and d
 
 ### Production Checklist
 - [x] SRI added to all CDN scripts
-- [x] All tests passing (217/217)
+- [x] Validation gates passing (`npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:integration`)
 - [x] Documentation complete
 - [ ] Consider self-hosting TweetNaCl (avoid CDN dependency)
 - [x] Add Content Security Policy headers
@@ -342,7 +329,7 @@ npm run generate-sri
 ### Technology Stack
 - **Languages**: JavaScript (ES6 modules), TypeScript (declaration files in `types/`)
 - **Crypto**: TweetNaCl 1.0.3 + tweetnacl-util + argon2 (key backup)
-- **Storage**: IndexedDB schema v4 (priority, TTL, linkId fields) via `crypto/store.js`
+- **Storage**: IndexedDB schema v5 via `crypto/store.js` (includes outbox priority/TTL/link targeting fields and append-only `eventLog`)
 - **Build**: Vite (app/), no build needed for crypto/tools
 
 ---
@@ -382,14 +369,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 **Current Version**: 0.1.0 (v0.1.0 release gate passed; prototype quality)
 
 ### Implemented ✅
-- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), 217/217 tests passing
+- Core crypto (Ed25519 + X25519-XSalsa20-Poly1305), covered by unit + vector + integration gates
 - Key management: generate, export/import (Argon2id/PBKDF2 password-protected backup)
 - Transport layer: Clipboard, QR, File, BLE (via TransportManager abstraction)
 - **Multi-link BLE runtime**: concurrent links via `Map<peerId, BLEManager>`, egress relay loop, route-adv broadcast
 - **MeshRouter Phase 1 + Phase 2**: 1-hop relay with dedup; N-hop proactive routing with route advertisements (auto-enabled at ≥2 links)
 - **GATT server layer**: `bluetooth/gatt-server.js` with pluggable `IGATTBackend` + `MockGATTBackend` for unit testing
 - **Operator Panel**: live mesh monitoring UI (`app/src/operator-panel.js`), mounted in app with 2 s polling
-- **Outbox schema v4**: `priority` / `ttl` / `linkId` fields, IDB migration, `getOutboxForLink()` / `getOutboxByMinPriority()` / `purgeExpiredOutbox()`
+- **Store schema v5**: outbox `priority`/`ttl`/`linkId` support plus append-only `eventLog` for sync/maintenance paths
 - **TypeScript declarations**: `types/runtime-mesh.d.ts`, `types/operator-panel.d.ts`, `types/gatt-server.d.ts`, `types/app-globals.d.ts`
 - **Contact verification workflow**: safety-number display, verify / mark-compromised per contact, encryption blocked for compromised recipients
 - **Node.js relay server** (`node-server/`): persistent single-client relay with durable store; 5/5 integration tests

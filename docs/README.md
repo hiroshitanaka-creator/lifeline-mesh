@@ -43,11 +43,9 @@ Task kickoff template (Japanese) covering:
 - Communication checkpoints and timeline guardrails
 
 ### [PHASE_A_TO_E_EXECUTION_JA.md](./PHASE_A_TO_E_EXECUTION_JA.md)
-Execution checklist for Phase A-E (Japanese) covering:
-- Definition of Done per phase
-- Required verification commands
-- Phase gate execution rules
-- Completion log template
+Legacy execution checklist for older A-E planning (Japanese).
+- Historical reference only (non-authoritative)
+- Superseded for completion evidence by `docs/IMPLEMENTATION_SERIES_STATUS.md` and `docs/REPO_TRUTH_AUDIT.md`
 
 
 ### [ISSUE_SYNC_REPORT.md](./ISSUE_SYNC_REPORT.md)
