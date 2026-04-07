@@ -35,9 +35,9 @@ import {
   cleanupOldChunks,
   clearPendingChunks,
   DELIVERY_STATUS,
-  OUTBOX_PRIORITY,
-  OUTBOX_RETRY_INTERVAL_MS
+  OUTBOX_PRIORITY
 } from "../crypto/store.js";
+import { TRANSPORT_CLASS, getRetryPolicy } from "../transport/retry-policy.js";
 
 /**
  * BLE Manager for Lifeline Mesh
@@ -49,7 +49,8 @@ export class BLEManager {
       protocolConfig = {},
       store = BLEManager.createStoreAdapter(),
       transportManager = null,
-      router = null
+      router = null,
+      transportClass = TRANSPORT_CLASS.BLE_INTERACTIVE
     } = options;
 
     this.device = null;
@@ -87,6 +88,8 @@ export class BLEManager {
     this.io = io;
     this.store = store;
     this.transportManager = transportManager;
+    this.transportClass = transportClass;
+    this.retryPolicy = getRetryPolicy(this.transportClass);
     this.protocolConfig = this._buildProtocolConfig(protocolConfig);
 
     /**
@@ -839,7 +842,7 @@ export class BLEManager {
       this.flushOutbox().catch((error) => {
         console.warn("[BLE] Background outbox flush failed", error instanceof Error ? error.message : String(error));
       });
-    }, OUTBOX_RETRY_INTERVAL_MS);
+    }, this.retryPolicy.outboxRetryIntervalMs);
   }
 
   _stopOutboxRetryLoop() {
@@ -908,9 +911,9 @@ export class BLEManager {
       mtu,
       packetHeaderSize,
       chunkSize,
-      ackTimeoutMs: Math.max(100, overrides.ackTimeoutMs ?? CONFIG.ACK_TIMEOUT_MS),
-      retryCount: Math.max(1, overrides.retryCount ?? CONFIG.RETRY_COUNT),
-      retryDelayMs: Math.max(0, overrides.retryDelayMs ?? CONFIG.RETRY_DELAY_MS),
+      ackTimeoutMs: Math.max(100, overrides.ackTimeoutMs ?? this.retryPolicy.ackTimeoutMs ?? CONFIG.ACK_TIMEOUT_MS),
+      retryCount: Math.max(1, overrides.retryCount ?? this.retryPolicy.retryCount ?? CONFIG.RETRY_COUNT),
+      retryDelayMs: Math.max(0, overrides.retryDelayMs ?? this.retryPolicy.retryDelayMs ?? CONFIG.RETRY_DELAY_MS),
       chunkDelayMs: Math.max(0, overrides.chunkDelayMs ?? CONFIG.CHUNK_DELAY_MS),
       reassemblyTimeoutMs: Math.max(1000, overrides.reassemblyTimeoutMs ?? CONFIG.REASSEMBLY_TIMEOUT_MS)
     };
@@ -930,12 +933,12 @@ export class BLEManager {
     if (entry.status === DELIVERY_STATUS.FAILED) {
       const lastAttempt = entry.lastAttempt || entry.createdAt || 0;
       const elapsedMs = Date.now() - lastAttempt;
-      if (elapsedMs < OUTBOX_RETRY_INTERVAL_MS) {
+      if (elapsedMs < this.retryPolicy.outboxRetryIntervalMs) {
         return {
           shouldSend: false,
           reason: "retry-cooldown",
-          nextRetryAt: lastAttempt + OUTBOX_RETRY_INTERVAL_MS,
-          remainingMs: OUTBOX_RETRY_INTERVAL_MS - elapsedMs
+          nextRetryAt: lastAttempt + this.retryPolicy.outboxRetryIntervalMs,
+          remainingMs: this.retryPolicy.outboxRetryIntervalMs - elapsedMs
         };
       }
     }

@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-217%2F217%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-224%2F224%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -76,6 +76,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 ### BLE Mesh Networking
 - 📡 **Multi-link runtime**: multiple concurrent BLE connections with real store-and-forward relay
 - 🔀 **N-hop routing**: MeshRouter Phase 2 proactive route advertisements (auto-enabled at ≥2 links)
+- 🧩 **Transport boundary (`transport/`)** with `TransportLink` adapters for browser-central BLE, Node peripheral reference path, and native peripheral contract stubs
 - 📤 Outbox queuing (priority / TTL / per-link targeting) with automatic flush on reconnect
 - 📥 Inbox persistence for received messages
 - 🔌 **GATT server layer** (`bluetooth/gatt-server.js`): pluggable `IGATTBackend` interface ready for native adapters (Capacitor, noble)
@@ -104,6 +105,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - **[FAQ](docs/FAQ.md)** - 30+ questions about security, features, and usage
 - **[Web Bluetooth Support](docs/WEB_BLUETOOTH_SUPPORT.md)** - Browser/platform compatibility and fallback guidance
 - **[BLE Manual Validation Runbook](docs/BLE_MANUAL_VALIDATION_RUNBOOK.md)** - Hardware test matrix and repeatable contributor checks
+- **[A↔B↔C Relay Drill](docs/RELAY_DRILL_AB_C.md)** - Unified interop drill for browser-central ↔ Node-peripheral path
 
 ### For Developers
 - **[Protocol Specification](spec/PROTOCOL.md)** - Current protocol specification (with vnext cross-link)
@@ -121,7 +123,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ## 🔬 Testing
 
-All tests passing: **217/217 ✓**
+All tests passing: **224/224 ✓**
 
 | Suite | Count | Command |
 |---|---|---|
@@ -141,7 +143,8 @@ All tests passing: **217/217 ✓**
 | Share-target intake routing integration | 4 | `npm run test:integration` |
 | Operator panel unit | 21 | `npm run test:integration` |
 | DB migration integration | 1 | `npm run test:integration` |
-| **Total** | **217** | `npm run test:unit && npm run test:integration` |
+| Transport Phase 2 boundary integration | 7 | `npm run test:integration` |
+| **Total** | **224** | `npm run test:unit && npm run test:integration` |
 
 ```bash
 # Run everything
@@ -182,6 +185,7 @@ CI note:
   ble-manager.js      BLE central/client with store-and-forward
   mesh-router.js      Phase 1 (1-hop dedup) + Phase 2 (N-hop route adv)
   gatt-server.js      GATT peripheral layer with pluggable IGATTBackend
+/transport      Phase 2 transport-link adapters + retry policy + envelope strategy
 /crypto         Core crypto, group messaging, transport, store (schema v4)
 /node-server    Node.js relay server (persistent single-client relay mode)
   relay-node.js             Relay session manager
