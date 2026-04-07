@@ -662,3 +662,6 @@ Group messaging uses a SenderKey ratchet per `(groupId, senderSignPK)`.
 - **Browser-side BLE peripheral mode** is still unavailable (Web Bluetooth central/client limitations).
   Peripheral relay mode is currently provided by Node runtime (`bluetooth/gatt-server.js` +
   `bluetooth/backends/node-bleno.js` + `node-server/server.js`).
+
+
+Phase 2 transport boundary note: the signed canonical envelope remains immutable; transport adapters may use a compact representation for constrained links and must decode back to the canonical object before verification/processing.
