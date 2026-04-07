@@ -122,6 +122,7 @@ export function createMeshRuntime(localPeerId = "unknown") {
    */
   async function _broadcastRouteAdv() {
     if (links.size === 0) return;
+    router.cleanup();
     const adv = router.createRouteAdv();
     state.routeAdvBroadcasts += 1;
     for (const { manager } of links.values()) {
@@ -251,6 +252,7 @@ export function createMeshRuntime(localPeerId = "unknown") {
      * @returns {Promise<object>} Relay result descriptor.
      */
     async onForward({ message, ingressPeerId }) {
+      router.cleanup();
       state.relayAttempts += 1;
 
       // ── Route advertisement handling ─────────────────────────────────────

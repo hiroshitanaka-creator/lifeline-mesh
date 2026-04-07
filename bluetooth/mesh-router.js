@@ -58,7 +58,16 @@ export const ROUTING_DEFAULTS = {
   SEQ_WINDOW: 64,
 
   /** How long (ms) to remember a seen route-advertisement transferId. */
-  ADV_SEEN_TTL_MS: 30 * 1000
+  ADV_SEEN_TTL_MS: 30 * 1000,
+
+  /** Maximum number of route entries accepted from a single advertisement. */
+  MAX_ADVERTISED_ROUTES: 128,
+
+  /** Maximum number of total entries kept in the route table. */
+  MAX_ROUTE_TABLE_ENTRIES: 1024,
+
+  /** Minimum interval between opportunistic cleanup runs during normal operation. */
+  CLEANUP_INTERVAL_MS: 5 * 1000
 };
 
 // ---------------------------------------------------------------------------
@@ -75,6 +84,9 @@ export const ROUTING_DEFAULTS = {
 function deriveTransferId(message) {
   if (!message || typeof message !== "object") {
     return `anonymous-${Date.now()}`;
+  }
+  if (message.kind === ROUTE_ADV_KIND && message.src && typeof message.seq === "number") {
+    return `${ROUTE_ADV_KIND}:${message.src}:${message.seq}`;
   }
   return message.msgId || `${message.kind || "msg"}:${message.ts || Date.now()}`;
 }
@@ -152,6 +164,9 @@ export class MeshRouter {
     this.maxRouteHops = options.maxRouteHops ?? ROUTING_DEFAULTS.MAX_ROUTE_HOPS;
     this.seqWindow = options.seqWindow ?? ROUTING_DEFAULTS.SEQ_WINDOW;
     this.advSeenTtlMs = options.advSeenTtlMs ?? ROUTING_DEFAULTS.ADV_SEEN_TTL_MS;
+    this.maxAdvertisedRoutes = options.maxAdvertisedRoutes ?? ROUTING_DEFAULTS.MAX_ADVERTISED_ROUTES;
+    this.maxRouteTableEntries = options.maxRouteTableEntries ?? ROUTING_DEFAULTS.MAX_ROUTE_TABLE_ENTRIES;
+    this.cleanupIntervalMs = options.cleanupIntervalMs ?? ROUTING_DEFAULTS.CLEANUP_INTERVAL_MS;
 
     // Phase 1: seen-message map for data deduplication.
     /** @type {Map<string, number>} transferId → timestamp */
@@ -190,6 +205,7 @@ export class MeshRouter {
      * @type {number}
      */
     this._localSeq = 0;
+    this._lastCleanupAt = 0;
   }
 
   // ─── Phase 1 API ──────────────────────────────────────────────────────────
@@ -202,6 +218,8 @@ export class MeshRouter {
    * @returns {boolean}
    */
   shouldForward(message, _ingressPeerId) {
+    this._maybeCleanup();
+
     if (!message || typeof message !== "object") {
       return false;
     }
@@ -282,6 +300,7 @@ export class MeshRouter {
    * @param {string} peerId
    */
   addNeighbor(peerId) {
+    this._maybeCleanup();
     if (!peerId || peerId === this.localPeerId) return;
     this._neighbors.add(peerId);
     this._upsertRoute({
@@ -300,6 +319,7 @@ export class MeshRouter {
    * @param {string} peerId
    */
   removeNeighbor(peerId) {
+    this._maybeCleanup();
     this._neighbors.delete(peerId);
     for (const [dst, entry] of this._routes.entries()) {
       if (entry.via === peerId) {
@@ -317,6 +337,8 @@ export class MeshRouter {
    * @returns {boolean} true if this advertisement should be re-broadcast.
    */
   processRouteAdv(adv, ingressPeerId) {
+    this._maybeCleanup();
+
     if (!adv || adv.kind !== ROUTE_ADV_KIND) return false;
     if (!adv.src || typeof adv.seq !== "number") return false;
 
@@ -362,7 +384,8 @@ export class MeshRouter {
 
     // Process each route entry carried in the advertisement.
     if (Array.isArray(adv.routes)) {
-      for (const r of adv.routes) {
+      const advertisedRoutes = adv.routes.slice(0, this.maxAdvertisedRoutes);
+      for (const r of advertisedRoutes) {
         if (!r.dst || r.dst === this.localPeerId) continue;
         if (typeof r.hops !== "number" || r.hops < 0) continue;
 
@@ -390,6 +413,7 @@ export class MeshRouter {
    * @returns {Object} A ROUTE_ADV message ready to send.
    */
   createRouteAdv() {
+    this._maybeCleanup();
     this._localSeq = (this._localSeq + 1) & 0xffffffff; // 32-bit wrap-around
     const now = Date.now();
 
@@ -405,7 +429,7 @@ export class MeshRouter {
       src: this.localPeerId,
       seq: this._localSeq,
       ts: now,
-      routes
+      routes: routes.slice(0, this.maxAdvertisedRoutes)
     };
   }
 
@@ -417,6 +441,7 @@ export class MeshRouter {
    *   (caller should flood to all connected peers as fallback).
    */
   getNextHop(destination) {
+    this._maybeCleanup();
     if (!destination) return null;
     if (this._neighbors.has(destination)) return destination; // direct neighbor
 
@@ -491,10 +516,24 @@ export class MeshRouter {
    * @param {Object} candidate - { dst, via, hops, seq, ts, expiresAt }
    */
   _upsertRoute(candidate) {
+    if (!this._routes.has(candidate.dst) && this._routes.size >= this.maxRouteTableEntries) {
+      this._cleanupRoutes(Date.now());
+      if (this._routes.size >= this.maxRouteTableEntries) {
+        return;
+      }
+    }
     const existing = this._routes.get(candidate.dst);
     if (!existing || preferredRoute(candidate, existing) === candidate) {
       this._routes.set(candidate.dst, candidate);
     }
+  }
+
+  _maybeCleanup(now = Date.now()) {
+    if (now - this._lastCleanupAt < this.cleanupIntervalMs) {
+      return;
+    }
+    this.cleanup(now);
+    this._lastCleanupAt = now;
   }
 
   /** Evict expired route entries. */

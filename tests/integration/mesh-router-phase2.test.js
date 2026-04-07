@@ -187,6 +187,19 @@ test("processRouteAdv: returns false for duplicate adv (same src:seq)", () => {
   assert(router.processRouteAdv(adv, "B") === false, "second call (duplicate)");
 });
 
+test("processRouteAdv: same ts but different src/seq do not collide", () => {
+  const router = makeRouter("A");
+  const ts = Date.now();
+
+  const first = makeAdv("B", 1, [{ dst: "X", hops: 0 }], ts);
+  const second = makeAdv("C", 1, [{ dst: "Y", hops: 0 }], ts);
+
+  assert(router.processRouteAdv(first, "B") === true, "first adv accepted");
+  assert(router.processRouteAdv(second, "C") === true, "second adv accepted despite same ts");
+  assertEqual(router.getNextHop("X"), "B", "route from first adv kept");
+  assertEqual(router.getNextHop("Y"), "C", "route from second adv kept");
+});
+
 test("processRouteAdv: returns false for stale seq", () => {
   const router = makeRouter("A");
 
@@ -225,6 +238,21 @@ test("processRouteAdv: drops routes exceeding maxRouteHops", () => {
   router.processRouteAdv(adv, "B");
 
   assertNull(router.getNextHop("C"), "over-hop route not installed");
+});
+
+test("processRouteAdv: only applies up to maxAdvertisedRoutes entries", () => {
+  const router = makeRouter("A", { maxAdvertisedRoutes: 2 });
+  const adv = makeAdv("B", 1, [
+    { dst: "R1", hops: 0 },
+    { dst: "R2", hops: 0 },
+    { dst: "R3", hops: 0 }
+  ]);
+
+  router.processRouteAdv(adv, "B");
+
+  assertEqual(router.getNextHop("R1"), "B", "first advertised route installed");
+  assertEqual(router.getNextHop("R2"), "B", "second advertised route installed");
+  assertNull(router.getNextHop("R3"), "route beyond maxAdvertisedRoutes ignored");
 });
 
 test("processRouteAdv: ignores routes to self", () => {
@@ -357,6 +385,18 @@ test("cleanup: evicts expired routes and stale adv-seen entries", () => {
   router.cleanup(Date.now() + 2000);
 
   assertEqual(router.routeCount, 0, "routes evicted after cleanup");
+});
+
+test("route table growth is bounded by maxRouteTableEntries", () => {
+  const router = makeRouter("A", { maxRouteTableEntries: 3, routeTtlMs: 60_000 });
+
+  router.processRouteAdv(makeAdv("B", 1, [{ dst: "C", hops: 0 }]), "B");
+  router.processRouteAdv(makeAdv("D", 1, [{ dst: "E", hops: 0 }]), "D");
+  router.processRouteAdv(makeAdv("F", 1, [{ dst: "G", hops: 0 }]), "F");
+
+  assertEqual(router.routeCount, 3, "route table capped");
+  assertNull(router.getNextHop("E"), "extra route not installed once cap reached");
+  assertNull(router.getNextHop("G"), "extra route not installed once cap reached");
 });
 
 test("getRouteTable: returns diagnostics snapshot", () => {
