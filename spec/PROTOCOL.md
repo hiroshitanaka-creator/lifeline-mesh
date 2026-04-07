@@ -665,3 +665,14 @@ Group messaging uses a SenderKey ratchet per `(groupId, senderSignPK)`.
 
 
 Phase 2 transport boundary note: the signed canonical envelope remains immutable; transport adapters may use a compact representation for constrained links and must decode back to the canonical object before verification/processing.
+
+### Phase 4 gateway bridge metadata (island backhaul only)
+
+Gateway backhaul replication is gateway-side and separate from endpoint mesh runtime. For backhaul-replicated signed events, gateways annotate:
+
+- `originIsland`: source island identifier
+- `gatewayPath`: ordered island path for loop suppression
+- `ingressTransport`: ingress class (`mesh`, `backhaul`, etc.)
+- `deliveryClass`: policy class (`backhaul-priority`, `local-default`)
+
+These fields are transport/backhaul metadata and do not change canonical sign-target bytes for endpoint envelopes.

@@ -78,6 +78,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - 🔀 **N-hop routing**: MeshRouter Phase 2 proactive route advertisements (auto-enabled at ≥2 links)
 - 🧩 **Transport boundary (`transport/`)** with `TransportLink` adapters for browser-central BLE, Node peripheral reference path, and native peripheral contract stubs
 - 🔁 **Phase 3 sync engine**: append-only event log + Lamport anti-entropy primitives for partition/heal convergence
+- 🌉 **Phase 4 gateway bridge (`gateway/`)**: dedicated island bridge service for local mesh ingest + duplicate-safe backhaul sync (no endpoint Starlink/browser mesh claims)
 - 📤 Outbox queuing (priority / TTL / per-link targeting) with automatic flush on reconnect
 - 📥 Inbox persistence for received messages
 - 🔌 **GATT server layer** (`bluetooth/gatt-server.js`): pluggable `IGATTBackend` interface ready for native adapters (Capacitor, noble)
@@ -189,6 +190,7 @@ CI note:
 /transport      Phase 2 transport-link adapters + retry policy + envelope strategy
 /crypto         Core crypto, group messaging, transport, store (schema v5 + event log)
 /node-server    Node.js relay server (persistent single-client relay mode)
+/gateway        Phase 4 gateway bridge service (island ingest/store/backhaul dedupe)
   relay-node.js             Relay session manager
   persistent-relay-store.js Durable message store for relay forwarding
 /spec           Threat model + protocol specification
@@ -229,6 +231,8 @@ Alice                  Relay Network              Bob
 The app runtime (`app/src/runtime-mesh.js`) maintains a `Map<peerId, BLEManager>` for concurrent links. Incoming messages on link-A are forwarded to other links (egress loop), and route advertisements propagate topology automatically when ≥2 links are active.
 
 The Node relay (`node-server/`) is intentionally **single-client** per active BLE session, with durable pending/delivered store state and observable cleanup/snapshot counters exposed via `relay-ops.js` and `FileRelayStore#getSnapshot()`.
+
+Gateway backhaul is a separate service (`gateway/`) and is **not** endpoint mesh runtime. Local mesh continues without gateway uplink; backhaul bridge logic only handles signed event replication between islands with loop/duplicate suppression.
 
 ---
 

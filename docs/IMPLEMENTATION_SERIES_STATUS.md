@@ -4,33 +4,36 @@
 
 - Phase 1 is **complete**.
 - Phase 2 is **complete**.
-- Phase 3 was **incomplete** at preflight: append-only event-log runtime and sync engine artifacts were missing.
+- Phase 3 is **complete**.
+- Phase 4 was **incomplete** at preflight: no dedicated `gateway/` service existed, and island backhaul bridge semantics were not implemented in code/tests.
 
 ## Active phase implemented in this task
 
-- Implemented: **Phase 3** only.
+- Implemented: **Phase 4** only.
 
 ## What was added
 
-- Added append-only event-log persistence to IndexedDB (`eventLog` store, v5 schema migration) with idempotent append/read/prune APIs.
-- Updated inbox/outbox write paths to emit append-only event-log entries while preserving existing materialized-view stores for compatibility.
-- Added `app/src/sync-engine.js` implementing Lamport-aware anti-entropy sync primitives:
-  - peer inventory summary (`count` + deterministic digest + `eventIds`)
-  - have/want exchange basis
-  - missing event pull + dedupe ingestion
-- Added `app/src/state-model.js` for Phase 3 state types:
-  - `shelter_status` via LWW register merge
-  - `supplies` via OR-Set helpers
-  - `people_count` via PN-counter value
-- Added `app/src/event-ingest.js` shared ingest routing so BLE/QR/File/share-target intake classification uses one route resolver contract.
-- Updated `app/src/share-target-intake.js` to use the shared ingest resolver.
-- Added integration test coverage for 3-node partition/heal convergence, anti-entropy duplicate-rate bound, ingest-path unification, and state-type primitives (`tests/integration/sync-engine-phase3.test.js`).
+- Added dedicated `gateway/` service runtime split from `node-server/`:
+  - `gateway/bridge.js`: `GatewayBridge` with explicit responsibilities for local ingest, signed event storage interaction, backhaul export/import, and duplicate/loop suppression.
+  - `gateway/event-store.js`: append-only event store with deterministic dedupe-by-`eventId` behavior.
+  - `gateway/service.js`: simple HTTP service endpoints (`/health`, `/gateway/local-ingest`, `/gateway/backhaul-ingest`, `/gateway/export`, `/gateway/snapshot`).
+  - `gateway/server.js`: executable service entrypoint using env-configurable island and policy settings.
+- Added Phase 4 integration coverage (`tests/integration/gateway-phase4.test.js`) proving:
+  - two-island sync through gateway export/import
+  - duplicate suppression on reconnect/replay
+  - loop suppression via `gatewayPath`
+  - local mesh operation with backhaul uplink disabled
+  - metadata-minimizing policy filtering (priority/topic/scope)
+- Updated repository truth docs:
+  - `README.md` now distinguishes endpoint mesh from gateway backhaul and maps the new `gateway/` module.
+  - Added `docs/GATEWAY_BRIDGE_PHASE4.md` runbook for shipped vs deferred gateway behavior.
+  - Updated `package.json` scripts so lint and integration gates include gateway code/tests.
 
 ## Explicitly deferred
 
-- Phase 4 gateway/backhaul bridge service.
-- Full UI surfacing of unresolved conflict queues (current work adds convergence hash/test primitives and operator-facing readiness building blocks only).
-- Log compaction policies beyond TTL pruning in this Phase 3 slice.
+- Wide-area production federation controls beyond simple HTTP import/export.
+- Dedicated WebSocket uplink implementation (HTTP-first service shipped in this phase).
+- Any change to Node relay single-client truth.
 
 ## Acceptance evidence
 
@@ -38,14 +41,14 @@
 - `npm run typecheck`
 - `npm run test:unit`
 - `npm run test:integration`
-  - Includes `tests/integration/sync-engine-phase3.test.js`.
+  - Includes `tests/integration/gateway-phase4.test.js`.
 
 ## Next phase recommendation
 
-- Proceed to **Phase 4**: gateway service split, island-to-island bridge semantics, duplicate/loop suppression across backhaul reconnects.
+- Proceed to **Phase 5 (supporting subset only where needed)** for deterministic simulation/property/fuzz support tied to currently shipped semantics.
 
 ## Unresolved risks
 
-- Existing UI components still primarily read legacy inbox/outbox views; conflict visualization remains partial.
-- Anti-entropy currently uses full event-id inventories (deterministic and testable, but not yet bloom/range optimized for scale).
-- Browser/mobile BLE peripheral remains unresolved (contract-only gap unchanged from earlier phases).
+- Current gateway service uses in-memory event storage; production durability strategy is not yet implemented.
+- Backhaul transport is HTTP-first; authenticated multi-gateway network controls remain future work.
+- Metadata minimization policy is implemented as filter logic but still requires operator governance defaults per deployment.
