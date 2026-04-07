@@ -62,6 +62,18 @@ Phase 4 gateway bridge runbook covering:
 - durable JSONL event persistence and restart behavior
 - local-only behavior and policy-based metadata minimization
 
+### [ADR_BLE_PERIPHERAL_PATH.md](./ADR_BLE_PERIPHERAL_PATH.md)
+Architecture decision record freezing the first supported BLE peripheral path for v0.1.x:
+- evaluated strategy set (Capacitor host, WebView bridge, Node relay appliance)
+- final decision and rejected alternatives
+- trust boundaries, threat-model implications, and validation criteria
+
+### [BLE_PERIPHERAL_CAPABILITY_MATRIX.md](./BLE_PERIPHERAL_CAPABILITY_MATRIX.md)
+Peripheral capability truth table covering:
+- shipped vs contract-only vs experimental status
+- first supported path statement for v0.1.x
+- explicit non-claim posture for unproven platforms
+
 ## Quick Links
 
 **For Users**:
