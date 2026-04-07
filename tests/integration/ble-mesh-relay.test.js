@@ -217,6 +217,54 @@ test("relay: onForward suppressed when hop budget exhausted", async () => {
   assert(!router.hasSeen(msg.msgId), "exhausted message not added to router seen-map");
 });
 
+test("relay: ROUTE_ADV bypasses router.shouldForward data-plane dedupe", async () => {
+  const router = new MeshRouter({ localPeerId: "C", defaultMaxHops: 1 });
+  router.shouldForward = () => {
+    throw new Error("shouldForward must not run for route advertisements");
+  };
+
+  const { sender, receiver } = createLinkedManagers({ router });
+  const forwarded = [];
+  receiver.onForward = (msg) => forwarded.push(msg);
+
+  const adv = {
+    kind: "dmesh-route-adv",
+    src: "node-a",
+    seq: 42,
+    ts: Date.now(),
+    routes: [{ dst: "node-z", hops: 1 }]
+  };
+  await sender.sendMessage(adv);
+
+  assert(forwarded.length === 1, "ROUTE_ADV is forwarded through control-plane path");
+  assert(forwarded[0].kind === "dmesh-route-adv", "forwarded object remains ROUTE_ADV");
+});
+
+test("relay: ROUTE_ADV transfer identity uses src+seq (no same-ts collision)", async () => {
+  const router = new MeshRouter({ localPeerId: "C", defaultMaxHops: 1 });
+  const { sender, receiver } = createLinkedManagers({ router });
+  const forwarded = [];
+  receiver.onForward = (msg) => forwarded.push(msg);
+
+  const sharedTs = Date.now();
+  await sender.sendMessage({
+    kind: "dmesh-route-adv",
+    src: "node-a",
+    seq: 1,
+    ts: sharedTs,
+    routes: []
+  });
+  await sender.sendMessage({
+    kind: "dmesh-route-adv",
+    src: "node-b",
+    seq: 1,
+    ts: sharedTs,
+    routes: []
+  });
+
+  assert(forwarded.length === 2, "both route advertisements are processed");
+});
+
 test("relay: direct delivery path unaffected when no router is set", async () => {
   // Standard pair with no router — existing behavior must be unchanged.
   const { sender, receiver } = createLinkedManagers();

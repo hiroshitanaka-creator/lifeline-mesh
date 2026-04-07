@@ -39,6 +39,8 @@ import {
 } from "../crypto/store.js";
 import { TRANSPORT_CLASS, getRetryPolicy } from "../transport/retry-policy.js";
 
+const ROUTE_ADV_KIND = "dmesh-route-adv";
+
 /**
  * BLE Manager for Lifeline Mesh
  */
@@ -654,6 +656,16 @@ export class BLEManager {
       return;
     }
     const ingressPeerId = this.device?.id || "unknown-ingress";
+
+    if (message?.kind === ROUTE_ADV_KIND) {
+      try {
+        await this.onForward(message, ingressPeerId);
+      } catch (err) {
+        console.warn("[BLE] onForward error:", err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+
     const shouldRelay = this.router.shouldForward(message, ingressPeerId);
     if (shouldRelay) {
       try {
@@ -770,6 +782,9 @@ export class BLEManager {
   _getTransferId(message) {
     if (!message || typeof message !== "object") {
       return `anonymous-${Date.now()}`;
+    }
+    if (message.kind === ROUTE_ADV_KIND && message.src && typeof message.seq === "number") {
+      return `${ROUTE_ADV_KIND}:${message.src}:${message.seq}`;
     }
     return message.msgId || `${message.kind || "msg"}:${message.ts || Date.now()}`;
   }

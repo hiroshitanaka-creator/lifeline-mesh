@@ -251,6 +251,31 @@ test("runtime mesh multi-link: incoming route adv re-broadcast to egress links",
   runtime.destroy();
 });
 
+test("runtime mesh multi-link: ordinary forward path triggers routing cleanup", async () => {
+  const runtime = createMeshRuntime("relay-node");
+  const mgrA = { sendMessage: () => Promise.resolve() };
+  const mgrB = { sendMessage: () => Promise.resolve() };
+
+  runtime.addLink("peer-a", mgrA);
+  runtime.addLink("peer-b", mgrB);
+
+  let cleanupCalls = 0;
+  const originalCleanup = runtime.router.cleanup.bind(runtime.router);
+  runtime.router.cleanup = (...args) => {
+    cleanupCalls += 1;
+    return originalCleanup(...args);
+  };
+
+  await runtime.onForward({
+    message: { kind: "dmesh-msg", msgId: "cleanup-loop-1", rcpt: "peer-z", ts: Date.now(), relay: { hops: 0, maxHops: 3 } },
+    ingressPeerId: "peer-a"
+  });
+  await runtime.broadcastRouteAdv();
+
+  assert(cleanupCalls >= 2, "cleanup runs in regular forward and broadcast loops");
+  runtime.destroy();
+});
+
 test("runtime mesh multi-link: getSnapshot includes all multi-link fields", () => {
   const runtime = createMeshRuntime("snap-node");
   const mgr = { sendMessage: () => Promise.resolve() };
