@@ -506,6 +506,129 @@ test("integration: inconsistent persisted total aborts transfer and purges chunk
   }
 });
 
+test("integration: disconnect while waiting for ACK fails fast and clears pending ack waiters", async () => {
+  const manager = new BLEManager({
+    protocolConfig: { ackTimeoutMs: 10_000 }
+  });
+  manager.isConnected = true;
+  manager.txCharacteristic = { async writeValue() {} };
+  manager.device = { id: "device-ack-1", gatt: { connected: true, disconnect() {} } };
+
+  const waitForAck = manager._waitForAck("disconnect-ack-case");
+  if (manager.pendingAcks.size !== 1) {
+    throw new Error("Expected one pending ACK waiter before disconnect");
+  }
+
+  manager._handleDisconnect();
+
+  let rejected = false;
+  try {
+    await waitForAck;
+  } catch (error) {
+    rejected = error.message === "BLE_DISCONNECTED";
+  }
+
+  if (!rejected) {
+    throw new Error("Expected pending ACK waiter to reject with BLE_DISCONNECTED on disconnect");
+  }
+  if (manager.pendingAcks.size !== 0) {
+    throw new Error("Expected pendingAcks to be empty after disconnect");
+  }
+});
+
+test("integration: DataView with non-zero byteOffset still parses incoming payload correctly", async () => {
+  const store = createInMemoryStore();
+  const manager = new BLEManager({ store });
+  manager.isConnected = true;
+  manager.device = { id: "offset-device" };
+  manager.txCharacteristic = { async writeValue() {} };
+
+  const transferId = "offset-case";
+  const payload = new TextEncoder().encode(JSON.stringify({
+    transferId,
+    data: Buffer.from(JSON.stringify({
+      kind: "dmesh-msg",
+      msgId: "offset-msg-1",
+      sndr: "sender-offset",
+      payload: "offset-ok",
+      ts: Date.now()
+    })).toString("base64")
+  }));
+  const packet = new Uint8Array([0x01, 0x00, 0x01, 0x00, ...payload]);
+  const prefixed = new Uint8Array(packet.length + 6);
+  prefixed.set(packet, 6);
+  const offsetView = new DataView(prefixed.buffer, 6, packet.length);
+
+  let received = null;
+  manager.onMessageReceived = (message) => {
+    received = message;
+  };
+
+  await manager._handleIncomingData({ target: { value: offsetView } });
+
+  if (!received || received.msgId !== "offset-msg-1") {
+    throw new Error("Expected message to be parsed correctly from offset DataView");
+  }
+});
+
+test("integration: stale receive state cleanup also clears persisted chunks for transfer", async () => {
+  const store = createInMemoryStore();
+  const cleared = [];
+  const originalClearPendingChunks = store.clearPendingChunks;
+  store.clearPendingChunks = async (msgId) => {
+    cleared.push(msgId);
+    return originalClearPendingChunks(msgId);
+  };
+
+  const manager = new BLEManager({ store, protocolConfig: { reassemblyTimeoutMs: 1000 } });
+  manager.receiveStates.set("stale-transfer", {
+    transferId: "stale-transfer",
+    msgType: 0x01,
+    totalChunks: 2,
+    chunks: [new Uint8Array([1]), null],
+    receivedCount: 1,
+    duplicates: 0,
+    createdAt: Date.now() - 5000,
+    lastUpdated: Date.now() - 5000
+  });
+
+  await store.storeChunk({
+    v: 1,
+    kind: "dmesh-chunk",
+    msgId: "stale-transfer",
+    seq: 0,
+    total: 2,
+    data: Buffer.from("old").toString("base64")
+  });
+
+  await manager._getOrCreateReceiveState(0x01, 1, "fresh-transfer");
+
+  if (!cleared.includes("stale-transfer")) {
+    throw new Error("Expected clearPendingChunks to be called for stale transfer");
+  }
+  if (store.pendingChunks("stale-transfer").length !== 0) {
+    throw new Error("Expected persisted stale chunks to be cleared");
+  }
+});
+
+test("integration: ACK success path resolves and clears waiter without timeout leak", async () => {
+  const manager = new BLEManager({
+    protocolConfig: { ackTimeoutMs: 5000 }
+  });
+
+  const waitForAck = manager._waitForAck("ack-success-case");
+  if (manager.pendingAcks.size !== 1) {
+    throw new Error("Expected pending ack to be registered");
+  }
+
+  manager._resolveAck("ack-success-case");
+  await waitForAck;
+
+  if (manager.pendingAcks.size !== 0) {
+    throw new Error("Expected pending ack entry to be removed after resolve");
+  }
+});
+
 test("integration: rejects invalid BLE packet header before decode", async () => {
   const { receiver } = createLinkedManagers();
 

@@ -510,15 +510,13 @@ export class BLEManager {
   _waitForAck(transferId) {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        this.pendingAcks.delete(transferId);
-        reject(new Error(`ACK timeout for ${transferId}`));
+        this._settleAckWaiter(transferId, "reject", new Error(`ACK timeout for ${transferId}`));
       }, this.protocolConfig.ackTimeoutMs);
 
       this.pendingAcks.set(transferId, {
-        resolve: () => {
-          globalThis.clearTimeout(timeout);
-          resolve();
-        }
+        timeout,
+        resolve,
+        reject
       });
     });
   }
@@ -546,7 +544,11 @@ export class BLEManager {
       const msgType = dataView.getUint8(0);
       const chunkIndex = dataView.getUint8(1);
       const totalChunks = dataView.getUint8(2);
-      const payload = new Uint8Array(dataView.buffer.slice(4));
+      const payload = new Uint8Array(
+        dataView.buffer,
+        dataView.byteOffset + 4,
+        dataView.byteLength - 4
+      );
 
       if (msgType === MSG_TYPE.ACK) {
         const ackId = new TextDecoder().decode(payload);
@@ -663,7 +665,7 @@ export class BLEManager {
   }
 
   async _getOrCreateReceiveState(msgType, totalChunks, transferId) {
-    this._cleanupExpiredReceiveStates();
+    await this._cleanupExpiredReceiveStates();
 
     if (totalChunks < 1 || totalChunks > 0xff) {
       throw new Error(`Invalid totalChunks: ${totalChunks}`);
@@ -773,14 +775,25 @@ export class BLEManager {
   }
 
   _resolveAck(ackId) {
-    const pending = this.pendingAcks.get(ackId);
-    if (!pending) {
+    if (!this._settleAckWaiter(ackId, "resolve")) {
       console.log("[BLE] ACK received for unknown transfer", ackId);
-      return;
+    }
+  }
+
+  _settleAckWaiter(transferId, action, error) {
+    const pending = this.pendingAcks.get(transferId);
+    if (!pending) {
+      return false;
     }
 
-    this.pendingAcks.delete(ackId);
-    pending.resolve();
+    this.pendingAcks.delete(transferId);
+    globalThis.clearTimeout(pending.timeout);
+    if (action === "resolve") {
+      pending.resolve();
+    } else {
+      pending.reject(error || new Error(`ACK failed for ${transferId}`));
+    }
+    return true;
   }
 
   async _sendAck(transferId) {
@@ -792,12 +805,15 @@ export class BLEManager {
     await this._writePacket(MSG_TYPE.ACK, 0, 1, 0, payload);
   }
 
-  _cleanupExpiredReceiveStates() {
+  async _cleanupExpiredReceiveStates() {
     const now = Date.now();
     for (const [transferId, state] of this.receiveStates.entries()) {
       if (now - state.lastUpdated > this.protocolConfig.reassemblyTimeoutMs) {
         console.warn("[BLE] Dropping stale receive state", transferId);
         this.receiveStates.delete(transferId);
+        if (this.store.clearPendingChunks) {
+          await this.store.clearPendingChunks(transferId);
+        }
       }
     }
   }
@@ -868,7 +884,7 @@ export class BLEManager {
     this._stopOutboxRetryLoop();
 
     for (const [transferId] of this.pendingAcks) {
-      this.pendingAcks.delete(transferId);
+      this._settleAckWaiter(transferId, "reject", new Error(BLE_ERROR.DISCONNECTED));
     }
 
     this._emitTransferState("disconnected", { deviceId: this.device?.id });
