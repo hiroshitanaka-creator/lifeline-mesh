@@ -2,7 +2,7 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
-[![Tests](https://img.shields.io/badge/tests-224%2F224%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
+[![Tests](https://img.shields.io/badge/tests-227%2F227%20passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
 
@@ -79,6 +79,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - 🧩 **Transport boundary (`transport/`)** with `TransportLink` adapters for browser-central BLE, Node peripheral reference path, and native peripheral contract stubs
 - 🔁 **Phase 3 sync engine**: append-only event log + Lamport anti-entropy primitives for partition/heal convergence
 - 🌉 **Phase 4 gateway bridge (`gateway/`)**: dedicated island bridge service for local mesh ingest + duplicate-safe backhaul sync (no endpoint Starlink/browser mesh claims)
+- 🧪 **Phase 5 verification support**: deterministic simulator (`sim/`), parser-fuzz/property integration tests, and simulation-based energy profiling
 - 📤 Outbox queuing (priority / TTL / per-link targeting) with automatic flush on reconnect
 - 📥 Inbox persistence for received messages
 - 🔌 **GATT server layer** (`bluetooth/gatt-server.js`): pluggable `IGATTBackend` interface ready for native adapters (Capacitor, noble)
@@ -108,11 +109,13 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - **[Web Bluetooth Support](docs/WEB_BLUETOOTH_SUPPORT.md)** - Browser/platform compatibility and fallback guidance
 - **[BLE Manual Validation Runbook](docs/BLE_MANUAL_VALIDATION_RUNBOOK.md)** - Hardware test matrix and repeatable contributor checks
 - **[A↔B↔C Relay Drill](docs/RELAY_DRILL_AB_C.md)** - Unified interop drill for browser-central ↔ Node-peripheral path
+- **[Hardware Smoke Path](docs/HARDWARE_SMOKE_PATH.md)** - Formalized realistic hardware validation path
 
 ### For Developers
 - **[Protocol Specification](spec/PROTOCOL.md)** - Current protocol specification (with vnext cross-link)
 - **[Protocol VNext Freeze](spec/PROTOCOL_VNEXT.md)** - Canonical phase-1 sign-target definitions and ID derivation
 - **[State Model](spec/STATE_MODEL.md)** - Verification state machine + signed state/event model
+- **[Phase 5 Model Spec](spec/PHASE5_MODEL_SPEC.md)** - Deterministic simulator invariants and state transitions
 - **[Threat Model](spec/THREAT_MODEL.md)** - Comprehensive security analysis
 - **[Crypto Core API](crypto/README.md)** - Reusable crypto functions
 
@@ -125,7 +128,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 
 ## 🔬 Testing
 
-All tests passing: **224/224 ✓**
+All tests passing: **227/227 ✓**
 
 | Suite | Count | Command |
 |---|---|---|
@@ -146,7 +149,7 @@ All tests passing: **224/224 ✓**
 | Operator panel unit | 21 | `npm run test:integration` |
 | DB migration integration | 1 | `npm run test:integration` |
 | Transport Phase 2 boundary integration | 7 | `npm run test:integration` |
-| **Total** | **224** | `npm run test:unit && npm run test:integration` |
+| **Total** | **227** | `npm run test:unit && npm run test:integration` |
 
 ```bash
 # Run everything

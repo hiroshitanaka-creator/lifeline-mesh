@@ -2,38 +2,42 @@
 
 ## Detected current phase state
 
-- Phase 1 is **complete**.
-- Phase 2 is **complete**.
-- Phase 3 is **complete**.
-- Phase 4 was **incomplete** at preflight: no dedicated `gateway/` service existed, and island backhaul bridge semantics were not implemented in code/tests.
+- Phase 1 is **complete** (`spec/PROTOCOL_VNEXT.md`, `spec/STATE_MODEL.md`, scope decision, conformance vectors/tests).
+- Phase 2 is **complete** (`transport/` boundary, BLE central adapter wrapping, Node peripheral reference path, retry/jitter policy, relay drill docs/tests).
+- Phase 3 is **complete** (event-log runtime + anti-entropy sync engine + convergence tests).
+- Phase 4 is **complete** (`gateway/` bridge service + duplicate/loop-safe island sync tests).
+- Phase 5 was **incomplete** at preflight: no `sim/` deterministic simulator, no parser-fuzz/property suite tied to active invariants, no formalized hardware smoke/energy metrics artifacts.
 
 ## Active phase implemented in this task
 
-- Implemented: **Phase 4** only.
+- Implemented: **Phase 5** only (verification support subset tied to shipped behavior).
 
 ## What was added
 
-- Added dedicated `gateway/` service runtime split from `node-server/`:
-  - `gateway/bridge.js`: `GatewayBridge` with explicit responsibilities for local ingest, signed event storage interaction, backhaul export/import, and duplicate/loop suppression.
-  - `gateway/event-store.js`: append-only event store with deterministic dedupe-by-`eventId` behavior.
-  - `gateway/service.js`: simple HTTP service endpoints (`/health`, `/gateway/local-ingest`, `/gateway/backhaul-ingest`, `/gateway/export`, `/gateway/snapshot`).
-  - `gateway/server.js`: executable service entrypoint using env-configurable island and policy settings.
-- Added Phase 4 integration coverage (`tests/integration/gateway-phase4.test.js`) proving:
-  - two-island sync through gateway export/import
-  - duplicate suppression on reconnect/replay
-  - loop suppression via `gatewayPath`
-  - local mesh operation with backhaul uplink disabled
-  - metadata-minimizing policy filtering (priority/topic/scope)
-- Updated repository truth docs:
-  - `README.md` now distinguishes endpoint mesh from gateway backhaul and maps the new `gateway/` module.
-  - Added `docs/GATEWAY_BRIDGE_PHASE4.md` runbook for shipped vs deferred gateway behavior.
-  - Updated `package.json` scripts so lint and integration gates include gateway code/tests.
+- Deterministic simulator under `sim/`:
+  - `sim/deterministic-simulator.js` seeded 3-node relay model with drop/replay behavior and duplicate suppression counters.
+- Phase 5 verification tests:
+  - `tests/integration/phase5-simulator-fuzz.test.js`
+    - deterministic repeatability check
+    - property-style multi-seed duplicate/delivery invariant checks
+    - parser-fuzz coverage for canonical sign-target envelope handling
+- Phase 5 model spec:
+  - `spec/PHASE5_MODEL_SPEC.md` with explicit entities, transitions, and invariants.
+- Hardware smoke formalization and energy metrics:
+  - `docs/HARDWARE_SMOKE_PATH.md`
+  - `tools/phase5-energy-metrics.js`
+  - `docs/ENERGY_METRICS.md`
+- Field drill/runbook updates:
+  - `docs/RELAY_DRILL_AB_C.md` now links simulator/property/fuzz and hardware-smoke evidence.
+- Unsafe sink risk reduction:
+  - Reduced `innerHTML` usage in select/QR reset flows by switching to safe DOM APIs (`replaceChildren`, option node creation) in `app/src/main.js`.
 
 ## Explicitly deferred
 
-- Wide-area production federation controls beyond simple HTTP import/export.
-- Dedicated WebSocket uplink implementation (HTTP-first service shipped in this phase).
-- Any change to Node relay single-client truth.
+- No new speculative runtime transports.
+- No browser BLE peripheral claims.
+- No multi-client relay semantics.
+- No CI gate expansion beyond reliable repository-local commands.
 
 ## Acceptance evidence
 
@@ -41,14 +45,14 @@
 - `npm run typecheck`
 - `npm run test:unit`
 - `npm run test:integration`
-  - Includes `tests/integration/gateway-phase4.test.js`.
+- `npm run test:phase5`
 
 ## Next phase recommendation
 
-- Proceed to **Phase 5 (supporting subset only where needed)** for deterministic simulation/property/fuzz support tied to currently shipped semantics.
+- Continue Phase 5 hardening incrementally (additional targeted parser mutation corpora and expanded simulator scenarios) while keeping shipped runtime truth unchanged.
 
 ## Unresolved risks
 
-- Current gateway service uses in-memory event storage; production durability strategy is not yet implemented.
-- Backhaul transport is HTTP-first; authenticated multi-gateway network controls remain future work.
-- Metadata minimization policy is implemented as filter logic but still requires operator governance defaults per deployment.
+- Energy metrics are currently simulation-derived, not hardware battery telemetry.
+- Unsafe sink scanning still reports additional known `innerHTML` call sites; residual risk requires continued incremental refactor.
+- Hardware smoke remains manual by design (truthful for environment); not elevated to CI gate.
