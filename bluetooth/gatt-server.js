@@ -89,6 +89,8 @@ export class GATTServer {
 
     /** @type {Map<string, object>} transferId -> reassembly state for active client */
     this._receiveStates = new Map();
+    /** @type {Map<string, {resolve: Function, reject: Function, timeout: ReturnType<typeof setTimeout>} >} */
+    this._pendingOutboundAcks = new Map();
 
     /** @type {string|null} Currently connected central client ID (single-client model). */
     this._clientId = null;
@@ -169,6 +171,7 @@ export class GATTServer {
 
     await this._backend.stopAdvertising();
     this._advertising = false;
+    this._rejectAllOutboundAcks(new Error(GATT_SERVER_ERROR.CLIENT_NOT_FOUND));
     this._clientId = null;
     this._receiveStates.clear();
     console.log("[GATTServer] Advertising stopped");
@@ -194,6 +197,9 @@ export class GATTServer {
       const bytes = new TextEncoder().encode(JSON.stringify(message));
       const chunks = this._chunkData(bytes);
       const transferId = message.msgId ?? `srv:${Date.now()}`;
+      if (chunks.length > 0xff) {
+        throw new Error(`Outbound message exceeds chunk limit: ${chunks.length}`);
+      }
 
       for (let i = 0; i < chunks.length; i++) {
         const framedPayload = this._encodeChunkPayload(transferId, chunks[i]);
@@ -203,6 +209,8 @@ export class GATTServer {
           await this._delay(this._protocolConfig.chunkDelayMs);
         }
       }
+
+      await this._waitForOutboundAck(transferId, clientId);
     } catch (err) {
       console.error("[GATTServer] sendMessage failed:", err);
       throw new Error(GATT_SERVER_ERROR.SEND_FAILED);
@@ -264,6 +272,7 @@ export class GATTServer {
       if (this._clientId && this._clientId !== clientId) {
         const previousClientId = this._clientId;
         this._receiveStates.clear();
+        this._rejectAllOutboundAcks(new Error(GATT_SERVER_ERROR.CLIENT_NOT_FOUND));
         this._clientId = null;
         console.warn("[GATTServer] Replacing active client:", previousClientId, "->", clientId);
         if (this.onClientDisconnected) {
@@ -283,6 +292,7 @@ export class GATTServer {
       if (!this._clientId || this._clientId !== clientId) {
         return;
       }
+      this._rejectAllOutboundAcks(new Error(GATT_SERVER_ERROR.CLIENT_NOT_FOUND));
       this._clientId = null;
       this._receiveStates.clear();
       console.log("[GATTServer] Client disconnected:", clientId);
@@ -318,7 +328,8 @@ export class GATTServer {
       const payload = data.slice(4);
 
       if (msgType === MSG_TYPE.ACK) {
-        // Centrals can ACK server messages; currently no-op here
+        const ackId = new TextDecoder().decode(payload);
+        this._resolveOutboundAck(ackId);
         return;
       }
 
@@ -484,12 +495,48 @@ export class GATTServer {
       packetHeaderSize,
       chunkSize,
       chunkDelayMs: Math.max(0, overrides.chunkDelayMs ?? CONFIG.CHUNK_DELAY_MS),
+      ackTimeoutMs: Math.max(100, overrides.ackTimeoutMs ?? CONFIG.ACK_TIMEOUT_MS),
       reassemblyTimeoutMs: Math.max(1000, overrides.reassemblyTimeoutMs ?? CONFIG.REASSEMBLY_TIMEOUT_MS)
     };
   }
 
   _delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  _waitForOutboundAck(transferId, clientId) {
+    return new Promise((resolve, reject) => {
+      const existing = this._pendingOutboundAcks.get(transferId);
+      if (existing) {
+        globalThis.clearTimeout(existing.timeout);
+        existing.reject(new Error(`Superseded ACK waiter for ${transferId}`));
+        this._pendingOutboundAcks.delete(transferId);
+      }
+      const timeout = globalThis.setTimeout(() => {
+        this._pendingOutboundAcks.delete(transferId);
+        reject(new Error(`ACK timeout for ${transferId} from ${clientId}`));
+      }, this._protocolConfig.ackTimeoutMs);
+
+      this._pendingOutboundAcks.set(transferId, { resolve, reject, timeout });
+    });
+  }
+
+  _resolveOutboundAck(transferId) {
+    const pending = this._pendingOutboundAcks.get(transferId);
+    if (!pending) {
+      return;
+    }
+    this._pendingOutboundAcks.delete(transferId);
+    globalThis.clearTimeout(pending.timeout);
+    pending.resolve();
+  }
+
+  _rejectAllOutboundAcks(error) {
+    for (const [, pending] of this._pendingOutboundAcks.entries()) {
+      globalThis.clearTimeout(pending.timeout);
+      pending.reject(error);
+    }
+    this._pendingOutboundAcks.clear();
   }
 }
 

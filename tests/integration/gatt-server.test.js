@@ -54,6 +54,11 @@ function makeDirectPacket(message, transferId) {
   return buildPacket(MSG_TYPE.DIRECT, 0, 1, payload);
 }
 
+function makeAckPacket(transferId) {
+  const payload = new TextEncoder().encode(transferId);
+  return buildPacket(MSG_TYPE.ACK, 0, 1, payload);
+}
+
 /**
  * Create a fresh GATTServer + MockGATTBackend pair.
  */
@@ -194,18 +199,48 @@ test("message receive: ACK is sent back to client on MESSAGE_RX", async () => {
   assert(ackPacket[0] === MSG_TYPE.ACK, "ACK packet has correct msgType byte");
 });
 
-test("sendMessage: message reaches client via notifyCharacteristic", async () => {
+test("sendMessage: resolves only after client ACK", async () => {
   const { server, backend } = makeServer();
   await server.startAdvertising();
   backend.simulateClientConnect("client-e");
 
   const outMsg = { kind: "dmesh-msg", msgId: "tx-test-1", payload: "world" };
-  await server.sendMessage(outMsg, "client-e");
+  let resolved = false;
+  const sendPromise = server.sendMessage(outMsg, "client-e").then(() => {
+    resolved = true;
+  });
+
+  await new Promise((r) => setTimeout(r, 20));
+  assert(!resolved, "send should remain pending before ACK");
+
+  backend.simulateWrite("client-e", CHARACTERISTICS.MESSAGE_TX, makeAckPacket("tx-test-1"));
+  await sendPromise;
+  assert(resolved, "send resolves after ACK");
 
   const txNotifs = backend.notifications.filter(n => n.clientId === "client-e");
   assert(txNotifs.length >= 1, "notification sent to client-e");
   // First byte of first packet should be MSG_TYPE.DIRECT
   assert(txNotifs[0].data[0] === MSG_TYPE.DIRECT, "DIRECT packet type");
+});
+
+test("sendMessage: rejects oversized outbound messages (>255 chunks)", async () => {
+  const { server, backend } = makeServer({
+    protocolConfig: { chunkSize: 16, ackTimeoutMs: 1000 }
+  });
+  await server.startAdvertising();
+  backend.simulateClientConnect("client-oversized");
+
+  const oversized = { msgId: "too-big", payload: "x".repeat(5000) };
+  let threw = false;
+  try {
+    await server.sendMessage(oversized, "client-oversized");
+  } catch (error) {
+    threw = true;
+    assert(error.message === GATT_SERVER_ERROR.SEND_FAILED, "oversized message is rejected");
+  }
+
+  assert(threw, "sendMessage should reject oversized messages");
+  assert(backend.notifications.length === 0, "no chunks sent when outbound message exceeds chunk limit");
 });
 
 test("sendMessage: throws CLIENT_NOT_FOUND for unknown client", async () => {
@@ -246,7 +281,10 @@ test("broadcast: sends only to the active client in single-client mode", async (
   backend.simulateClientConnect("client-g");
 
   const outMsg = { kind: "dmesh-msg", msgId: "bcast-1" };
-  await server.broadcast(outMsg);
+  const broadcastPromise = server.broadcast(outMsg);
+  await new Promise((r) => setTimeout(r, 20));
+  backend.simulateWrite("client-g", CHARACTERISTICS.MESSAGE_TX, makeAckPacket("bcast-1"));
+  await broadcastPromise;
 
   const fNotifs = backend.notifications.filter(n => n.clientId === "client-f");
   const gNotifs = backend.notifications.filter(n => n.clientId === "client-g");

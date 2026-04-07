@@ -212,10 +212,10 @@ export class BlenoBackend {
     const sent = this._rxChar.notify(data);
     if (!sent) {
       this._diag(`notify failed client=${clientId} reason=no-subscriber-or-callback-error bytes=${data.byteLength}`);
-      console.warn("[BlenoBackend] notifyCharacteristic: no subscriber");
-    } else {
-      this._diag(`notify ok client=${clientId} bytes=${data.byteLength}`);
+      return Promise.reject(new Error("[BlenoBackend] notifyCharacteristic failed: no subscriber or callback error"));
     }
+    this._diag(`notify ok client=${clientId} bytes=${data.byteLength}`);
+
     return Promise.resolve();
   }
 

@@ -38,6 +38,17 @@ function makeDirectPacket(message, transferId) {
   return buildPacket(MSG_TYPE.DIRECT, 0, 1, payload);
 }
 
+function makeAckPacket(transferId) {
+  const payload = new TextEncoder().encode(transferId);
+  return buildPacket(MSG_TYPE.ACK, 0, 1, payload);
+}
+
+function decodeTransferIdFromDirectPacket(packet) {
+  const payload = packet.slice(4);
+  const envelope = JSON.parse(new TextDecoder().decode(payload));
+  return envelope.transferId;
+}
+
 async function setupHarness(storePath, storeOptions = {}) {
   const backend = new MockGATTBackend();
   const server = new GATTServer({ backend, localName: "RelayHarness" });
@@ -98,10 +109,13 @@ test("node relay: pending message is replayed on reconnect", async () => {
   backend.notifications.length = 0;
   backend.simulateClientDisconnect("client-1");
   backend.simulateClientConnect("client-1");
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await new Promise((resolve) => setTimeout(resolve, 20));
 
   const directNotifs = backend.notifications.filter((notification) => notification.data[0] === MSG_TYPE.DIRECT);
   assert(directNotifs.length >= 1, "pending message replayed to reconnected client");
+  const transferId = decodeTransferIdFromDirectPacket(directNotifs[0].data);
+  backend.simulateWrite("client-1", CHARACTERISTICS.MESSAGE_TX, makeAckPacket(transferId));
+  await new Promise((resolve) => setTimeout(resolve, 30));
 
   const pendingAfterReplay = await store.listPending();
   assert(pendingAfterReplay.length === 0, "pending queue drained after replay success");
@@ -127,10 +141,13 @@ test("node relay: pending message survives process restart and replays", async (
   {
     const { backend, store } = await setupHarness(storePath);
     backend.simulateClientConnect("client-b");
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     const directNotifs = backend.notifications.filter((notification) => notification.data[0] === MSG_TYPE.DIRECT);
     assert(directNotifs.length >= 1, "persisted pending message replayed after restart");
+    const transferId = decodeTransferIdFromDirectPacket(directNotifs[0].data);
+    backend.simulateWrite("client-b", CHARACTERISTICS.MESSAGE_TX, makeAckPacket(transferId));
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     const pending = await store.listPending();
     assert(pending.length === 0, "pending message marked delivered after replay");
@@ -159,7 +176,13 @@ test("node relay: duplicate inbound msgId is suppressed within dedupe window", a
   assert(pending.length === 1, "duplicate inbound packet should not create a second pending entry");
   assert(pending[0].message.payload === "first payload", "original pending payload remains unchanged");
 
-  await relayNode.flushPending("client-1");
+  const flushPromise = relayNode.flushPending("client-1");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const replayDirect = backend.notifications.find((notification) => notification.data[0] === MSG_TYPE.DIRECT);
+  assert(Boolean(replayDirect), "flush emits a replay notification");
+  backend.simulateWrite("client-1", CHARACTERISTICS.MESSAGE_TX, makeAckPacket(decodeTransferIdFromDirectPacket(replayDirect.data)));
+  await flushPromise;
+  await new Promise((resolve) => setTimeout(resolve, 20));
   const pendingAfterReplay = await store.listPending();
   assert(pendingAfterReplay.length === 0, "message delivered after replay");
 
@@ -186,7 +209,16 @@ test("node relay: cleanup evicts retained delivered entries and reports counts",
   backend.simulateWrite("client-cleanup", CHARACTERISTICS.MESSAGE_TX, makeDirectPacket(message, message.msgId));
   await new Promise((resolve) => setTimeout(resolve, 25));
 
-  await relayNode.flushPending("client-cleanup");
+  const flushPromise = relayNode.flushPending("client-cleanup");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const replayDirect = backend.notifications.find((notification) => notification.data[0] === MSG_TYPE.DIRECT);
+  assert(Boolean(replayDirect), "cleanup scenario emits replay notification");
+  backend.simulateWrite(
+    "client-cleanup",
+    CHARACTERISTICS.MESSAGE_TX,
+    makeAckPacket(decodeTransferIdFromDirectPacket(replayDirect.data))
+  );
+  await flushPromise;
   await new Promise((resolve) => setTimeout(resolve, 40));
   await store.cleanup();
 
@@ -288,10 +320,95 @@ test("node relay: flush failure keeps message pending and retries on reconnect",
 
   backend.simulateClientDisconnect("client-failure");
   backend.simulateClientConnect("client-failure");
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const retryDirect = backend.notifications.find((notification) => notification.data[0] === MSG_TYPE.DIRECT);
+  assert(Boolean(retryDirect), "retry replay notification emitted on reconnect");
+  backend.simulateWrite(
+    "client-failure",
+    CHARACTERISTICS.MESSAGE_TX,
+    makeAckPacket(decodeTransferIdFromDirectPacket(retryDirect.data))
+  );
+  await new Promise((resolve) => setTimeout(resolve, 30));
 
   pending = await store.listPending();
   assert(pending.length === 0, "pending entry is delivered after retry on reconnect");
+});
+
+test("node relay: missing subscriber causes send failure and relay entry remains pending", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+  const { backend, relayNode, store } = await setupHarness(storePath);
+  backend.simulateClientConnect("client-nosub");
+
+  await store.addInboundMessage({ kind: "dmesh-msg", msgId: "relay-nosub-1", payload: "pending" }, "client-nosub");
+
+  const originalNotify = backend.notifyCharacteristic.bind(backend);
+  backend.notifyCharacteristic = () => Promise.reject(new Error("no subscriber"));
+
+  await relayNode.flushPending("client-nosub");
+  let pending = await store.listPending();
+  assert(pending.length === 1, "pending entry remains when notify fails");
+  assert(pending[0].attempts === 1, "failed notify increments attempt count");
+
+  backend.notifyCharacteristic = originalNotify;
+  const flushPromise = relayNode.flushPending("client-nosub");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const directNotifs = backend.notifications.filter((notification) => notification.data[0] === MSG_TYPE.DIRECT);
+  assert(directNotifs.length >= 1, "retry emits replay notification");
+  backend.simulateWrite(
+    "client-nosub",
+    CHARACTERISTICS.MESSAGE_TX,
+    makeAckPacket(decodeTransferIdFromDirectPacket(directNotifs[directNotifs.length - 1].data))
+  );
+  await flushPromise;
+  pending = await store.listPending();
+  assert(pending.length === 0, "pending drains only after notify succeeds and ACK arrives");
+});
+
+test("node relay: disconnect during replay does not mark delivered", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+  const { backend, relayNode, store } = await setupHarness(storePath);
+  backend.simulateClientConnect("client-drop");
+
+  await store.addInboundMessage({ kind: "dmesh-msg", msgId: "relay-drop-1", payload: "drop me" }, "client-drop");
+
+  const flushPromise = relayNode.flushPending("client-drop");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  backend.simulateClientDisconnect("client-drop");
+  await flushPromise;
+
+  const pending = await store.listPending();
+  assert(pending.length === 1, "entry remains pending when replay disconnects before ACK");
+});
+
+test("node relay: successful replay drains pending queue only after ACK", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+  const { backend, relayNode, store } = await setupHarness(storePath);
+  backend.simulateClientConnect("client-ack");
+  await store.addInboundMessage({ kind: "dmesh-msg", msgId: "relay-ack-1", payload: "ack gated" }, "client-ack");
+
+  let resolved = false;
+  const flushPromise = relayNode.flushPending("client-ack").then(() => {
+    resolved = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  let pending = await store.listPending();
+  assert(pending.length === 1, "entry still pending before ACK");
+  assert(!resolved, "flush remains pending before ACK");
+
+  const directNotifs = backend.notifications.filter((notification) => notification.data[0] === MSG_TYPE.DIRECT);
+  assert(directNotifs.length >= 1, "direct replay notification emitted");
+  backend.simulateWrite(
+    "client-ack",
+    CHARACTERISTICS.MESSAGE_TX,
+    makeAckPacket(decodeTransferIdFromDirectPacket(directNotifs[0].data))
+  );
+  await flushPromise;
+  pending = await store.listPending();
+  assert(pending.length === 0, "entry drains after ACK");
 });
 
 (async () => {
