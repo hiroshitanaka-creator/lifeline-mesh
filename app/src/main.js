@@ -2491,7 +2491,7 @@ function updateKdfStatus() {
   const el = document.getElementById('kdf-status');
   if (!el) return;
   const key = isArgon2Available() ? 'keys.kdf.argon2id' : 'keys.kdf.pbkdf2';
-  el.innerHTML = tr(key);
+  el.textContent = tr(key);
 }
 
 /* =========================

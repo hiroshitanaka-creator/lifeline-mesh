@@ -69,13 +69,24 @@ checks.push({
 });
 
 const sinkScan = run("rg", ["-n", "innerHTML\\s*=|outerHTML\\s*=|insertAdjacentHTML\\(|eval\\(", "app/src", "crypto", "bluetooth"]);
+const allowedSinkPatterns = [
+  /^app\/src\/operator-panel\.js:\d+:\s+inner\.innerHTML = renderPanel\(snapshot, outboxStats, maintenanceStats, policy\);$/,
+  /^app\/src\/operator-panel\.js:\d+:\s+inner\.innerHTML = `<div class="lm-op-empty">Error rendering panel: \$\{esc\(err instanceof Error \? err\.message : String\(err\)\)\}<\/div>`;$/
+];
+const sinkMatches = (sinkScan.stdout || "")
+  .split("\n")
+  .map((line) => line.trim())
+  .filter(Boolean);
+const unapprovedSinkMatches = sinkMatches.filter((line) => !allowedSinkPatterns.some((pattern) => pattern.test(line)));
 checks.push({
   name: "Unsafe sink scan (innerHTML/eval)",
-  status: sinkScan.code === 1 ? "PASS" : sinkScan.code === 0 ? "WARN" : "FAIL",
+  status: sinkScan.code === 1 ? "PASS" : sinkScan.code === 0 ? (unapprovedSinkMatches.length === 0 ? "PASS" : "WARN") : "FAIL",
   details: sinkScan.code === 1
     ? "no direct unsafe sink pattern detected"
     : sinkScan.code === 0
-      ? "potential unsafe sink usage found; review matches"
+      ? unapprovedSinkMatches.length === 0
+        ? "only audited allowlisted sinks found"
+        : "potential unsafe sink usage found; review matches"
       : `scan failed (${sinkScan.code})`,
   command: sinkScan.command
 });
@@ -85,7 +96,7 @@ const lines = [];
 lines.push("# Security Audit Report");
 lines.push("");
 lines.push(`- Generated: ${now}`);
-lines.push("- Scope: Phase 15 security audit preparation");
+lines.push("- Scope: Phase 5 unsafe sink risk reduction + audit");
 lines.push("");
 lines.push("| Check | Status | Details | Command |");
 lines.push("|---|---|---|---|");
@@ -94,11 +105,19 @@ for (const check of checks) {
   lines.push(`| ${check.name} | ${status} | ${check.details} | \`${check.command}\` |`);
 }
 
-if (sinkScan.code === 0) {
+if (sinkScan.code === 0 && unapprovedSinkMatches.length > 0) {
   lines.push("");
-  lines.push("## Unsafe sink scan matches");
+  lines.push("## Unsafe sink scan matches (unapproved)");
   lines.push("```text");
-  lines.push((sinkScan.stdout || "").trim());
+  lines.push(unapprovedSinkMatches.join("\n"));
+  lines.push("```");
+}
+
+if (sinkMatches.length > 0 && unapprovedSinkMatches.length === 0) {
+  lines.push("");
+  lines.push("## Unsafe sink scan matches (allowlisted)");
+  lines.push("```text");
+  lines.push(sinkMatches.join("\n"));
   lines.push("```");
 }
 

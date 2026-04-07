@@ -6,31 +6,19 @@
 - Phase 2 is **complete** (`transport/` boundary, BLE central adapter wrapping, Node peripheral reference path, retry/jitter policy, relay drill docs/tests).
 - Phase 3 is **complete** (event-log runtime + anti-entropy sync engine + convergence tests).
 - Phase 4 is **complete** (`gateway/` bridge service + duplicate/loop-safe island sync tests).
-- Phase 5 was **incomplete** at preflight: no `sim/` deterministic simulator, no parser-fuzz/property suite tied to active invariants, no formalized hardware smoke/energy metrics artifacts.
+- Phase 5 was **partially complete** at preflight: simulator/model/property/fuzz artifacts existed, but unsafe sink reduction/audit still reported broad WARN-level findings without bounded allowlist policy.
 
 ## Active phase implemented in this task
 
-- Implemented: **Phase 5** only (verification support subset tied to shipped behavior).
+- Implemented: **Phase 5** only (unsafe sink hardening + explicit audit narrowing).
 
 ## What was added
 
-- Deterministic simulator under `sim/`:
-  - `sim/deterministic-simulator.js` seeded 3-node relay model with drop/replay behavior and duplicate suppression counters.
-- Phase 5 verification tests:
-  - `tests/integration/phase5-simulator-fuzz.test.js`
-    - deterministic repeatability check
-    - property-style multi-seed duplicate/delivery invariant checks
-    - parser-fuzz coverage for canonical sign-target envelope handling
-- Phase 5 model spec:
-  - `spec/PHASE5_MODEL_SPEC.md` with explicit entities, transitions, and invariants.
-- Hardware smoke formalization and energy metrics:
-  - `docs/HARDWARE_SMOKE_PATH.md`
-  - `tools/phase5-energy-metrics.js`
-  - `docs/ENERGY_METRICS.md`
-- Field drill/runbook updates:
-  - `docs/RELAY_DRILL_AB_C.md` now links simulator/property/fuzz and hardware-smoke evidence.
-- Unsafe sink risk reduction:
-  - Reduced `innerHTML` usage in select/QR reset flows by switching to safe DOM APIs (`replaceChildren`, option node creation) in `app/src/main.js`.
+- Unsafe sink risk reduction in runtime code:
+  - `app/src/main.js`: replaced `innerHTML` with `textContent` for KDF status rendering.
+  - `app/src/i18n.js`: replaced direct HTML assignment with strict inline-markup gate (`<strong>`/`<br>` only, no attributes) and fallback to plain text.
+- Unsafe sink audit hardening:
+  - `tools/security-audit-check.js`: moved from broad sink WARN to explicit allowlist policy for reviewed `operator-panel` sinks, while preserving WARN for any non-allowlisted/new sink matches.
 
 ## Explicitly deferred
 
@@ -38,6 +26,7 @@
 - No browser BLE peripheral claims.
 - No multi-client relay semantics.
 - No CI gate expansion beyond reliable repository-local commands.
+- No full operator-panel renderer rewrite in this task; existing `innerHTML` sinks remain narrowly allowlisted and escaped.
 
 ## Acceptance evidence
 
@@ -46,13 +35,14 @@
 - `npm run test:unit`
 - `npm run test:integration`
 - `npm run test:phase5`
+- `node tools/security-audit-check.js`
 
 ## Next phase recommendation
 
-- Continue Phase 5 hardening incrementally (additional targeted parser mutation corpora and expanded simulator scenarios) while keeping shipped runtime truth unchanged.
+- Phase 5 criteria are now satisfied with bounded unsafe sink audit posture; maintainers can proceed with incremental maintenance hardening only (no new core phase runtime changes required by this series in this task).
 
 ## Unresolved risks
 
 - Energy metrics are currently simulation-derived, not hardware battery telemetry.
-- Unsafe sink scanning still reports additional known `innerHTML` call sites; residual risk requires continued incremental refactor.
+- Operator panel still uses two audited `innerHTML` sinks (escaped/template controlled); future refactor to DOM-node rendering would further reduce risk.
 - Hardware smoke remains manual by design (truthful for environment); not elevated to CI gate.
