@@ -3,6 +3,7 @@
 ========================= */
 import * as DMesh from '../../crypto/core.js';
 import * as GroupMesh from '../../crypto/group.js';
+import { legacyUnsignedPolicy } from '../../crypto/protocol-vnext.js';
 import { BLEManager } from '../../bluetooth/ble-manager.js';
 import { encryptKeys, decryptKeys, checkPasswordStrength, isArgon2Available } from '../../crypto/key-backup.js';
 import nacl from 'tweetnacl';
@@ -1354,6 +1355,9 @@ function normalizeImportedGroupPayload(rawPayload) {
   }
 
   if (rawPayload.type === 'lifeline-sender-state-sync-v1') {
+    if (!legacyUnsignedPolicy().acceptsLegacyUnsignedOnboarding) {
+      throw new Error('Unsigned legacy sender-state sync payload support expired');
+    }
     if (!rawPayload.groupId || !rawPayload.senderSignPK || !rawPayload.senderKeyState) {
       throw new Error('Invalid sender-state sync payload');
     }
@@ -1370,6 +1374,9 @@ function normalizeImportedGroupPayload(rawPayload) {
   }
 
   if (rawPayload.type === 'lifeline-group-onboarding-v1') {
+    if (!legacyUnsignedPolicy().acceptsLegacyUnsignedOnboarding) {
+      throw new Error('Unsigned legacy onboarding payload support expired');
+    }
     if (!rawPayload.group?.id || !rawPayload.group?.senderKey) {
       throw new Error('Invalid onboarding payload');
     }

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "profile": "phase1-vnext-canonical-signing",
+  "generated": "2026-04-07T00:00:00.000Z",
+  "cases": [
+    {"id":"msg-valid-01","class":"valid normal case","kind":"dmesh-msg","mutation":"none","expect":"accept"},
+    {"id":"msg-valid-02","class":"valid normal case","kind":"dmesh-msg","mutation":"none","expect":"accept"},
+    {"id":"msg-valid-03","class":"valid normal case","kind":"dmesh-msg","mutation":"none","expect":"accept"},
+    {"id":"id-valid-01","class":"valid normal case","kind":"dmesh-id","mutation":"none","expect":"accept"},
+    {"id":"id-valid-02","class":"valid normal case","kind":"dmesh-id","mutation":"none","expect":"accept"},
+
+    {"id":"id-tampered-name-01","class":"tampered name","kind":"dmesh-id","mutation":"tamper-name","expect":"reject"},
+    {"id":"id-tampered-name-02","class":"tampered name","kind":"dmesh-id","mutation":"tamper-name","expect":"reject"},
+    {"id":"id-tampered-name-03","class":"tampered name","kind":"dmesh-id","mutation":"tamper-name","expect":"reject"},
+    {"id":"id-tampered-name-04","class":"tampered name","kind":"dmesh-id","mutation":"tamper-name","expect":"reject"},
+
+    {"id":"msg-recipient-sub-01","class":"recipient substitution","kind":"dmesh-msg","mutation":"recipient-substitution","expect":"reject"},
+    {"id":"msg-recipient-sub-02","class":"recipient substitution","kind":"dmesh-msg","mutation":"recipient-substitution","expect":"reject"},
+    {"id":"msg-recipient-sub-03","class":"recipient substitution","kind":"dmesh-msg","mutation":"recipient-substitution","expect":"reject"},
+    {"id":"msg-recipient-sub-04","class":"recipient substitution","kind":"dmesh-msg","mutation":"recipient-substitution","expect":"reject"},
+
+    {"id":"msg-stale-ttl-01","class":"stale TTL","kind":"ack","mutation":"stale-ttl","expect":"reject"},
+    {"id":"msg-stale-ttl-02","class":"stale TTL","kind":"ack","mutation":"stale-ttl","expect":"reject"},
+    {"id":"msg-stale-ttl-03","class":"stale TTL","kind":"ack","mutation":"stale-ttl","expect":"reject"},
+    {"id":"msg-stale-ttl-04","class":"stale TTL","kind":"ack","mutation":"stale-ttl","expect":"reject"},
+
+    {"id":"group-key-version-mismatch-01","class":"senderKeyVersion mismatch","kind":"dmesh-group-msg","mutation":"sender-key-version-mismatch","expect":"reject"},
+    {"id":"group-key-version-mismatch-02","class":"senderKeyVersion mismatch","kind":"dmesh-group-msg","mutation":"sender-key-version-mismatch","expect":"reject"},
+    {"id":"group-key-version-mismatch-03","class":"senderKeyVersion mismatch","kind":"dmesh-group-msg","mutation":"sender-key-version-mismatch","expect":"reject"},
+    {"id":"group-key-version-mismatch-04","class":"senderKeyVersion mismatch","kind":"dmesh-group-msg","mutation":"sender-key-version-mismatch","expect":"reject"},
+
+    {"id":"chunk-malformed-01","class":"malformed chunk","kind":"dmesh-chunk","mutation":"malformed-chunk","expect":"reject"},
+    {"id":"chunk-malformed-02","class":"malformed chunk","kind":"dmesh-chunk","mutation":"malformed-chunk","expect":"reject"},
+    {"id":"chunk-malformed-03","class":"malformed chunk","kind":"dmesh-chunk","mutation":"malformed-chunk","expect":"reject"},
+    {"id":"chunk-malformed-04","class":"malformed chunk","kind":"dmesh-chunk","mutation":"malformed-chunk","expect":"reject"},
+
+    {"id":"replay-dup-01","class":"replay duplicate","kind":"ack","mutation":"replay-duplicate","expect":"reject"},
+    {"id":"replay-dup-02","class":"replay duplicate","kind":"ack","mutation":"replay-duplicate","expect":"reject"},
+    {"id":"replay-dup-03","class":"replay duplicate","kind":"ack","mutation":"replay-duplicate","expect":"reject"},
+    {"id":"replay-dup-04","class":"replay duplicate","kind":"ack","mutation":"replay-duplicate","expect":"reject"},
+
+    {"id":"route-adv-valid-01","class":"valid normal case","kind":"dmesh-route-adv","mutation":"none","expect":"accept"},
+    {"id":"route-adv-valid-02","class":"valid normal case","kind":"dmesh-route-adv","mutation":"none","expect":"accept"}
+  ]
+}
