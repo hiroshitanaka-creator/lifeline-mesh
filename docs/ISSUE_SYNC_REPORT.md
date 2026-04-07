@@ -40,3 +40,11 @@ Result: `gh` command is unavailable in this environment, so direct GitHub issue 
 
 4. **Refresh stale issue labels and pointers**
    - Reconfirm that already-shipped tasks (dark mode, keyboard shortcuts, emergency mode MVP, BLE support doc) remain marked as historical/completed and redirect to active gaps (browser/mobile peripheral adapter, real-device validation expansion).
+
+---
+
+## Addendum (PR158 cleanup) — 2026-04-07
+
+- PR #158 introduced speculative runtime/spec changes (PQ v2, CRDT, LoRa, chaos, hybrid backhaul) that were not aligned with current dependency/tested truth.
+- Cleanup restored mainline truth to the pre-#158 implementation baseline for protocol/runtime/scripts and removed speculative gates/features from shipped paths.
+- Details and full KEEP/DELETE/DOWNGRADE triage are documented in `docs/PR158_TRIAGE_REPORT.md`.
