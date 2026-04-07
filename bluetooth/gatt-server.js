@@ -328,8 +328,11 @@ export class GATTServer {
       const payload = data.slice(4);
 
       if (msgType === MSG_TYPE.ACK) {
+        if (!this._clientId || this._clientId !== clientId) {
+          return;
+        }
         const ackId = new TextDecoder().decode(payload);
-        this._resolveOutboundAck(ackId);
+        this._resolveOutboundAck(clientId, ackId);
         return;
       }
 
@@ -506,29 +509,35 @@ export class GATTServer {
 
   _waitForOutboundAck(transferId, clientId) {
     return new Promise((resolve, reject) => {
-      const existing = this._pendingOutboundAcks.get(transferId);
+      const waiterKey = this._makeOutboundAckKey(clientId, transferId);
+      const existing = this._pendingOutboundAcks.get(waiterKey);
       if (existing) {
         globalThis.clearTimeout(existing.timeout);
         existing.reject(new Error(`Superseded ACK waiter for ${transferId}`));
-        this._pendingOutboundAcks.delete(transferId);
+        this._pendingOutboundAcks.delete(waiterKey);
       }
       const timeout = globalThis.setTimeout(() => {
-        this._pendingOutboundAcks.delete(transferId);
+        this._pendingOutboundAcks.delete(waiterKey);
         reject(new Error(`ACK timeout for ${transferId} from ${clientId}`));
       }, this._protocolConfig.ackTimeoutMs);
 
-      this._pendingOutboundAcks.set(transferId, { resolve, reject, timeout });
+      this._pendingOutboundAcks.set(waiterKey, { resolve, reject, timeout });
     });
   }
 
-  _resolveOutboundAck(transferId) {
-    const pending = this._pendingOutboundAcks.get(transferId);
+  _resolveOutboundAck(clientId, transferId) {
+    const waiterKey = this._makeOutboundAckKey(clientId, transferId);
+    const pending = this._pendingOutboundAcks.get(waiterKey);
     if (!pending) {
       return;
     }
-    this._pendingOutboundAcks.delete(transferId);
+    this._pendingOutboundAcks.delete(waiterKey);
     globalThis.clearTimeout(pending.timeout);
     pending.resolve();
+  }
+
+  _makeOutboundAckKey(clientId, transferId) {
+    return `${clientId}:${transferId}`;
   }
 
   _rejectAllOutboundAcks(error) {

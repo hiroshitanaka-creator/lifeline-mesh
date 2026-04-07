@@ -223,6 +223,45 @@ test("sendMessage: resolves only after client ACK", async () => {
   assert(txNotifs[0].data[0] === MSG_TYPE.DIRECT, "DIRECT packet type");
 });
 
+test("sendMessage: wrong-client ACK cannot resolve outbound waiter", async () => {
+  const { server, backend } = makeServer();
+  await server.startAdvertising();
+  backend.simulateClientConnect("client-active");
+
+  const outMsg = { kind: "dmesh-msg", msgId: "tx-wrong-ack-1", payload: "secure" };
+  let resolved = false;
+  const sendPromise = server.sendMessage(outMsg, "client-active").then(() => {
+    resolved = true;
+  });
+
+  await new Promise((r) => setTimeout(r, 20));
+  backend.simulateWrite("client-wrong", CHARACTERISTICS.MESSAGE_TX, makeAckPacket("tx-wrong-ack-1"));
+  await new Promise((r) => setTimeout(r, 20));
+  assert(!resolved, "ACK from non-active client must not resolve waiter");
+
+  backend.simulateWrite("client-active", CHARACTERISTICS.MESSAGE_TX, makeAckPacket("tx-wrong-ack-1"));
+  await sendPromise;
+  assert(resolved, "ACK from active client resolves waiter");
+});
+
+test("sendMessage: stale/replaced client ACK cannot complete delivery", async () => {
+  const { server, backend } = makeServer();
+  await server.startAdvertising();
+  backend.simulateClientConnect("client-a");
+
+  let rejected = false;
+  const sendPromise = server.sendMessage({ kind: "dmesh-msg", msgId: "tx-replace-1" }, "client-a").catch((error) => {
+    rejected = true;
+    assert(error.message === GATT_SERVER_ERROR.SEND_FAILED, "replacement fails in-flight send");
+  });
+
+  await new Promise((r) => setTimeout(r, 20));
+  backend.simulateClientConnect("client-b");
+  backend.simulateWrite("client-a", CHARACTERISTICS.MESSAGE_TX, makeAckPacket("tx-replace-1"));
+  await sendPromise;
+  assert(rejected, "old client ACK must not revive/recover replaced waiter");
+});
+
 test("sendMessage: rejects oversized outbound messages (>255 chunks)", async () => {
   const { server, backend } = makeServer({
     protocolConfig: { chunkSize: 16, ackTimeoutMs: 1000 }
