@@ -56,6 +56,13 @@ PR-17 synchronization report covering:
 - issue edit permission status
 - per-issue update proposals when direct GitHub edits are unavailable
 
+### [GATEWAY_BRIDGE_PHASE4.md](./GATEWAY_BRIDGE_PHASE4.md)
+Phase 4 gateway bridge runbook covering:
+- dedicated gateway service scope
+- shipped HTTP endpoints and bridge responsibilities
+- duplicate/loop suppression semantics
+- local-only behavior and policy-based metadata minimization
+
 ## Quick Links
 
 **For Users**:
