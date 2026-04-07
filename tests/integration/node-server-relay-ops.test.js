@@ -1,4 +1,10 @@
-import { parseRelayAdminArgs, formatRelayStatus, resolveDiagnosticsEnabled } from "../../node-server/relay-ops.js";
+import {
+  parseRelayAdminArgs,
+  parseManualSmokeArgs,
+  formatRelayStatus,
+  resolveDiagnosticsEnabled,
+  createSmokeOutput
+} from "../../node-server/relay-ops.js";
 
 const tests = [];
 
@@ -117,6 +123,74 @@ test("relay ops: env false applies when cli is unspecified", () => {
     envValue: "off"
   });
   assert(enabled === false, "env false should disable diagnostics when cli is unspecified");
+});
+
+
+test("relay ops: manual smoke non-interactive defaults are stable", () => {
+  const parsed = parseManualSmokeArgs([]);
+  assert(parsed.nonInteractive === false, "manual smoke defaults to interactive");
+  assert(parsed.timeoutMs === 15000, "default non-interactive timeout is stable");
+  assert(parsed.expectClient === false, "client expectation defaults to false");
+  assert(parsed.cleanup === false, "cleanup defaults to false");
+  assert(parsed.jsonOutput === false, "json stdout defaults to false");
+  assert(parsed.statusFile === null, "status file defaults to null");
+});
+
+test("relay ops: manual smoke parses non-interactive machine options", () => {
+  const parsed = parseManualSmokeArgs([
+    "--non-interactive",
+    "--expect-client=true",
+    "--timeout-ms",
+    "22000",
+    "--cleanup",
+    "--json",
+    "--status-file",
+    "artifacts/real-bleno-smoke.json"
+  ]);
+
+  assert(parsed.nonInteractive === true, "non-interactive mode should be enabled");
+  assert(parsed.expectClient === true, "expect client should parse from key=value");
+  assert(parsed.timeoutMs === 22000, "timeout override should parse");
+  assert(parsed.cleanup === true, "cleanup should be enabled");
+  assert(parsed.jsonOutput === true, "json output should be enabled");
+  assert(parsed.statusFile === "artifacts/real-bleno-smoke.json", "status output path should parse");
+});
+
+
+test("relay ops: smoke output routes human logs to stderr in json mode", () => {
+  let stdoutText = "";
+  let stderrText = "";
+
+  const output = createSmokeOutput({
+    jsonOutput: true,
+    stdout: { write: (chunk) => { stdoutText += chunk; } },
+    stderr: { write: (chunk) => { stderrText += chunk; } }
+  });
+
+  output.info("[Smoke] hello");
+  output.warn("[Smoke] warn");
+  output.jsonResult({ ok: true });
+
+  assert(stdoutText.trim() === '{"ok":true}', "stdout should include only json result");
+  assert(stderrText.includes("[Smoke] hello"), "info should be redirected to stderr in json mode");
+  assert(stderrText.includes("[Smoke] warn"), "warn should be in stderr");
+});
+
+test("relay ops: smoke output keeps info logs on stdout when json mode is disabled", () => {
+  let stdoutText = "";
+  let stderrText = "";
+
+  const output = createSmokeOutput({
+    jsonOutput: false,
+    stdout: { write: (chunk) => { stdoutText += chunk; } },
+    stderr: { write: (chunk) => { stderrText += chunk; } }
+  });
+
+  output.info("[Smoke] hello");
+  output.error("[Smoke] err");
+
+  assert(stdoutText.includes("[Smoke] hello"), "info should remain on stdout outside json mode");
+  assert(stderrText.includes("[Smoke] err"), "error should remain on stderr");
 });
 
 (async () => {
