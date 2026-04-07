@@ -57,3 +57,20 @@
 - Weekly: dependency/security review and regression smoke checks.
 - Per release: full checklist + runbook drill for one failure scenario.
 - Monthly: tabletop exercise (BLE unavailable / device loss / migration rollback).
+
+## 7) BLE peripheral endpoint operations (v0.1.x frozen path)
+
+- The only supported peripheral endpoint is the **Node relay appliance path** (`node-server/` + `node-bleno` backend).
+- Mobile/browser peripheral hosting remains unresolved and must not be represented as shipped.
+
+### Bring-up checklist
+1. Provision Linux host with BlueZ + BLE adapter.
+2. Start relay appliance: `node node-server/server.js`.
+3. Confirm startup log shows advertising and relay status snapshot.
+4. Run relay-focused integration gate: `npm run test:relay-appliance`.
+5. Execute manual A↔B↔C drill from `docs/RELAY_DRILL_AB_C.md` for operator acceptance.
+
+### Incident/failure cues
+- If flush replay fails, pending entries must remain queued and retry on reconnect.
+- If duplicate `msgId` reappears unexpectedly, collect relay store snapshot and `dedupeWindowMs` values before restarting service.
+- If no clients connect, run `node node-server/manual-smoke.js --non-interactive --json` to confirm adapter/advertising baseline.

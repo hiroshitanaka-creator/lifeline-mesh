@@ -259,6 +259,41 @@ test("node relay: diagnostics emits flush and cleanup lifecycle", async () => {
   assert(logs.some((line) => line.includes("[RelayNode][diag] cleanup reason=diag-test")), "cleanup diagnostics are emitted");
 });
 
+test("node relay: flush failure keeps message pending and retries on reconnect", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+
+  const { backend, store, relayNode, server } = await setupHarness(storePath);
+  backend.simulateClientConnect("client-failure");
+
+  const message = { kind: "dmesh-msg", msgId: "relay-failure-1", payload: "retry me" };
+  backend.simulateWrite("client-failure", CHARACTERISTICS.MESSAGE_TX, makeDirectPacket(message, message.msgId));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const originalSendMessage = server.sendMessage.bind(server);
+  let failOnce = true;
+  server.sendMessage = (outboundMessage, clientId) => {
+    if (failOnce) {
+      failOnce = false;
+      return Promise.reject(new Error("simulated send failure"));
+    }
+    return originalSendMessage(outboundMessage, clientId);
+  };
+
+  await relayNode.flushPending("client-failure");
+  let pending = await store.listPending();
+  assert(pending.length === 1, "failed flush keeps entry pending");
+  assert(pending[0].attempts === 1, "failed flush increments attempt counter");
+  assert(pending[0].lastError === "simulated send failure", "failed flush records error reason");
+
+  backend.simulateClientDisconnect("client-failure");
+  backend.simulateClientConnect("client-failure");
+  await new Promise((resolve) => setTimeout(resolve, 40));
+
+  pending = await store.listPending();
+  assert(pending.length === 0, "pending entry is delivered after retry on reconnect");
+});
+
 (async () => {
   let passed = 0;
   let failed = 0;

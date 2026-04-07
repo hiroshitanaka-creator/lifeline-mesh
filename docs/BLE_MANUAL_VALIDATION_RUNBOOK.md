@@ -5,6 +5,8 @@ _Last updated: 2026-03-31_
 This runbook gives contributors a repeatable checklist to validate **real hardware BLE behavior** for Lifeline Mesh.
 
 > Scope: Manual verification only. This document does **not** claim automated or hardware CI validation.
+>
+> v0.1.x support truth: BLE peripheral endpoint is the **Node relay appliance path** (`node-server/` + `node-bleno` backend). Browser/mobile peripheral mode is not shipped.
 
 ## 1) Preconditions
 
