@@ -1,4 +1,6 @@
-# BLE Support Matrix (Phase 4)
+# BLE Support Matrix (Central/Web Bluetooth)
+
+> For BLE **peripheral-side** support status and first supported path freeze, see [BLE_PERIPHERAL_CAPABILITY_MATRIX.md](./BLE_PERIPHERAL_CAPABILITY_MATRIX.md) and [ADR_BLE_PERIPHERAL_PATH.md](./ADR_BLE_PERIPHERAL_PATH.md).
 
 | Browser / OS | Web Bluetooth | Lifeline Mesh BLE | Notes |
 |---|---|---|---|

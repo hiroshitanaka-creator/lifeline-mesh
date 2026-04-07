@@ -21,7 +21,7 @@ This project could save lives, but it needs contributors to grow.
 
 | Priority | Task | Skills | Notes |
 |----------|------|--------|-------|
-| 🟡 High | **Browser-side BLE peripheral backend** | Capacitor / WebView bridge / native BLE APIs | `IGATTBackend` already has a Node backend (`node-bleno`); mobile/browser-peripheral adapters are still needed |
+| 🟡 High | **Mobile BLE peripheral implementation (experimental → shipped)** | Capacitor / WebView bridge / native BLE APIs | v0.1.x first supported peripheral path is Node relay appliance (`node-bleno`); mobile/browser peripheral remains unresolved |
 | 🟡 High | **UI/UX Overhaul** | Design, CSS, Accessibility | Functional but not polished |
 | 🟢 Good First | **Documentation i18n** | Any language | Good first issue |
 | 🟢 Good First | **Playwright E2E expansion** | Testing, browser automation | Real-browser harness exists; coverage can be widened |
@@ -107,6 +107,8 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - **[Usage Guide](docs/USAGE.md)** - Quick start, security practices, troubleshooting
 - **[FAQ](docs/FAQ.md)** - 30+ questions about security, features, and usage
 - **[Web Bluetooth Support](docs/WEB_BLUETOOTH_SUPPORT.md)** - Browser/platform compatibility and fallback guidance
+- **[BLE Peripheral ADR](docs/ADR_BLE_PERIPHERAL_PATH.md)** - Frozen v0.1.x decision: Node relay appliance is first supported peripheral endpoint
+- **[BLE Peripheral Capability Matrix](docs/BLE_PERIPHERAL_CAPABILITY_MATRIX.md)** - Shipped vs contract-only vs experimental peripheral paths
 - **[BLE Manual Validation Runbook](docs/BLE_MANUAL_VALIDATION_RUNBOOK.md)** - Hardware test matrix and repeatable contributor checks
 - **[A↔B↔C Relay Drill](docs/RELAY_DRILL_AB_C.md)** - Unified interop drill for browser-central ↔ Node-peripheral path
 - **[Hardware Smoke Path](docs/HARDWARE_SMOKE_PATH.md)** - Formalized realistic hardware validation path
@@ -241,7 +243,7 @@ Gateway backhaul is a separate service (`gateway/`) and is **not** endpoint mesh
 ❌ **Post-quantum security**: Vulnerable to quantum computers
 ❌ **Perfect forward secrecy**: Long-term signing keys used
 ❌ **BLE availability**: Web Bluetooth is effectively Chromium-only and requires a secure context (`https://` or `http://localhost`)
-⚠️ **Browser/mobile peripheral mode gap**: Node relay peripheral mode exists (`bluetooth/backends/node-bleno.js`), but browser/mobile adapters are not yet implemented
+⚠️ **Browser/mobile peripheral mode gap**: v0.1.x officially supports only Node relay appliance peripheral mode (`bluetooth/backends/node-bleno.js`); mobile/browser peripheral remains unresolved (operational bypass, not closure)
 ❌ **Offline bootstrap**: First load must happen in a served origin; `file://` is unsupported. After first load, cached app assets can be used offline
 ⚠️ **Fallback path**: Clipboard/File/QR relay is the compatibility baseline when BLE is unavailable
 
@@ -386,7 +388,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - Comprehensive docs and threat model
 
 ### Not Yet Implemented ⚠️
-- **Browser/mobile peripheral backend gap**: `IGATTBackend` already has a Node backend (`bluetooth/backends/node-bleno.js`). Browser/mobile peripheral adapters (Capacitor/WebView/native bridge) remain pending
+- **Browser/mobile peripheral backend gap (not closed)**: Node relay appliance is the only officially supported peripheral endpoint in v0.1.x. Native/mobile peripheral paths remain contract-only or experimental
 - Mobile apps, LoRa integration, post-quantum crypto
 - Full TypeScript strict-mode coverage for `app/src/` and `bluetooth/`
 
