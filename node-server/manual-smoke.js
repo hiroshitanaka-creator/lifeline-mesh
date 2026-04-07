@@ -1,27 +1,35 @@
 #!/usr/bin/env node
 
+import fs from "fs/promises";
 import path from "path";
 import readline from "readline";
 import { fileURLToPath } from "url";
 
 import { GATTServer } from "../bluetooth/gatt-server.js";
 import { FileRelayStore } from "./persistent-relay-store.js";
-import { parseRelayAdminArgs, formatRelayStatus, resolveDiagnosticsEnabled } from "./relay-ops.js";
+import {
+  parseRelayAdminArgs,
+  parseManualSmokeArgs,
+  formatRelayStatus,
+  resolveDiagnosticsEnabled
+} from "./relay-ops.js";
 import { SingleClientRelayNode } from "./relay-node.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const args = parseRelayAdminArgs(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const relayArgs = parseRelayAdminArgs(argv);
+const smokeArgs = parseManualSmokeArgs(argv);
 const diagnosticsEnabled = resolveDiagnosticsEnabled({
-  cliSpecified: args.diagnosticsSpecified,
-  cliEnabled: args.diagnosticsEnabled,
+  cliSpecified: relayArgs.diagnosticsSpecified,
+  cliEnabled: relayArgs.diagnosticsEnabled,
   envValue: process.env.LIFELINE_RELAY_DIAG
 });
 const localName = process.env.LIFELINE_NAME ?? "LifelineMesh";
 const relayStorePath = process.env.LIFELINE_RELAY_STORE
   ?? path.resolve(__dirname, "data/relay-store.json");
 
-if (process.argv.includes("--help") || process.argv.includes("-h")) {
+if (argv.includes("--help") || argv.includes("-h")) {
   printHelp();
   process.exit(0);
 }
@@ -78,28 +86,34 @@ try {
   process.exit(1);
 }
 
-console.log("[Smoke] Type 'help' for operator commands.");
+let rl = null;
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: true
-});
+if (smokeArgs.nonInteractive) {
+  await runNonInteractiveSmoke();
+} else {
+  console.log("[Smoke] Type 'help' for operator commands.");
 
-rl.on("line", (line) => {
-  runCommand(line).catch((error) => {
-    console.error("[Smoke] command error:", error?.message ?? error);
+  rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: true
   });
-});
 
-rl.on("close", () => {
-  if (!isShuttingDown) {
-    shutdown("stdin closed");
-  }
-});
+  rl.on("line", (line) => {
+    runCommand(line).catch((error) => {
+      console.error("[Smoke] command error:", error?.message ?? error);
+    });
+  });
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+  rl.on("close", () => {
+    if (!isShuttingDown) {
+      shutdown("stdin closed");
+    }
+  });
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+}
 
 async function runCommand(line) {
   const input = line.trim();
@@ -171,7 +185,9 @@ async function shutdown(reason) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log(`\n[Smoke] shutting down (${reason})`);
-  rl.close();
+  if (rl) {
+    rl.close();
+  }
   relayNode.close();
   if (server.isAdvertising) {
     await server.stopAdvertising();
@@ -179,6 +195,82 @@ async function shutdown(reason) {
   process.exit(0);
 }
 
+async function runNonInteractiveSmoke() {
+  console.log(`[Smoke] Running non-interactive smoke (timeoutMs=${smokeArgs.timeoutMs}, expectClient=${smokeArgs.expectClient})`);
+  const startedAt = Date.now();
+  const deadline = startedAt + smokeArgs.timeoutMs;
+  let clientObserved = server.connectedClients.length > 0;
+
+  while (Date.now() < deadline && smokeArgs.expectClient && !clientObserved) {
+    await sleep(250);
+    clientObserved = server.connectedClients.length > 0;
+  }
+
+  let cleanupResult = null;
+  if (smokeArgs.cleanup) {
+    cleanupResult = await relayNode.runCleanup("manual-smoke:non-interactive");
+  }
+
+  const snapshot = await relayNode.getSnapshot();
+  const relayStatus = formatRelayStatus(snapshot, {
+    source: "manual-smoke:non-interactive",
+    expectClient: smokeArgs.expectClient
+  });
+
+  const result = {
+    ok: smokeArgs.expectClient ? clientObserved : true,
+    mode: "manual-smoke-non-interactive",
+    summary: {
+      localName,
+      relayStorePath,
+      diagnosticsEnabled,
+      timeoutMs: smokeArgs.timeoutMs,
+      elapsedMs: Date.now() - startedAt,
+      expectClient: smokeArgs.expectClient,
+      clientObserved,
+      connectedClients: server.connectedClients,
+      cleanupRequested: smokeArgs.cleanup
+    },
+    relayStatus,
+    cleanupResult,
+    checklist: smokeChecklist()
+  };
+
+  if (smokeArgs.statusFile) {
+    await fs.mkdir(path.dirname(smokeArgs.statusFile), { recursive: true });
+    await fs.writeFile(smokeArgs.statusFile, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+    console.log(`[Smoke] Wrote status file: ${smokeArgs.statusFile}`);
+  }
+
+  if (smokeArgs.jsonOutput) {
+    console.log(JSON.stringify(result));
+  } else {
+    console.log("[Smoke] non-interactive result:", JSON.stringify(result));
+  }
+
+  relayNode.close();
+  if (server.isAdvertising) {
+    await server.stopAdvertising();
+  }
+
+  process.exit(result.ok ? 0 : 2);
+}
+
+function smokeChecklist() {
+  return [
+    "BLE adapter reaches poweredOn and advertising starts",
+    "Central client can connect, disconnect, and reconnect",
+    "Inbound write is queued in pending store and replayed on reconnect",
+    "cleanup command runs and reports removedPending/removedDelivered",
+    "status snapshot includes server connectedClients and store counters"
+  ];
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 function printHelp() {
   console.log(`
@@ -186,6 +278,7 @@ Manual real-bleno smoke harness (Linux + BlueZ)
 
 Usage:
   node node-server/manual-smoke.js [--diag]
+  node node-server/manual-smoke.js --non-interactive [--expect-client] [--timeout-ms 15000] [--cleanup] [--status-file artifacts/real-bleno-smoke.json] [--json]
   LIFELINE_RELAY_DIAG=1 node node-server/manual-smoke.js
 
 Prerequisites:
@@ -200,6 +293,21 @@ Operator commands after start:
   send <text> send one DIRECT message to active client
   cleanup     run relay retention cleanup and print snapshot
   exit        stop harness
+
+Non-interactive options:
+  --non-interactive, --once  run a single smoke cycle and exit
+  --expect-client            fail with exit code 2 when no client connects before timeout
+  --timeout-ms <ms>          wait timeout for expected client (default: 15000)
+  --cleanup                  run relay cleanup before reporting status
+  --status-file <path>       write machine-readable smoke JSON output
+  --json                     print machine-readable smoke JSON to stdout only
+
+Real-bleno validation checklist:
+  - BLE adapter reaches poweredOn and advertising starts
+  - Central can connect/disconnect/reconnect without stale state
+  - Inbound message persists as pending and replays on reconnect
+  - Cleanup reports removedPending/removedDelivered when applicable
+  - Status snapshot includes connectedClients and store counters
 `);
 }
 

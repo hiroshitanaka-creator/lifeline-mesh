@@ -1,0 +1,67 @@
+name: Real bleno smoke (self-hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      timeout_ms:
+        description: "Timeout to wait for BLE central connection in non-interactive smoke"
+        required: false
+        default: "30000"
+      expect_client:
+        description: "Require at least one real client connection before timeout"
+        required: false
+        type: boolean
+        default: true
+      relay_diag:
+        description: "Enable relay diagnostics logs"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: real-bleno-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Manual harness non-interactive smoke
+    runs-on:
+      - self-hosted
+      - linux
+      - bluetooth
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix node-server
+
+      - name: Run real-bleno smoke harness (non-interactive)
+        env:
+          LIFELINE_RELAY_DIAG: ${{ inputs.relay_diag && '1' || '0' }}
+        run: |
+          mkdir -p artifacts
+          node node-server/manual-smoke.js \
+            --non-interactive \
+            --expect-client=${{ inputs.expect_client && 'true' || 'false' }} \
+            --timeout-ms=${{ inputs.timeout_ms }} \
+            --cleanup \
+            --status-file artifacts/real-bleno-smoke.json \
+            --json | tee artifacts/real-bleno-smoke.stdout.json
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-bleno-smoke
+          path: artifacts/real-bleno-smoke.*
+          if-no-files-found: ignore

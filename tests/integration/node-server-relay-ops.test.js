@@ -1,4 +1,9 @@
-import { parseRelayAdminArgs, formatRelayStatus, resolveDiagnosticsEnabled } from "../../node-server/relay-ops.js";
+import {
+  parseRelayAdminArgs,
+  parseManualSmokeArgs,
+  formatRelayStatus,
+  resolveDiagnosticsEnabled
+} from "../../node-server/relay-ops.js";
 
 const tests = [];
 
@@ -117,6 +122,37 @@ test("relay ops: env false applies when cli is unspecified", () => {
     envValue: "off"
   });
   assert(enabled === false, "env false should disable diagnostics when cli is unspecified");
+});
+
+
+test("relay ops: manual smoke non-interactive defaults are stable", () => {
+  const parsed = parseManualSmokeArgs([]);
+  assert(parsed.nonInteractive === false, "manual smoke defaults to interactive");
+  assert(parsed.timeoutMs === 15000, "default non-interactive timeout is stable");
+  assert(parsed.expectClient === false, "client expectation defaults to false");
+  assert(parsed.cleanup === false, "cleanup defaults to false");
+  assert(parsed.jsonOutput === false, "json stdout defaults to false");
+  assert(parsed.statusFile === null, "status file defaults to null");
+});
+
+test("relay ops: manual smoke parses non-interactive machine options", () => {
+  const parsed = parseManualSmokeArgs([
+    "--non-interactive",
+    "--expect-client=true",
+    "--timeout-ms",
+    "22000",
+    "--cleanup",
+    "--json",
+    "--status-file",
+    "artifacts/real-bleno-smoke.json"
+  ]);
+
+  assert(parsed.nonInteractive === true, "non-interactive mode should be enabled");
+  assert(parsed.expectClient === true, "expect client should parse from key=value");
+  assert(parsed.timeoutMs === 22000, "timeout override should parse");
+  assert(parsed.cleanup === true, "cleanup should be enabled");
+  assert(parsed.jsonOutput === true, "json output should be enabled");
+  assert(parsed.statusFile === "artifacts/real-bleno-smoke.json", "status output path should parse");
 });
 
 (async () => {

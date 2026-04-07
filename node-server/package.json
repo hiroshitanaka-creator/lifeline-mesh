@@ -9,7 +9,8 @@
     "start": "node server.js",
     "start:verbose": "DEBUG=bleno node server.js",
     "smoke:manual": "node manual-smoke.js",
-    "smoke:manual:diag": "node manual-smoke.js --diag"
+    "smoke:manual:diag": "node manual-smoke.js --diag",
+    "smoke:manual:noninteractive": "node manual-smoke.js --non-interactive --timeout-ms=15000 --status-file=../artifacts/real-bleno-smoke.json --json"
   },
   "dependencies": {
     "@abandonware/bleno": "^0.6.1"

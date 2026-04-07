@@ -21,6 +21,25 @@ export function parseRelayAdminArgs(argv = []) {
   };
 }
 
+export function parseManualSmokeArgs(argv = []) {
+  const args = Array.isArray(argv) ? argv : [];
+  const timeoutMs = parseIntegerOption(args, "--timeout-ms", 15000);
+  const expectClient = parseBooleanOption(args, "--expect-client", args.includes("--expect-client"));
+  const cleanup = parseBooleanOption(args, "--cleanup", args.includes("--cleanup"));
+  const jsonOutput = parseBooleanOption(args, "--json", args.includes("--json"));
+  const statusFile = readOptionValue(args, "--status-file");
+  const nonInteractive = args.includes("--non-interactive") || args.includes("--once");
+
+  return {
+    timeoutMs,
+    expectClient,
+    cleanup,
+    jsonOutput,
+    statusFile,
+    nonInteractive
+  };
+}
+
 export function formatRelayStatus(snapshot, context = {}) {
   return {
     mode: "single-client-relay",
@@ -74,4 +93,25 @@ function parseBooleanFlag(value, fallback = false) {
     return false;
   }
   return fallback;
+}
+
+function parseBooleanOption(args, key, fallback = false) {
+  const raw = readOptionValue(args, key);
+  if (raw === null) {
+    return fallback;
+  }
+  return parseBooleanFlag(raw, fallback);
+}
+
+function parseIntegerOption(args, key, fallback) {
+  const raw = readOptionValue(args, key);
+  if (raw === null || raw === "true") {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
 }
