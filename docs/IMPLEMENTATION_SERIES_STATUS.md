@@ -4,7 +4,7 @@
 
 - Phase 1 is **complete** (`spec/PROTOCOL_VNEXT.md`, `spec/STATE_MODEL.md`, scope decision, conformance vectors/tests).
 - Phase 2 is **complete** (`transport/` boundary, BLE central adapter wrapping, Node peripheral reference path, retry/jitter policy, relay drill docs/tests).
-- Phase 3 is **complete** (append-only event log runtime, shared ingest path, anti-entropy sync engine, convergence tests).
+- Phase 3 is **complete** (append-only event log runtime, outbox/inbox transition events with deterministic replay projectors, shared ingest path, anti-entropy sync engine, convergence tests).
 - Phase 4 is **complete** (`gateway/` bridge service, loop-safe dedupe semantics, island sync tests, local-only continuity).
 - Phase 5 is **complete** (deterministic simulator, property tests, parser fuzzing, model spec, hardware smoke path, energy metrics, field drill docs, bounded unsafe sink audit).
 
