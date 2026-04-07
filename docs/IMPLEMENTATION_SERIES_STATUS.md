@@ -11,7 +11,7 @@
 ## Active phase implemented in this task
 
 - **No new phase implementation**.
-- Preflight detection found **no incomplete phase** in the ordered series (`1 -> 2 -> 5-support -> 3 -> 4`).
+- Implementation-series verification confirms **no incomplete phase** in the canonical sequence (Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5).
 - Per execution rules, work stopped after verification to avoid speculative or out-of-order changes.
 
 ## What was added
@@ -29,7 +29,7 @@
 - `npm run typecheck`
 - `npm run test:unit`
 - `npm run test:integration`
-- `node tools/phase-gate-check.js`
+- `npm run check:phase` (implementation-series maintenance gate; no legacy A/B/C/D/E model)
 
 ## Next phase recommendation
 

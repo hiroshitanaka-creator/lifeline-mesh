@@ -1,4 +1,4 @@
-# Operations Runbook (Phase 19 Final)
+# Operations Runbook (Implementation Series 1-5 Complete)
 
 ## Scope
 - This runbook covers **release operations**, **delivery incidents**, and **field fallback flow** for the current prototype.
@@ -18,7 +18,7 @@
 - BLE offline queue path validated (offline enqueue → reconnect → flush).
 
 ## 2) DB migration / rollback
-- DB implementation: `crypto/store.js` (`DB_VERSION`, `onupgradeneeded`).
+- DB implementation: `crypto/store.js` (`DB_VERSION=5`, `onupgradeneeded`, append-only `eventLog` store).
 - Before release:
   - verify migration path in staging with existing IndexedDB data.
   - verify old data read/write for keys, contacts, groups, sender keys.

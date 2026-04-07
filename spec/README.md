@@ -36,6 +36,6 @@ Detailed protocol specification including:
 
 ## Conformance References
 
-- Protocol and runtime behavior are verified via `npm run test:unit && npm run test:integration` (current aggregate: 217 tests).
+- Protocol and runtime behavior are verified via `npm run test:unit && npm run test:integration` (authoritative evidence uses commands, not hard-coded aggregate counts).
 - Local validation command: `npm run validate` (`validate:local`).
 - CI validation command: `npm run ci` (`validate:ci`, includes `typecheck:runtime` and Playwright critical path).
