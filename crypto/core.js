@@ -6,6 +6,7 @@
  *
  * Dependencies: TweetNaCl, TweetNaCl-util
  */
+import { legacyUnsignedPolicy } from "./protocol-vnext.js";
 
 // ============================================================================
 // Constants
@@ -790,6 +791,10 @@ export function normalizePublicIdentityPayload(payload, nacl, naclUtil) {
   }
 
   if (!isDmeshId) {
+    const policy = legacyUnsignedPolicy();
+    if (!policy.acceptsLegacyUnsignedIdentity) {
+      throw new Error("Legacy unsigned sender-only contact support expired");
+    }
     return {
       payload: {
         v: 1,
@@ -804,6 +809,10 @@ export function normalizePublicIdentityPayload(payload, nacl, naclUtil) {
   }
 
   if (!payload.envelope) {
+    const policy = legacyUnsignedPolicy();
+    if (!policy.acceptsLegacyUnsignedIdentity) {
+      throw new Error("Legacy unsigned dmesh-id support expired");
+    }
     return {
       payload: {
         v: payload.v ?? 1,

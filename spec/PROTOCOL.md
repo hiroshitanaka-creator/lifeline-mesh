@@ -1,5 +1,7 @@
 # Protocol Specification
 
+> Phase-1 freeze note: canonical vnext sign-target definitions are in `spec/PROTOCOL_VNEXT.md`.
+
 ## Version
 Protocol Version: **1** (field `v: 1`)
 

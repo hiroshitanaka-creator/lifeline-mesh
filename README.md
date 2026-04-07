@@ -106,7 +106,9 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - **[BLE Manual Validation Runbook](docs/BLE_MANUAL_VALIDATION_RUNBOOK.md)** - Hardware test matrix and repeatable contributor checks
 
 ### For Developers
-- **[Protocol Specification](spec/PROTOCOL.md)** - Detailed technical specification
+- **[Protocol Specification](spec/PROTOCOL.md)** - Current protocol specification (with vnext cross-link)
+- **[Protocol VNext Freeze](spec/PROTOCOL_VNEXT.md)** - Canonical phase-1 sign-target definitions and ID derivation
+- **[State Model](spec/STATE_MODEL.md)** - Verification state machine + signed state/event model
 - **[Threat Model](spec/THREAT_MODEL.md)** - Comprehensive security analysis
 - **[Crypto Core API](crypto/README.md)** - Reusable crypto functions
 
