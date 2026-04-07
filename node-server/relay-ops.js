@@ -40,6 +40,30 @@ export function parseManualSmokeArgs(argv = []) {
   };
 }
 
+export function createSmokeOutput({ jsonOutput = false, stdout = process.stdout, stderr = process.stderr } = {}) {
+  function normalisePart(part) {
+    if (typeof part === "string") return part;
+    if (part instanceof Error) return part.message;
+    try {
+      return JSON.stringify(part);
+    } catch {
+      return String(part);
+    }
+  }
+
+  function writeLine(stream, parts) {
+    stream.write(`${parts.map(normalisePart).join(" ")}
+`);
+  }
+
+  return {
+    info: (...parts) => writeLine(jsonOutput ? stderr : stdout, parts),
+    warn: (...parts) => writeLine(stderr, parts),
+    error: (...parts) => writeLine(stderr, parts),
+    jsonResult: (value) => writeLine(stdout, [JSON.stringify(value)])
+  };
+}
+
 export function formatRelayStatus(snapshot, context = {}) {
   return {
     mode: "single-client-relay",

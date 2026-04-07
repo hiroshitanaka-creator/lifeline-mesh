@@ -11,7 +11,8 @@ import {
   parseRelayAdminArgs,
   parseManualSmokeArgs,
   formatRelayStatus,
-  resolveDiagnosticsEnabled
+  resolveDiagnosticsEnabled,
+  createSmokeOutput
 } from "./relay-ops.js";
 import { SingleClientRelayNode } from "./relay-node.js";
 
@@ -20,6 +21,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const relayArgs = parseRelayAdminArgs(argv);
 const smokeArgs = parseManualSmokeArgs(argv);
+const jsonStdoutMode = smokeArgs.nonInteractive && smokeArgs.jsonOutput;
+
+if (jsonStdoutMode) {
+  redirectConsoleLogToStderr();
+}
+
+const output = createSmokeOutput({ jsonOutput: jsonStdoutMode });
+
 const diagnosticsEnabled = resolveDiagnosticsEnabled({
   cliSpecified: relayArgs.diagnosticsSpecified,
   cliEnabled: relayArgs.diagnosticsEnabled,
@@ -35,8 +44,8 @@ if (argv.includes("--help") || argv.includes("-h")) {
 }
 
 const logger = {
-  log: (...parts) => console.log(...parts),
-  warn: (...parts) => console.warn(...parts)
+  log: (...parts) => output.info(...parts),
+  warn: (...parts) => output.warn(...parts)
 };
 
 const { BlenoBackend } = await import("../bluetooth/backends/node-bleno.js");
@@ -55,34 +64,34 @@ server.setBackend(backend);
 
 server.onMessageReceived = (message, clientId) => {
   relayNode.onInboundMessage(message, clientId).catch((error) => {
-    console.error("[Smoke] Failed to persist inbound message:", error?.message ?? error);
+    output.error("[Smoke] Failed to persist inbound message:", error?.message ?? error);
   });
 };
 
 server.onClientConnected = (clientId) => {
-  console.log(`[Smoke] client connected: ${clientId}`);
+  output.info(`[Smoke] client connected: ${clientId}`);
   relayNode.onClientConnected(clientId).catch((error) => {
-    console.error("[Smoke] replay failed:", error?.message ?? error);
+    output.error("[Smoke] replay failed:", error?.message ?? error);
   });
 };
 
 server.onClientDisconnected = (clientId) => {
-  console.log(`[Smoke] client disconnected: ${clientId}`);
+  output.info(`[Smoke] client disconnected: ${clientId}`);
 };
 
 server.onError = (code, error) => {
-  console.error(`[Smoke] server error [${code}]:`, error?.message ?? error);
+  output.error(`[Smoke] server error [${code}]:`, error?.message ?? error);
 };
 
-console.log(`[Smoke] Starting manual real-bleno harness as "${localName}"`);
-console.log(`[Smoke] Relay store path: ${relayStorePath}`);
-console.log(`[Smoke] Diagnostics: ${diagnosticsEnabled ? "enabled" : "disabled"}`);
+output.info(`[Smoke] Starting manual real-bleno harness as "${localName}"`);
+output.info(`[Smoke] Relay store path: ${relayStorePath}`);
+output.info(`[Smoke] Diagnostics: ${diagnosticsEnabled ? "enabled" : "disabled"}`);
 
 try {
   await server.startAdvertising();
-  console.log("[Smoke] Advertising started.");
+  output.info("[Smoke] Advertising started.");
 } catch (error) {
-  console.error("[Smoke] Failed to start advertising:", error?.message ?? error);
+  output.error("[Smoke] Failed to start advertising:", error?.message ?? error);
   process.exit(1);
 }
 
@@ -91,7 +100,7 @@ let rl = null;
 if (smokeArgs.nonInteractive) {
   await runNonInteractiveSmoke();
 } else {
-  console.log("[Smoke] Type 'help' for operator commands.");
+  output.info("[Smoke] Type 'help' for operator commands.");
 
   rl = readline.createInterface({
     input: process.stdin,
@@ -101,7 +110,7 @@ if (smokeArgs.nonInteractive) {
 
   rl.on("line", (line) => {
     runCommand(line).catch((error) => {
-      console.error("[Smoke] command error:", error?.message ?? error);
+      output.error("[Smoke] command error:", error?.message ?? error);
     });
   });
 
@@ -131,13 +140,13 @@ async function runCommand(line) {
 
   if (input === "cleanup") {
     const result = await relayNode.runCleanup("manual-smoke");
-    console.log("[Smoke] cleanup:", JSON.stringify(result));
+    output.info("[Smoke] cleanup:", JSON.stringify(result));
     await dumpStatus("manual-smoke:post-cleanup");
     return;
   }
 
   if (input === "clients") {
-    console.log("[Smoke] connected clients:", server.connectedClients.join(",") || "none");
+    output.info("[Smoke] connected clients:", server.connectedClients.join(",") || "none");
     return;
   }
 
@@ -152,14 +161,14 @@ async function runCommand(line) {
     return;
   }
 
-  console.log(`[Smoke] unknown command: ${input}`);
+  output.info(`[Smoke] unknown command: ${input}`);
   printRuntimeHelp();
 }
 
 async function sendManualMessage(payloadText) {
   const clientId = server.connectedClients[0];
   if (!clientId) {
-    console.log("[Smoke] no active client; connect Web Bluetooth central first");
+    output.info("[Smoke] no active client; connect Web Bluetooth central first");
     return;
   }
 
@@ -171,12 +180,12 @@ async function sendManualMessage(payloadText) {
   };
 
   await server.sendMessage(message, clientId);
-  console.log(`[Smoke] sent msgId=${message.msgId} to ${clientId}`);
+  output.info(`[Smoke] sent msgId=${message.msgId} to ${clientId}`);
 }
 
 async function dumpStatus(source) {
   const snapshot = await relayNode.getSnapshot();
-  console.log("[Smoke] relay status:", JSON.stringify(formatRelayStatus(snapshot, { source })));
+  output.info("[Smoke] relay status:", JSON.stringify(formatRelayStatus(snapshot, { source })));
 }
 
 let isShuttingDown = false;
@@ -184,7 +193,7 @@ let isShuttingDown = false;
 async function shutdown(reason) {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  console.log(`\n[Smoke] shutting down (${reason})`);
+  output.info(`\n[Smoke] shutting down (${reason})`);
   if (rl) {
     rl.close();
   }
@@ -196,7 +205,7 @@ async function shutdown(reason) {
 }
 
 async function runNonInteractiveSmoke() {
-  console.log(`[Smoke] Running non-interactive smoke (timeoutMs=${smokeArgs.timeoutMs}, expectClient=${smokeArgs.expectClient})`);
+  output.info(`[Smoke] Running non-interactive smoke (timeoutMs=${smokeArgs.timeoutMs}, expectClient=${smokeArgs.expectClient})`);
   const startedAt = Date.now();
   const deadline = startedAt + smokeArgs.timeoutMs;
   let clientObserved = server.connectedClients.length > 0;
@@ -239,13 +248,13 @@ async function runNonInteractiveSmoke() {
   if (smokeArgs.statusFile) {
     await fs.mkdir(path.dirname(smokeArgs.statusFile), { recursive: true });
     await fs.writeFile(smokeArgs.statusFile, `${JSON.stringify(result, null, 2)}\n`, "utf8");
-    console.log(`[Smoke] Wrote status file: ${smokeArgs.statusFile}`);
+    output.info(`[Smoke] Wrote status file: ${smokeArgs.statusFile}`);
   }
 
-  if (smokeArgs.jsonOutput) {
-    console.log(JSON.stringify(result));
+  if (jsonStdoutMode) {
+    output.jsonResult(result);
   } else {
-    console.log("[Smoke] non-interactive result:", JSON.stringify(result));
+    output.info("[Smoke] non-interactive result:", JSON.stringify(result));
   }
 
   relayNode.close();
@@ -270,6 +279,12 @@ function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function redirectConsoleLogToStderr() {
+  console.log = (...parts) => {
+    process.stderr.write(`${parts.join(" ")}\n`);
+  };
 }
 
 function printHelp() {
@@ -312,5 +327,5 @@ Real-bleno validation checklist:
 }
 
 function printRuntimeHelp() {
-  console.log("[Smoke] commands: help | status | clients | send <text> | cleanup | exit");
+  output.info("[Smoke] commands: help | status | clients | send <text> | cleanup | exit");
 }
