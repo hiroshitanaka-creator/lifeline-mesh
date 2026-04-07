@@ -13,10 +13,12 @@
 - **No new phase implementation**.
 - Implementation-series verification confirms **no incomplete phase** in the canonical sequence (Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5).
 - Per execution rules, work stopped after verification to avoid speculative or out-of-order changes.
+- ADR freeze alignment applied for BLE peripheral truth: v0.1.x supported path is Node relay appliance only (mobile/browser peripheral remains unresolved).
 
 ## What was added
 
 - Updated this status report to record the current truthful end-state and this run's verification evidence.
+- Added first-class operator documentation for the Node relay appliance path and relay-focused validation command.
 
 ## Explicitly deferred
 

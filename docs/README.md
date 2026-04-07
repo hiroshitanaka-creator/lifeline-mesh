@@ -74,6 +74,12 @@ Peripheral capability truth table covering:
 - first supported path statement for v0.1.x
 - explicit non-claim posture for unproven platforms
 
+### [NODE_RELAY_APPLIANCE_PATH.md](./NODE_RELAY_APPLIANCE_PATH.md)
+Operator-facing first supported BLE peripheral path covering:
+- install and run workflow for Node relay appliance
+- supported vs unsupported boundary for v0.1.x
+- relay-specific validation commands and failure-mode expectations
+
 ## Quick Links
 
 **For Users**:

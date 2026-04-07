@@ -28,6 +28,7 @@ This drill is the **single truthful interop drill** for the current Phase 2 scop
 
 - Test: `tests/integration/transport-phase2.test.js`
 - Command: `npm run test:integration`
+- Relay-focused command: `npm run test:relay-appliance`
 - Deterministic simulator support (Phase 5): `sim/deterministic-simulator.js`
 - Simulator/property/fuzz gate: `tests/integration/phase5-simulator-fuzz.test.js`
 

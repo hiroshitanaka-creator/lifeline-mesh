@@ -112,6 +112,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - **[BLE Manual Validation Runbook](docs/BLE_MANUAL_VALIDATION_RUNBOOK.md)** - Hardware test matrix and repeatable contributor checks
 - **[A↔B↔C Relay Drill](docs/RELAY_DRILL_AB_C.md)** - Unified interop drill for browser-central ↔ Node-peripheral path
 - **[Hardware Smoke Path](docs/HARDWARE_SMOKE_PATH.md)** - Formalized realistic hardware validation path
+- **[Node Relay Appliance Path](docs/NODE_RELAY_APPLIANCE_PATH.md)** - Install/run/operator workflow for the first supported BLE peripheral endpoint
 
 ### For Developers
 - **[Protocol Specification](spec/PROTOCOL.md)** - Current protocol specification (with vnext cross-link)
@@ -138,6 +139,7 @@ Validation gate status: **passing (see commands below) ✓**
 | Typecheck | `npm run typecheck` |
 | Unit (crypto + vectors) | `npm run test:unit` |
 | Integration | `npm run test:integration` |
+| Node relay appliance validation | `npm run test:relay-appliance` |
 | Local aggregate | `npm run validate` |
 
 ```bash
@@ -158,6 +160,9 @@ npm run test:e2e:playwright
 
 # Full real-browser path (install + Playwright run)
 npm run test:e2e:real-browser
+
+# Node relay appliance path validation (first supported BLE peripheral endpoint)
+npm run test:relay-appliance
 ```
 
 CI note:
@@ -381,7 +386,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - **Store schema v5**: outbox `priority`/`ttl`/`linkId` support plus append-only `eventLog` with replayable outbox/inbox materialized views
 - **TypeScript declarations**: `types/runtime-mesh.d.ts`, `types/operator-panel.d.ts`, `types/gatt-server.d.ts`, `types/app-globals.d.ts`
 - **Contact verification workflow**: safety-number display, verify / mark-compromised per contact, encryption blocked for compromised recipients
-- **Node.js relay server** (`node-server/`): persistent single-client relay with durable store; 5/5 integration tests
+- **Node.js relay server** (`node-server/`): persistent single-client relay with durable store; lifecycle/replay/dedup/failure-mode integration coverage
 - Group messaging MVP (Sender Keys / DMESH_GROUP_V1 protocol)
 - Multi-job CI (lint, typecheck, unit, integration, compat, security, E2E Playwright critical-path)
 - GitHub Pages deployment (Vite build)
