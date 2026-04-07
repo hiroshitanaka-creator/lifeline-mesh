@@ -1505,6 +1505,14 @@ window.importKeys = async function() {
   input.click();
 };
 
+function resetSelectWithPlaceholder(selectEl, placeholder) {
+  if (!selectEl) return;
+  const option = document.createElement("option");
+  option.value = "";
+  option.textContent = placeholder;
+  selectEl.replaceChildren(option);
+}
+
 window.resetAll = async function() {
   if (!confirm("⚠️ Delete ALL data (keys, contacts, replay DB)?\nThis cannot be undone!")) return;
 
@@ -1512,8 +1520,8 @@ window.resetAll = async function() {
 
   document.getElementById("my-id").textContent = tr('keys.notLoaded');
   document.getElementById("contacts-view").textContent = tr('contacts.none');
-  document.getElementById("recipient-select").innerHTML = `<option value="">${tr('contacts.recipient.placeholder')}</option>`;
-  document.getElementById("group-select").innerHTML = `<option value="">${tr('encrypt.group.select')}</option>`;
+  resetSelectWithPlaceholder(document.getElementById("recipient-select"), tr('contacts.recipient.placeholder'));
+  resetSelectWithPlaceholder(document.getElementById("group-select"), tr('encrypt.group.select'));
   document.getElementById("encrypted").textContent = "";
   document.getElementById("decrypted").textContent = "";
   setStatus(true, "All data deleted");
@@ -1607,7 +1615,7 @@ window.refreshContacts = async function() {
 
   const sel = document.getElementById("recipient-select");
   const selectedFpBefore = /** @type {HTMLSelectElement} */ (sel).value;
-  sel.innerHTML = `<option value="">Select Recipient</option>`;
+  resetSelectWithPlaceholder(sel, "Select Recipient");
 
   for (const c of contacts) {
     const opt = document.createElement("option");
@@ -1623,7 +1631,7 @@ window.refreshContacts = async function() {
 
   const groupMemberSel = document.getElementById("group-member-select");
   if (groupMemberSel) {
-    groupMemberSel.innerHTML = `<option value="">Select Contact</option>`;
+    resetSelectWithPlaceholder(groupMemberSel, "Select Contact");
     for (const c of contacts) {
       const opt = document.createElement("option");
       opt.value = c.fp;
@@ -1688,7 +1696,7 @@ window.refreshGroups = async function() {
   groups.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
   const sel = document.getElementById('group-select');
-  sel.innerHTML = `<option value="">Select Group</option>`;
+  resetSelectWithPlaceholder(sel, "Select Group");
 
   for (const g of groups) {
     const opt = document.createElement('option');
@@ -2277,7 +2285,7 @@ window.showQRCode = async function() {
 
   // Clear previous QR code
   const qrContainer = document.getElementById("qr-code");
-  qrContainer.innerHTML = "";
+  qrContainer.replaceChildren();
 
   // Create canvas for QR code
   const canvas = document.createElement('canvas');

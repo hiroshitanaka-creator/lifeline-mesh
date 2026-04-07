@@ -28,6 +28,8 @@ This drill is the **single truthful interop drill** for the current Phase 2 scop
 
 - Test: `tests/integration/transport-phase2.test.js`
 - Command: `npm run test:integration`
+- Deterministic simulator support (Phase 5): `sim/deterministic-simulator.js`
+- Simulator/property/fuzz gate: `tests/integration/phase5-simulator-fuzz.test.js`
 
 ## Route advertisement policy used in Phase 2
 
@@ -40,3 +42,8 @@ This drill is the **single truthful interop drill** for the current Phase 2 scop
 - Browser-native LoRa runtime.
 - Browser BLE peripheral mode.
 - Multi-client Node relay semantics.
+
+## Phase 5 support evidence
+
+- Hardware smoke formalization: `docs/HARDWARE_SMOKE_PATH.md`
+- Energy profile command: `node tools/phase5-energy-metrics.js`
