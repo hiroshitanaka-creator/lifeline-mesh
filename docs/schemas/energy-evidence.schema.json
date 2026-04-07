@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hiroshitanaka-creator.github.io/lifeline-mesh/schemas/energy-evidence.schema.json",
+  "title": "Energy Evidence Record",
+  "type": "object",
+  "required": ["schemaVersion", "recordType", "capturedAt", "evidenceClass", "truthFlags", "metrics"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "recordType": { "const": "phase5-energy-evidence" },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "evidenceClass": { "enum": ["simulation", "measured"] },
+    "truthFlags": {
+      "type": "object",
+      "required": ["batteryTelemetry"],
+      "properties": {
+        "batteryTelemetry": { "enum": ["simulated", "measured", "not_available"] },
+        "manualCollection": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["avgUniqueDelivered", "avgQueueRemaining", "nodeEnergyProfile"],
+      "properties": {
+        "avgUniqueDelivered": { "type": "number" },
+        "avgQueueRemaining": { "type": "number" },
+        "nodeEnergyProfile": {
+          "type": "object",
+          "required": ["A", "B", "C"],
+          "properties": {
+            "A": { "enum": ["low", "medium", "high"] },
+            "B": { "enum": ["low", "medium", "high"] },
+            "C": { "enum": ["low", "medium", "high"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "measurementMetadata": {
+      "type": "object",
+      "properties": {
+        "deviceModel": { "type": "string" },
+        "samplingWindowMs": { "type": "integer", "minimum": 1 },
+        "collectionMethod": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
