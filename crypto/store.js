@@ -15,7 +15,12 @@
 // ============================================================================
 
 export const DB_NAME = "lifelineMeshV2";
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
+
+// CRDT store names (v5 schema)
+export const STORE_CRDT_DOCS = "crdt-ydocs";       // Compacted Y.Doc snapshots
+export const STORE_CRDT_UPDATES = "crdt-updates";   // Pending unmerged Yjs updateV2 entries
+export const STORE_CRDT_BLOOM = "crdt-bloom";       // Bloom filter state (Phase3MeshRouter)
 
 // Store names
 export const STORE_KEYS = "keys";
@@ -179,6 +184,22 @@ export function openDB() {
           }
         }
         console.log("Migrating database from v3 to v4 (outbox priority/ttl/linkId indexes)");
+      }
+
+      // v5: CRDT stores for Yjs group state + Bloom filter persistence
+      if (oldVersion < 5) {
+        if (!db.objectStoreNames.contains(STORE_CRDT_DOCS)) {
+          db.createObjectStore(STORE_CRDT_DOCS); // key: docName (string)
+        }
+        if (!db.objectStoreNames.contains(STORE_CRDT_UPDATES)) {
+          const updatesStore = db.createObjectStore(STORE_CRDT_UPDATES, { autoIncrement: true });
+          updatesStore.createIndex("docName", "docName", { unique: false });
+          updatesStore.createIndex("ts", "ts", { unique: false });
+        }
+        if (!db.objectStoreNames.contains(STORE_CRDT_BLOOM)) {
+          db.createObjectStore(STORE_CRDT_BLOOM); // key: routerId (string)
+        }
+        console.log("Migrated database from v4 to v5 (CRDT + Bloom filter stores)");
       }
     };
   });
@@ -963,6 +984,278 @@ export async function getStats() {
   };
 }
 
+// ============================================================================
+// CRDT Store — Yjs Y.Doc persistence + Bloom filter
+// ============================================================================
+
+/**
+ * Maximum number of pending Yjs update entries before triggering compaction.
+ * After compaction, entries are merged into the main snapshot.
+ */
+export const CRDT_COMPACTION_THRESHOLD = 500;
+
+/**
+ * Save a compacted Y.Doc snapshot (replaces any previous snapshot).
+ * @param {string} docName - e.g. "group-<groupId>-doc"
+ * @param {Uint8Array} snapshot - Y.encodeStateAsUpdateV2(ydoc) result
+ */
+export async function crdtSaveSnapshot(docName, snapshot) {
+  await idbPut(STORE_CRDT_DOCS, snapshot, docName);
+}
+
+/**
+ * Load a Y.Doc snapshot.
+ * @param {string} docName
+ * @returns {Promise<Uint8Array|null>}
+ */
+export async function crdtLoadSnapshot(docName) {
+  return idbGet(STORE_CRDT_DOCS, docName);
+}
+
+/**
+ * Append a pending Yjs updateV2 to the update log.
+ * @param {string} docName
+ * @param {Uint8Array} update - Y.encodeStateAsUpdateV2 delta
+ * @returns {Promise<number>} IDB auto-increment key
+ */
+export async function crdtAppendUpdate(docName, update) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CRDT_UPDATES, "readwrite");
+    const store = tx.objectStore(STORE_CRDT_UPDATES);
+    const entry = { docName, update, ts: Date.now() };
+    const req = store.add(entry);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Load all pending Yjs updates for a Y.Doc.
+ * @param {string} docName
+ * @returns {Promise<Array<{ key: number, docName: string, update: Uint8Array, ts: number }>>}
+ */
+export async function crdtLoadPendingUpdates(docName) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CRDT_UPDATES, "readonly");
+    const store = tx.objectStore(STORE_CRDT_UPDATES);
+    const index = store.index("docName");
+    const req = index.getAll(docName);
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Clear pending update entries for a Y.Doc (after compaction).
+ * @param {string} docName
+ */
+export async function crdtClearPendingUpdates(docName) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CRDT_UPDATES, "readwrite");
+    const store = tx.objectStore(STORE_CRDT_UPDATES);
+    const index = store.index("docName");
+    const req = index.getAllKeys(docName);
+    req.onsuccess = () => {
+      const keys = req.result || [];
+      let pending = keys.length;
+      if (pending === 0) { resolve(); return; }
+      for (const key of keys) {
+        const delReq = store.delete(key);
+        delReq.onsuccess = () => { if (--pending === 0) resolve(); };
+        delReq.onerror = () => reject(delReq.error);
+      }
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Count pending updates for a Y.Doc.
+ * @param {string} docName
+ * @returns {Promise<number>}
+ */
+export async function crdtCountPendingUpdates(docName) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CRDT_UPDATES, "readonly");
+    const store = tx.objectStore(STORE_CRDT_UPDATES);
+    const index = store.index("docName");
+    const req = index.count(docName);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Add a CRDT delta to a group message's outbox entry.
+ * Stores the serialized Yjs updateV2 alongside the message for idempotent retry.
+ *
+ * @param {Object} message - Outbox message (mutated to add crdtDelta field)
+ * @param {Uint8Array} delta - Yjs updateV2 binary
+ * @param {string} recipientFp
+ * @param {Object} [options]
+ * @returns {Promise<void>}
+ */
+export async function addGroupMessageToOutbox(message, delta, recipientFp, options = {}) {
+  const msgId = message.msgId;
+  if (!msgId) throw new Error("addGroupMessageToOutbox: message.msgId is required");
+
+  const b64Delta = _uint8ToBase64(delta);
+
+  return addToOutbox(
+    { ...message, crdtDelta: b64Delta },
+    recipientFp,
+    { transport: "ble", ...options }
+  );
+}
+
+/**
+ * Get the CRDT delta from an outbox entry (decoded from base64).
+ * @param {Object} outboxEntry
+ * @returns {Uint8Array|null}
+ */
+export function getOutboxCrdtDelta(outboxEntry) {
+  if (!outboxEntry || !outboxEntry.crdtDelta) return null;
+  return _base64ToUint8(outboxEntry.crdtDelta);
+}
+
+// ─── Bloom filter persistence ─────────────────────────────────────────────────
+
+/**
+ * Save serialized Bloom filter state for a router instance.
+ * @param {string} routerId - e.g. node fingerprint
+ * @param {Object} serialized - BloomFilter.serialize() result
+ */
+export async function bloomSave(routerId, serialized) {
+  await idbPut(STORE_CRDT_BLOOM, serialized, routerId);
+}
+
+/**
+ * Load serialized Bloom filter state.
+ * @param {string} routerId
+ * @returns {Promise<Object|null>}
+ */
+export async function bloomLoad(routerId) {
+  return idbGet(STORE_CRDT_BLOOM, routerId);
+}
+
+// ─── IDB seen-set for Phase3MeshRouter ───────────────────────────────────────
+
+/**
+ * Persist a seen transferId to the SEEN store (used by Phase3MeshRouter).
+ * @param {string} transferId
+ */
+export async function persistSeenKey(transferId) {
+  const entry = {
+    seenKey: `mesh:${transferId}`,
+    seenAt: Date.now()
+  };
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_SEEN, "readwrite");
+    const store = tx.objectStore(STORE_SEEN);
+    const req = store.put(entry);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Check if a transferId exists in the persistent seen-set.
+ * @param {string} transferId
+ * @returns {Promise<boolean>}
+ */
+export async function isSeenPersistent(transferId) {
+  const key = `mesh:${transferId}`;
+  const result = await idbGet(STORE_SEEN, key);
+  return result !== undefined;
+}
+
+// ─── v1 → CRDT v2 migration ──────────────────────────────────────────────────
+
+/**
+ * Migrate legacy v1 group state (from STORE_GROUPS + STORE_GROUP_MEMBERS)
+ * into a CRDT-backed Y.Doc format.
+ *
+ * This function is idempotent: if the Y.Doc already exists for a group,
+ * it is not overwritten.
+ *
+ * @param {string} groupId
+ * @returns {Promise<{ migrated: boolean, reason?: string }>}
+ */
+export async function migrateGroupTocrdt(groupId) {
+  const docName = `group-${groupId}-doc`;
+
+  // Check if already migrated
+  const existing = await crdtLoadSnapshot(docName);
+  if (existing) {
+    return { migrated: false, reason: "already migrated" };
+  }
+
+  // Load legacy group data
+  const group = await idbGet(STORE_GROUPS, groupId);
+  if (!group) {
+    return { migrated: false, reason: "group not found" };
+  }
+
+  const members = await idbGetByIndex(STORE_GROUP_MEMBERS, "groupId", groupId);
+
+  // Build a minimal synthetic Y.Doc update representing existing state.
+  // Since we don't have Yjs available in this module (it's a browser lib),
+  // we store a JSON-encoded migration record that the app layer can use
+  // to initialize a Y.Doc on first load.
+  const migrationRecord = {
+    _migration: true,
+    _version: "v1-to-crdt-v2",
+    _ts: Date.now(),
+    group,
+    members,
+    messages: [] // Messages from inbox must be loaded separately by app layer
+  };
+
+  // Store as a special JSON blob (not a real Yjs update)
+  // The app layer checks for _migration: true and initializes Y.Doc accordingly.
+  await idbPut(STORE_CRDT_DOCS, migrationRecord, `${docName}:migration`);
+
+  return { migrated: true, groupId, memberCount: members.length };
+}
+
+/**
+ * Run full v1→v2 CRDT migration for all groups.
+ * @returns {Promise<Array<{ groupId, migrated, reason? }>>}
+ */
+export async function migrateAllGroupsToCrdt() {
+  const groups = await idbGetAll(STORE_GROUPS);
+  const results = [];
+  for (const group of groups) {
+    const result = await migrateGroupTocrdt(group.id);
+    results.push({ groupId: group.id, ...result });
+  }
+  return results;
+}
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+function _uint8ToBase64(u8) {
+  let binary = "";
+  for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
+  if (typeof globalThis.btoa === "function") return globalThis.btoa(binary);
+  return Buffer.from(u8).toString("base64");
+}
+
+function _base64ToUint8(b64) {
+  if (typeof globalThis.atob === "function") {
+    const binary = globalThis.atob(b64);
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  }
+  return new Uint8Array(Buffer.from(b64, "base64"));
+}
+
 /**
  * Clear all data (for testing or reset)
  */
@@ -977,7 +1270,10 @@ export async function clearAllData() {
     STORE_CHUNKS,
     STORE_GROUPS,
     STORE_GROUP_MEMBERS,
-    STORE_SENDER_KEYS
+    STORE_SENDER_KEYS,
+    STORE_CRDT_DOCS,
+    STORE_CRDT_UPDATES,
+    STORE_CRDT_BLOOM
   ];
 
   return new Promise((resolve, reject) => {

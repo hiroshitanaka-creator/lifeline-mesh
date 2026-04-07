@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:runtime": "tsc --noEmit -p tsconfig.runtime.json",
     "validate": "npm run validate:local",
-    "validate:local": "npm run gate:lint-typecheck:local && npm run gate:test:unit && npm run gate:test:integration && npm run gate:compat && npm run gate:e2e:smoke",
+    "validate:local": "npm run gate:lint-typecheck:local && npm run gate:test:unit && npm run gate:test:integration && npm run gate:compat && npm run gate:e2e:smoke && npm run check:backups",
     "validate:ci": "npm run gate:lint-typecheck:ci && npm run gate:test:unit && npm run gate:test:integration && npm run gate:compat && npm run gate:e2e:ci-critical && npm run gate:e2e:ci-extra-browser",
     "ci": "npm run validate:ci",
     "gate:lint-typecheck:local": "npm run lint && npm run typecheck",
@@ -40,7 +40,16 @@
     "check:security-audit": "node tools/security-audit-check.js",
     "test:e2e:real-browser": "npm run test:e2e:install && npm run test:e2e:playwright",
     "test:e2e:playwright:main-ci": "node tests/e2e/run-playwright.js tests/e2e/main-ci-critical-path.spec.js",
-    "test:e2e:playwright:extra-ci": "node tests/e2e/run-playwright.js tests/e2e/transport-receive-ci-fast.spec.js"
+    "test:e2e:playwright:extra-ci": "node tests/e2e/run-playwright.js tests/e2e/transport-receive-ci-fast.spec.js",
+    "audit:security": "node crypto/audit.js --path . --format text --fail-on-high",
+    "audit:pq": "node crypto/audit.js --path . --format json | node -e \"process.stdin|0\" 2>/dev/null || node crypto/audit.js --path . --format text",
+    "migrate:backup": "node tools/migrate-v1-backup.js",
+    "check:backups": "node tools/migrate-v1-backup.js --check-all",
+    "chaos:network": "node tools/chaos/orchestrator.js --scenario network",
+    "chaos:battery": "node tools/chaos/orchestrator.js --scenario battery",
+    "chaos:disaster": "node tools/chaos/orchestrator.js --scenario disaster",
+    "migrate:crdt": "node -e \"import('./crypto/store.js').then(m => m.migrateAllGroupsToCrdt()).then(r => console.log(JSON.stringify(r, null, 2)))\"",
+    "release:check": "npm run validate && npm run audit:security && npm run check:backups"
   },
   "keywords": [
     "cryptography",
