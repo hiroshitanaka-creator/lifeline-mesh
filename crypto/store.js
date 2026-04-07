@@ -15,7 +15,7 @@
 // ============================================================================
 
 export const DB_NAME = "lifelineMeshV2";
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 // Store names
 export const STORE_KEYS = "keys";
@@ -27,6 +27,7 @@ export const STORE_CHUNKS = "chunks"; // Partial chunk reassembly
 export const STORE_GROUPS = "groups";
 export const STORE_GROUP_MEMBERS = "groupMembers";
 export const STORE_SENDER_KEYS = "senderKeys";
+export const STORE_EVENT_LOG = "eventLog";
 
 // Cleanup intervals
 export const SEEN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -161,6 +162,17 @@ export function openDB() {
         }
 
         console.log("Migrating database from v2 to v3 (group stores)");
+      }
+
+      if (oldVersion < 5) {
+        if (!db.objectStoreNames.contains(STORE_EVENT_LOG)) {
+          const eventLogStore = db.createObjectStore(STORE_EVENT_LOG, { keyPath: "eventId" });
+          eventLogStore.createIndex("lamport", "lamport", { unique: false });
+          eventLogStore.createIndex("ts", "ts", { unique: false });
+          eventLogStore.createIndex("scope", "scope", { unique: false });
+          eventLogStore.createIndex("topic", "topic", { unique: false });
+        }
+        console.log("Migrating database from v4 to v5 (append-only event log)");
       }
 
       if (oldVersion < 4) {
@@ -320,10 +332,17 @@ export async function idbCount(storeName) {
  * @param {number} [options.priority] - OUTBOX_PRIORITY value (default: NORMAL)
  * @param {number} [options.ttl] - Absolute expiry timestamp in ms (default: now + 7 days)
  * @param {string} [options.linkId] - BLE link/peer ID this message is targeted at
+ * @param {string} [options.sourceEventId] - Event identifier backing this view row
+ * @param {number} [options.lamport] - Lamport timestamp for source event
+ * @param {string[]} [options.parents] - Causal parent event IDs
+ * @param {string} [options.authorFp] - Event author fingerprint
+ * @param {string} [options.scope] - Event scope
+ * @param {string} [options.topic] - Event topic
  * @returns {Promise<void>}
  */
 export async function addToOutbox(message, recipientFp, options = {}) {
   const now = Date.now();
+  const lamport = Number.isFinite(options.lamport) ? options.lamport : now;
   const outboxEntry = {
     msgId: message.msgId,
     recipientFp,
@@ -334,11 +353,29 @@ export async function addToOutbox(message, recipientFp, options = {}) {
     lastAttempt: null,
     // v4 fields
     schemaVersion: OUTBOX_SCHEMA_VERSION,
+    sourceEventId: options.sourceEventId || message.msgId,
     priority: options.priority ?? OUTBOX_PRIORITY.NORMAL,
     ttl: options.ttl ?? (now + OUTBOX_DEFAULT_TTL_MS),
     linkId: options.linkId ?? null,
     ...options
   };
+  await appendEventLog({
+    eventId: outboxEntry.sourceEventId,
+    parents: Array.isArray(options.parents) ? options.parents : [],
+    authorFp: options.authorFp || "local",
+    scope: options.scope || "direct",
+    topic: options.topic || "outbox",
+    ts: outboxEntry.createdAt,
+    ttl: outboxEntry.ttl,
+    lamport,
+    priority: outboxEntry.priority,
+    schemaVersion: 1,
+    type: "outbox-message",
+    payload: {
+      msgId: message.msgId,
+      recipientFp
+    }
+  });
   await idbPut(STORE_OUTBOX, outboxEntry);
 }
 
@@ -473,6 +510,24 @@ export async function addToInbox(decryptedResult, originalMessage) {
       .map(b => b.toString(16).padStart(2, "0"))
       .join("");
   }
+
+  await appendEventLog({
+    eventId: decryptedResult.eventId || decryptedResult.msgId,
+    parents: Array.isArray(decryptedResult.parents) ? decryptedResult.parents : [],
+    authorFp: typeof decryptedResult.senderFp === "string" ? decryptedResult.senderFp : "unknown",
+    scope: decryptedResult.scope || "direct",
+    topic: decryptedResult.topic || "inbox",
+    ts: Number.isFinite(decryptedResult.ts) ? decryptedResult.ts : Date.now(),
+    ttl: Number.isFinite(decryptedResult.ttl) ? decryptedResult.ttl : null,
+    lamport: Number.isFinite(decryptedResult.lamport) ? decryptedResult.lamport : Date.now(),
+    priority: Number.isFinite(decryptedResult.priority) ? decryptedResult.priority : OUTBOX_PRIORITY.NORMAL,
+    schemaVersion: 1,
+    type: "inbox-message",
+    payload: {
+      msgId: decryptedResult.msgId,
+      senderFp: inboxEntry.senderFpB64 || inboxEntry.senderFp
+    }
+  });
 
   await idbPut(STORE_INBOX, inboxEntry);
 }
@@ -921,6 +976,82 @@ export function getSenderKeysForGroup(groupId) {
 }
 
 // ============================================================================
+// Append-only Event Log (Phase 3)
+// ============================================================================
+
+/**
+ * Append event if not present (idempotent).
+ * @param {object} event
+ * @returns {Promise<{appended: boolean, event: object}>}
+ */
+export async function appendEventLog(event) {
+  if (!event || !event.eventId) {
+    throw new Error("appendEventLog requires event.eventId");
+  }
+
+  const existing = await idbGet(STORE_EVENT_LOG, event.eventId);
+  if (existing) {
+    return { appended: false, event: existing };
+  }
+
+  const entry = {
+    schemaVersion: 1,
+    parents: Array.isArray(event.parents) ? event.parents : [],
+    lamport: Number.isFinite(event.lamport) ? event.lamport : 0,
+    ts: Number.isFinite(event.ts) ? event.ts : Date.now(),
+    ttl: event.ttl ?? null,
+    topic: event.topic || "default",
+    scope: event.scope || "direct",
+    ...event
+  };
+
+  await idbPut(STORE_EVENT_LOG, entry);
+  return { appended: true, event: entry };
+}
+
+/**
+ * @returns {Promise<object[]>}
+ */
+export async function getAllEventLogEntries() {
+  const entries = await idbGetAll(STORE_EVENT_LOG);
+  return entries.sort((a, b) => {
+    if ((a.lamport || 0) !== (b.lamport || 0)) {
+      return (a.lamport || 0) - (b.lamport || 0);
+    }
+    if ((a.ts || 0) !== (b.ts || 0)) {
+      return (a.ts || 0) - (b.ts || 0);
+    }
+    return String(a.eventId).localeCompare(String(b.eventId));
+  });
+}
+
+/**
+ * @param {number} lamportInclusive
+ * @returns {Promise<object[]>}
+ */
+export async function getEventLogFromLamport(lamportInclusive = 0) {
+  const entries = await getAllEventLogEntries();
+  return entries.filter((event) => (event.lamport || 0) >= lamportInclusive);
+}
+
+/**
+ * Remove expired events by ttl.
+ * @param {number} [now]
+ * @returns {Promise<number>}
+ */
+export async function pruneExpiredEvents(now = Date.now()) {
+  const entries = await idbGetAll(STORE_EVENT_LOG);
+  let removed = 0;
+  for (const event of entries) {
+    if (event.ttl !== null && event.ttl !== undefined && event.ttl < now) {
+      await idbDel(STORE_EVENT_LOG, event.eventId);
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
+// ============================================================================
 // Database Maintenance
 // ============================================================================
 
@@ -931,12 +1062,14 @@ export async function runMaintenance() {
   const seenRemoved = await cleanupSeen();
   const chunksRemoved = await cleanupOldChunks();
   const outboxPurged = await purgeExpiredOutbox();
+  const eventLogPruned = await pruneExpiredEvents();
 
   const result = {
     at: Date.now(),
     seenRemoved,
     chunksRemoved,
-    outboxPurged
+    outboxPurged,
+    eventLogPruned
   };
 
   console.log(
@@ -959,7 +1092,8 @@ export async function getStats() {
     chunks: await idbCount(STORE_CHUNKS),
     groups: await idbCount(STORE_GROUPS),
     groupMembers: await idbCount(STORE_GROUP_MEMBERS),
-    senderKeys: await idbCount(STORE_SENDER_KEYS)
+    senderKeys: await idbCount(STORE_SENDER_KEYS),
+    eventLog: await idbCount(STORE_EVENT_LOG)
   };
 }
 
@@ -977,7 +1111,8 @@ export async function clearAllData() {
     STORE_CHUNKS,
     STORE_GROUPS,
     STORE_GROUP_MEMBERS,
-    STORE_SENDER_KEYS
+    STORE_SENDER_KEYS,
+    STORE_EVENT_LOG
   ];
 
   return new Promise((resolve, reject) => {

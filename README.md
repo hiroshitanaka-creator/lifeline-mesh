@@ -77,6 +77,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - 📡 **Multi-link runtime**: multiple concurrent BLE connections with real store-and-forward relay
 - 🔀 **N-hop routing**: MeshRouter Phase 2 proactive route advertisements (auto-enabled at ≥2 links)
 - 🧩 **Transport boundary (`transport/`)** with `TransportLink` adapters for browser-central BLE, Node peripheral reference path, and native peripheral contract stubs
+- 🔁 **Phase 3 sync engine**: append-only event log + Lamport anti-entropy primitives for partition/heal convergence
 - 📤 Outbox queuing (priority / TTL / per-link targeting) with automatic flush on reconnect
 - 📥 Inbox persistence for received messages
 - 🔌 **GATT server layer** (`bluetooth/gatt-server.js`): pluggable `IGATTBackend` interface ready for native adapters (Capacitor, noble)
@@ -186,7 +187,7 @@ CI note:
   mesh-router.js      Phase 1 (1-hop dedup) + Phase 2 (N-hop route adv)
   gatt-server.js      GATT peripheral layer with pluggable IGATTBackend
 /transport      Phase 2 transport-link adapters + retry policy + envelope strategy
-/crypto         Core crypto, group messaging, transport, store (schema v4)
+/crypto         Core crypto, group messaging, transport, store (schema v5 + event log)
 /node-server    Node.js relay server (persistent single-client relay mode)
   relay-node.js             Relay session manager
   persistent-relay-store.js Durable message store for relay forwarding
