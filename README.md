@@ -222,7 +222,7 @@ The app runtime (`app/src/runtime-mesh.js`) maintains a `Map<peerId, BLEManager>
 
 The Node relay (`node-server/`) is intentionally **single-client** per active BLE session, with durable pending/delivered store state and observable cleanup/snapshot counters exposed via `relay-ops.js` and `FileRelayStore#getSnapshot()`.
 
-Gateway backhaul is a separate service (`gateway/`) and is **not** endpoint mesh runtime. Local mesh continues without gateway uplink; backhaul bridge logic only handles signed event replication between islands with loop/duplicate suppression.
+Gateway backhaul is a separate service (`gateway/`) and is **not** endpoint mesh runtime. Local mesh continues without gateway uplink; backhaul bridge logic only handles signed event replication between islands with loop/duplicate suppression. Gateway server event storage is append-only durable JSONL (`.lifeline-gateway/<islandId>.events.jsonl` by default, configurable with `LIFELINE_GATEWAY_DATA_DIR` / `LIFELINE_GATEWAY_EVENT_STORE_PATH`).
 
 ---
 

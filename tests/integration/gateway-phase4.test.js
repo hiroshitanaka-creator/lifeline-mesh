@@ -1,4 +1,9 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { GatewayBridge } from "../../gateway/bridge.js";
+import { GatewayEventStore } from "../../gateway/event-store.js";
 
 const tests = [];
 
@@ -31,6 +36,14 @@ function bridgePair() {
   const islandA = new GatewayBridge({ islandId: "island-a" });
   const islandB = new GatewayBridge({ islandId: "island-b" });
   return { islandA, islandB };
+}
+
+function durableStore(filePath) {
+  return new GatewayEventStore({ filePath, logger: { warn: () => null } });
+}
+
+function tmpStorePath(suffix) {
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "gateway-phase4-")), `${suffix}.jsonl`);
 }
 
 test("gateway phase4: two islands sync over backhaul without duplicate storm", () => {
@@ -95,6 +108,61 @@ test("gateway phase4: policy minimizes metadata and uplinks high/critical only",
   assert(exported[0].eventId === "evt-phase4-policy-1", "topic/scope policy applied");
   assert(exported[0].metadataMinimized === true, "gateway marks metadata-minimized policy on exported events");
   assert(!("content" in exported[0]), "gateway exports no additional plaintext fields");
+});
+
+test("gateway phase4: event store survives restart and dedupe still works", () => {
+  const filePath = tmpStorePath("durable-events");
+  const islandId = "island-restart-a";
+  const event = makeEvent({ eventId: "evt-phase4-restart-1", priority: "critical" });
+
+  const firstBridge = new GatewayBridge({ islandId, store: durableStore(filePath) });
+  const firstInsert = firstBridge.ingestLocalMesh(event);
+  assert(firstInsert.inserted, "first ingest should insert");
+
+  const secondBridge = new GatewayBridge({ islandId, store: durableStore(filePath) });
+  assert(secondBridge.snapshot().store.totalEvents === 1, "stored events should recover after restart");
+
+  const duplicate = secondBridge.ingestLocalMesh(event);
+  assert(!duplicate.inserted, "duplicate suppression should still work after restart");
+});
+
+test("gateway phase4: export cursor is restart-safe", () => {
+  const filePath = tmpStorePath("export-cursor");
+  const islandId = "island-restart-cursor";
+
+  const firstBridge = new GatewayBridge({ islandId, store: durableStore(filePath) });
+  firstBridge.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-cursor-1", priority: "critical" }));
+  firstBridge.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-cursor-2", priority: "high" }));
+
+  const firstBatch = firstBridge.exportBackhaulBatch({ cursor: 0 });
+  assert(firstBatch.events.length === 2, "initial export should include first two events");
+  assert(firstBatch.cursor === 2, "cursor should advance to ingested event count");
+
+  const secondBridge = new GatewayBridge({ islandId, store: durableStore(filePath) });
+  secondBridge.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-cursor-3", priority: "critical" }));
+
+  const resumed = secondBridge.exportBackhaulBatch({ cursor: firstBatch.cursor });
+  assert(resumed.events.length === 1, "restart should preserve cursor progression");
+  assert(resumed.events[0].eventId === "evt-phase4-cursor-3", "resumed export should return only unseen event");
+});
+
+test("gateway phase4: loop suppression still works after restart/import", () => {
+  const storeAPath = tmpStorePath("loop-a");
+  const storeBPath = tmpStorePath("loop-b");
+
+  const islandA1 = new GatewayBridge({ islandId: "island-loop-a", store: durableStore(storeAPath) });
+  const islandB1 = new GatewayBridge({ islandId: "island-loop-b", store: durableStore(storeBPath) });
+
+  islandA1.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-loop-1", priority: "critical" }));
+  const initialBatch = islandA1.exportBackhaulBatch({ cursor: 0 });
+  const imported = islandB1.ingestBackhaul(initialBatch.events[0]);
+  assert(imported.inserted, "remote import should insert before restart");
+
+  const islandA2 = new GatewayBridge({ islandId: "island-loop-a", store: durableStore(storeAPath) });
+  const islandB2 = new GatewayBridge({ islandId: "island-loop-b", store: durableStore(storeBPath) });
+  const replay = islandB2.exportBackhaulBatch({ cursor: 0 });
+  const loopAttempt = islandA2.ingestBackhaul(replay.events[0]);
+  assert(!loopAttempt.inserted, "loop suppression should continue after restart");
 });
 
 async function run() {

@@ -7,7 +7,7 @@ This runbook defines the truthful Phase 4 gateway scope.
 - Dedicated `gateway/` service split from `node-server/` relay.
 - `GatewayBridge` responsibilities:
   1. local mesh ingest
-  2. signed event store
+  2. signed event store (durable JSONL persistence on gateway server)
   3. backhaul export/import over simple HTTP service endpoints
   4. duplicate + loop suppression (`eventId` dedupe + `gatewayPath` loop guard)
 - Local-only mode supported (`uplinkEnabled=false`): events remain locally available even when backhaul is unavailable.
@@ -15,6 +15,17 @@ This runbook defines the truthful Phase 4 gateway scope.
   - high/critical priority uplink only
   - optional topic filter (`allowedTopics`)
   - optional geofence/scope filter (`geofences`)
+- Restart safety:
+  - persisted events are replayed on process boot
+  - export cursor semantics remain index-ordered across restart (`cursor` tracks durable append order)
+  - duplicate/loop suppression behavior remains unchanged after recovery
+
+## Persistence configuration
+
+- Default gateway server path: `.lifeline-gateway/<islandId>.events.jsonl`
+- Optional overrides:
+  - `LIFELINE_GATEWAY_DATA_DIR` (base directory for per-island store files)
+  - `LIFELINE_GATEWAY_EVENT_STORE_PATH` (explicit full file path; overrides data-dir default)
 
 ## Not shipped in this phase
 

@@ -59,6 +59,7 @@ Phase 4 gateway bridge runbook covering:
 - dedicated gateway service scope
 - shipped HTTP endpoints and bridge responsibilities
 - duplicate/loop suppression semantics
+- durable JSONL event persistence and restart behavior
 - local-only behavior and policy-based metadata minimization
 
 ## Quick Links
