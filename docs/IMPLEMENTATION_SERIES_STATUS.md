@@ -4,29 +4,24 @@
 
 - Phase 1 is **complete** (`spec/PROTOCOL_VNEXT.md`, `spec/STATE_MODEL.md`, scope decision, conformance vectors/tests).
 - Phase 2 is **complete** (`transport/` boundary, BLE central adapter wrapping, Node peripheral reference path, retry/jitter policy, relay drill docs/tests).
-- Phase 3 is **complete** (event-log runtime + anti-entropy sync engine + convergence tests).
-- Phase 4 is **complete** (`gateway/` bridge service + duplicate/loop-safe island sync tests).
-- Phase 5 was **partially complete** at preflight: simulator/model/property/fuzz artifacts existed, but unsafe sink reduction/audit still reported broad WARN-level findings without bounded allowlist policy.
+- Phase 3 is **complete** (append-only event log runtime, shared ingest path, anti-entropy sync engine, convergence tests).
+- Phase 4 is **complete** (`gateway/` bridge service, loop-safe dedupe semantics, island sync tests, local-only continuity).
+- Phase 5 is **complete** (deterministic simulator, property tests, parser fuzzing, model spec, hardware smoke path, energy metrics, field drill docs, bounded unsafe sink audit).
 
 ## Active phase implemented in this task
 
-- Implemented: **Phase 5** only (unsafe sink hardening + explicit audit narrowing).
+- **No new phase implementation**.
+- Preflight detection found **no incomplete phase** in the ordered series (`1 -> 2 -> 5-support -> 3 -> 4`).
+- Per execution rules, work stopped after verification to avoid speculative or out-of-order changes.
 
 ## What was added
 
-- Unsafe sink risk reduction in runtime code:
-  - `app/src/main.js`: replaced `innerHTML` with `textContent` for KDF status rendering.
-  - `app/src/i18n.js`: replaced direct HTML assignment with strict inline-markup gate (`<strong>`/`<br>` only, no attributes) and fallback to plain text.
-- Unsafe sink audit hardening:
-  - `tools/security-audit-check.js`: moved from broad sink WARN to explicit allowlist policy for reviewed `operator-panel` sinks, while preserving WARN for any non-allowlisted/new sink matches.
+- Updated this status report to record the current truthful end-state and this run's verification evidence.
 
 ## Explicitly deferred
 
-- No new speculative runtime transports.
-- No browser BLE peripheral claims.
-- No multi-client relay semantics.
-- No CI gate expansion beyond reliable repository-local commands.
-- No full operator-panel renderer rewrite in this task; existing `innerHTML` sinks remain narrowly allowlisted and escaped.
+- All future runtime/architecture expansion beyond the defined five-phase series.
+- Any speculative transport, relay, or gateway feature not tied to an incomplete phase.
 
 ## Acceptance evidence
 
@@ -34,15 +29,15 @@
 - `npm run typecheck`
 - `npm run test:unit`
 - `npm run test:integration`
-- `npm run test:phase5`
-- `node tools/security-audit-check.js`
+- `node tools/phase-gate-check.js`
 
 ## Next phase recommendation
 
-- Phase 5 criteria are now satisfied with bounded unsafe sink audit posture; maintainers can proceed with incremental maintenance hardening only (no new core phase runtime changes required by this series in this task).
+- No core phase is pending.
+- Recommended track is **maintenance-only**: defect fixes, operational hardening, and truthful regression coverage without introducing new unapproved phase scope.
 
 ## Unresolved risks
 
-- Energy metrics are currently simulation-derived, not hardware battery telemetry.
-- Operator panel still uses two audited `innerHTML` sinks (escaped/template controlled); future refactor to DOM-node rendering would further reduce risk.
-- Hardware smoke remains manual by design (truthful for environment); not elevated to CI gate.
+- Energy metrics remain simulator-derived and should not be represented as hardware battery telemetry.
+- Manual hardware smoke path is intentionally non-CI and should remain documented as such.
+- Existing audited HTML sinks in operator rendering remain bounded but should continue periodic review.
