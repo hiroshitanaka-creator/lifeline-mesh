@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import {
   CANONICAL_ENVELOPE_KINDS,
   buildCanonicalSignBytes,
+  deriveEventIdFromCanonical,
   deriveMsgIdFromCanonical,
   legacyUnsignedPolicy
 } from "../../crypto/protocol-vnext.js";
@@ -53,12 +54,52 @@ test("canonical signing kinds include all phase1 envelope targets", () => {
     "dmesh-chunk",
     "dmesh-route-adv",
     "ack",
+    "dmesh-event",
     "lifeline-group-onboarding-v1",
     "lifeline-sender-state-sync-v1"
   ];
   for (const kind of requiredKinds) {
     if (!CANONICAL_ENVELOPE_KINDS.includes(kind)) {
       throw new Error(`Missing canonical envelope kind: ${kind}`);
+    }
+  }
+});
+
+test("vector fixtures: sign-bytes and IDs are deterministic", () => {
+  for (const vector of vectors.cases) {
+    const signBytesB64 = Buffer.from(buildCanonicalSignBytes(vector.kind, vector.envelope)).toString("base64");
+    if (signBytesB64 !== vector.expectedSignBytesB64) {
+      throw new Error(`sign-bytes mismatch for ${vector.id}`);
+    }
+    if (vector.kind === "dmesh-event") {
+      const eventId = deriveEventIdFromCanonical(vector.envelope);
+      if (eventId !== vector.expectedEventId) throw new Error(`eventId mismatch for ${vector.id}`);
+    } else {
+      const msgId = deriveMsgIdFromCanonical(vector.kind, vector.envelope);
+      if (msgId !== vector.expectedMsgId) throw new Error(`msgId mismatch for ${vector.id}`);
+    }
+  }
+});
+
+test("vector failure classes have deterministic reject predicates", () => {
+  const now = Date.parse("2026-04-07T00:00:00.000Z");
+  const predicates = {
+    "tampered name": (v) => !String(v.envelope.name || "").startsWith("Alice"),
+    "recipient substitution": (v) => v.envelope.recipientBoxPK !== "boxB",
+    "stale TTL": (v) => (Number(v.envelope.ts) + Number(v.envelope.ttl)) < now,
+    "senderKeyVersion mismatch": (v) => Number(v.envelope.senderKeyVersion) !== 7,
+    "malformed chunk": (v) => !v.envelope.data || Number(v.envelope.seq) >= Number(v.envelope.total),
+    "replay duplicate": () => true
+  };
+
+  for (const vector of vectors.cases) {
+    if (vector.class === "valid normal case") continue;
+    const predicate = predicates[vector.class];
+    if (!predicate) throw new Error(`Missing predicate for ${vector.class}`);
+    const rejected = predicate(vector);
+    const shouldReject = vector.expect === "reject";
+    if (rejected !== shouldReject) {
+      throw new Error(`Unexpected ${vector.expect} evaluation for ${vector.id}`);
     }
   }
 });
@@ -99,4 +140,3 @@ test("legacy unsigned compatibility is bounded by explicit cutoff", () => {
     throw new Error("Expected legacy unsigned acceptance to expire after cutoff");
   }
 });
-

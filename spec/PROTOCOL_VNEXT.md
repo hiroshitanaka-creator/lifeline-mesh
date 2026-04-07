@@ -28,10 +28,24 @@ For each signed envelope, the sign target is UTF-8 JSON of:
 
 Canonicalization implementation reference: `crypto/protocol-vnext.js`.
 
+## Explicit sign-bytes field map (v1)
+
+The canonical sign-target payload includes only these fields (in canonical sorted form):
+
+- `dmesh-msg`: `v, kind, ts, ttl, senderSignPK, senderBoxPK, recipientBoxPK, ephPK, nonce, ciphertext, senderKeyVersion`
+- `dmesh-group-msg`: `v, kind, groupId, ts, ttl, senderSignPK, senderKeyVersion, nonce, ciphertext`
+- `dmesh-id`: `v, kind, name, fp, signPK, boxPK`
+- `dmesh-chunk`: `v, kind, msgId, seq, total, data`
+- `dmesh-route-adv`: `v, kind, src, seq, ts, ttl, routes`
+- `ack`: `v, kind, refMsgId, scope, topic, authorFp, ts, ttl, priority`
+- `lifeline-group-onboarding-v1`: `type, group, senderStates, exportedAt, exportedBySignPK`
+- `lifeline-sender-state-sync-v1`: `type, groupId, senderSignPK, senderKeyState, exportedAt, exportedBySignPK`
+- event envelope (`dmesh-event`): `schemaVersion, eventId, parents, authorFp, scope, topic, ts, ttl, priority`
+
 ## Canonical ID derivation
 
 - `msgId = base64(sha512(canonicalSignBytes).slice(0,32))`
-- `eventId = base64(sha512(canonicalSignBytes).slice(0,32))`
+- `eventId = base64(sha512(canonicalSignBytes(dmesh-event)).slice(0,32))`
 
 ## Legacy compatibility bound
 

@@ -1,45 +1,662 @@
 {
-  "version": 1,
+  "version": 2,
   "profile": "phase1-vnext-canonical-signing",
   "generated": "2026-04-07T00:00:00.000Z",
   "cases": [
-    {"id":"msg-valid-01","class":"valid normal case","kind":"dmesh-msg","mutation":"none","expect":"accept"},
-    {"id":"msg-valid-02","class":"valid normal case","kind":"dmesh-msg","mutation":"none","expect":"accept"},
-    {"id":"msg-valid-03","class":"valid normal case","kind":"dmesh-msg","mutation":"none","expect":"accept"},
-    {"id":"id-valid-01","class":"valid normal case","kind":"dmesh-id","mutation":"none","expect":"accept"},
-    {"id":"id-valid-02","class":"valid normal case","kind":"dmesh-id","mutation":"none","expect":"accept"},
-
-    {"id":"id-tampered-name-01","class":"tampered name","kind":"dmesh-id","mutation":"tamper-name","expect":"reject"},
-    {"id":"id-tampered-name-02","class":"tampered name","kind":"dmesh-id","mutation":"tamper-name","expect":"reject"},
-    {"id":"id-tampered-name-03","class":"tampered name","kind":"dmesh-id","mutation":"tamper-name","expect":"reject"},
-    {"id":"id-tampered-name-04","class":"tampered name","kind":"dmesh-id","mutation":"tamper-name","expect":"reject"},
-
-    {"id":"msg-recipient-sub-01","class":"recipient substitution","kind":"dmesh-msg","mutation":"recipient-substitution","expect":"reject"},
-    {"id":"msg-recipient-sub-02","class":"recipient substitution","kind":"dmesh-msg","mutation":"recipient-substitution","expect":"reject"},
-    {"id":"msg-recipient-sub-03","class":"recipient substitution","kind":"dmesh-msg","mutation":"recipient-substitution","expect":"reject"},
-    {"id":"msg-recipient-sub-04","class":"recipient substitution","kind":"dmesh-msg","mutation":"recipient-substitution","expect":"reject"},
-
-    {"id":"msg-stale-ttl-01","class":"stale TTL","kind":"ack","mutation":"stale-ttl","expect":"reject"},
-    {"id":"msg-stale-ttl-02","class":"stale TTL","kind":"ack","mutation":"stale-ttl","expect":"reject"},
-    {"id":"msg-stale-ttl-03","class":"stale TTL","kind":"ack","mutation":"stale-ttl","expect":"reject"},
-    {"id":"msg-stale-ttl-04","class":"stale TTL","kind":"ack","mutation":"stale-ttl","expect":"reject"},
-
-    {"id":"group-key-version-mismatch-01","class":"senderKeyVersion mismatch","kind":"dmesh-group-msg","mutation":"sender-key-version-mismatch","expect":"reject"},
-    {"id":"group-key-version-mismatch-02","class":"senderKeyVersion mismatch","kind":"dmesh-group-msg","mutation":"sender-key-version-mismatch","expect":"reject"},
-    {"id":"group-key-version-mismatch-03","class":"senderKeyVersion mismatch","kind":"dmesh-group-msg","mutation":"sender-key-version-mismatch","expect":"reject"},
-    {"id":"group-key-version-mismatch-04","class":"senderKeyVersion mismatch","kind":"dmesh-group-msg","mutation":"sender-key-version-mismatch","expect":"reject"},
-
-    {"id":"chunk-malformed-01","class":"malformed chunk","kind":"dmesh-chunk","mutation":"malformed-chunk","expect":"reject"},
-    {"id":"chunk-malformed-02","class":"malformed chunk","kind":"dmesh-chunk","mutation":"malformed-chunk","expect":"reject"},
-    {"id":"chunk-malformed-03","class":"malformed chunk","kind":"dmesh-chunk","mutation":"malformed-chunk","expect":"reject"},
-    {"id":"chunk-malformed-04","class":"malformed chunk","kind":"dmesh-chunk","mutation":"malformed-chunk","expect":"reject"},
-
-    {"id":"replay-dup-01","class":"replay duplicate","kind":"ack","mutation":"replay-duplicate","expect":"reject"},
-    {"id":"replay-dup-02","class":"replay duplicate","kind":"ack","mutation":"replay-duplicate","expect":"reject"},
-    {"id":"replay-dup-03","class":"replay duplicate","kind":"ack","mutation":"replay-duplicate","expect":"reject"},
-    {"id":"replay-dup-04","class":"replay duplicate","kind":"ack","mutation":"replay-duplicate","expect":"reject"},
-
-    {"id":"route-adv-valid-01","class":"valid normal case","kind":"dmesh-route-adv","mutation":"none","expect":"accept"},
-    {"id":"route-adv-valid-02","class":"valid normal case","kind":"dmesh-route-adv","mutation":"none","expect":"accept"}
+    {
+      "id": "dmesh-msg-01",
+      "class": "valid normal case",
+      "kind": "dmesh-msg",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderBoxPK": "boxA",
+        "recipientBoxPK": "boxB",
+        "ephPK": "eph1",
+        "nonce": "nonce1",
+        "ciphertext": "ct1",
+        "senderKeyVersion": 1
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiY3QxIiwiZXBoUEsiOiJlcGgxIiwia2luZCI6ImRtZXNoLW1zZyIsIm5vbmNlIjoibm9uY2UxIiwicmVjaXBpZW50Qm94UEsiOiJib3hCIiwic2VuZGVyQm94UEsiOiJib3hBIiwic2VuZGVyS2V5VmVyc2lvbiI6MSwic2VuZGVyU2lnblBLIjoic2lnbkEiLCJ0cyI6MTcwNjAxMjM0NTY3OCwidHRsIjozNjAwMDAwLCJ2IjoxfX0=",
+      "expectedMsgId": "0qNhz+mCr/c2jlUFbf/EoAsM2WJoiSDfO0jUtjPU2OU="
+    },
+    {
+      "id": "dmesh-id-02",
+      "class": "valid normal case",
+      "kind": "dmesh-id",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-id",
+        "name": "Alice",
+        "fp": "fpAlice",
+        "signPK": "signA",
+        "boxPK": "boxA"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1pZDp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1pZCIsInBheWxvYWQiOnsiYm94UEsiOiJib3hBIiwiZnAiOiJmcEFsaWNlIiwia2luZCI6ImRtZXNoLWlkIiwibmFtZSI6IkFsaWNlIiwic2lnblBLIjoic2lnbkEiLCJ2IjoxfX0=",
+      "expectedMsgId": "wovOWMvrnLvKzHfAO3WyUtfzY5qfwPd097EIF5k8QEQ="
+    },
+    {
+      "id": "dmesh-group-msg-03",
+      "class": "valid normal case",
+      "kind": "dmesh-group-msg",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-group-msg",
+        "groupId": "group-1",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderKeyVersion": 7,
+        "nonce": "gnonce",
+        "ciphertext": "gct"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1ncm91cC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiZ2N0IiwiZ3JvdXBJZCI6Imdyb3VwLTEiLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwibm9uY2UiOiJnbm9uY2UiLCJzZW5kZXJLZXlWZXJzaW9uIjo3LCJzZW5kZXJTaWduUEsiOiJzaWduQSIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjM2MDAwMDAsInYiOjF9fQ==",
+      "expectedMsgId": "iN/D10946Dg0nXCINWZzdqSYg5y/b4NNMf/ycZM1LMs="
+    },
+    {
+      "id": "dmesh-chunk-04",
+      "class": "valid normal case",
+      "kind": "dmesh-chunk",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-chunk",
+        "msgId": "m1",
+        "seq": 0,
+        "total": 2,
+        "data": "chunkdata0"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1jaHVuazp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1jaHVuayIsInBheWxvYWQiOnsiZGF0YSI6ImNodW5rZGF0YTAiLCJraW5kIjoiZG1lc2gtY2h1bmsiLCJtc2dJZCI6Im0xIiwic2VxIjowLCJ0b3RhbCI6MiwidiI6MX19",
+      "expectedMsgId": "64kGoO97pMNkK9RISIaE0ijFZ87QUWkC8aFLvpHvx+Y="
+    },
+    {
+      "id": "dmesh-route-adv-05",
+      "class": "valid normal case",
+      "kind": "dmesh-route-adv",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-route-adv",
+        "src": "peer-a",
+        "seq": 8,
+        "ts": 1706012345678,
+        "ttl": 120000,
+        "routes": [
+          {
+            "dest": "peer-b",
+            "hops": 1
+          }
+        ]
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1yb3V0ZS1hZHY6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtcm91dGUtYWR2IiwicGF5bG9hZCI6eyJraW5kIjoiZG1lc2gtcm91dGUtYWR2Iiwicm91dGVzIjpbeyJkZXN0IjoicGVlci1iIiwiaG9wcyI6MX1dLCJzZXEiOjgsInNyYyI6InBlZXItYSIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjEyMDAwMCwidiI6MX19",
+      "expectedMsgId": "kQyFyR5VZwJxOCfj6MFe/iKiDH1+gkrZKeOj1/dIwb8="
+    },
+    {
+      "id": "ack-06",
+      "class": "valid normal case",
+      "kind": "ack",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "m1",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1706012345678,
+        "ttl": 60000,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJtMSIsInNjb3BlIjoib3BzIiwidG9waWMiOiJzaGVsdGVyIiwidHMiOjE3MDYwMTIzNDU2NzgsInR0bCI6NjAwMDAsInYiOjF9fQ==",
+      "expectedMsgId": "ijam74YcAGxNpe0p87XyBpAT9uD/d50xFh43FHu80jY="
+    },
+    {
+      "id": "lifeline-group-onboarding-v1-07",
+      "class": "valid normal case",
+      "kind": "lifeline-group-onboarding-v1",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "type": "lifeline-group-onboarding-v1",
+        "group": {
+          "id": "g1",
+          "senderKey": {
+            "version": 1,
+            "chainKey": "k1"
+          }
+        },
+        "senderStates": [
+          {
+            "senderSignPK": "signA",
+            "senderKeyState": {
+              "version": 2,
+              "chainKey": "k2"
+            }
+          }
+        ],
+        "exportedAt": 1706012345678,
+        "exportedBySignPK": "signAdmin"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpncm91cC1vbmJvYXJkaW5nOnYxIiwic2NoZW1hVmVyc2lvbiI6MSwia2luZCI6ImxpZmVsaW5lLWdyb3VwLW9uYm9hcmRpbmctdjEiLCJwYXlsb2FkIjp7ImV4cG9ydGVkQXQiOjE3MDYwMTIzNDU2NzgsImV4cG9ydGVkQnlTaWduUEsiOiJzaWduQWRtaW4iLCJncm91cCI6eyJpZCI6ImcxIiwic2VuZGVyS2V5Ijp7ImNoYWluS2V5IjoiazEiLCJ2ZXJzaW9uIjoxfX0sInNlbmRlclN0YXRlcyI6W3sic2VuZGVyS2V5U3RhdGUiOnsiY2hhaW5LZXkiOiJrMiIsInZlcnNpb24iOjJ9LCJzZW5kZXJTaWduUEsiOiJzaWduQSJ9XSwidHlwZSI6ImxpZmVsaW5lLWdyb3VwLW9uYm9hcmRpbmctdjEifX0=",
+      "expectedMsgId": "nP1AKtEBKwUrUlcC8N8qiG12FYogrYzwaalTMz9bpBM="
+    },
+    {
+      "id": "lifeline-sender-state-sync-v1-08",
+      "class": "valid normal case",
+      "kind": "lifeline-sender-state-sync-v1",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "type": "lifeline-sender-state-sync-v1",
+        "groupId": "g1",
+        "senderSignPK": "signA",
+        "senderKeyState": {
+          "version": 3,
+          "chainKey": "k3"
+        },
+        "exportedAt": 1706012345678,
+        "exportedBySignPK": "signA"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpzZW5kZXItc3RhdGU6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoibGlmZWxpbmUtc2VuZGVyLXN0YXRlLXN5bmMtdjEiLCJwYXlsb2FkIjp7ImV4cG9ydGVkQXQiOjE3MDYwMTIzNDU2NzgsImV4cG9ydGVkQnlTaWduUEsiOiJzaWduQSIsImdyb3VwSWQiOiJnMSIsInNlbmRlcktleVN0YXRlIjp7ImNoYWluS2V5IjoiazMiLCJ2ZXJzaW9uIjozfSwic2VuZGVyU2lnblBLIjoic2lnbkEiLCJ0eXBlIjoibGlmZWxpbmUtc2VuZGVyLXN0YXRlLXN5bmMtdjEifX0=",
+      "expectedMsgId": "FOMm7UN+wz8F3RRqA5aSeTBvISaZFjyhMKdPWJluGiA="
+    },
+    {
+      "id": "dmesh-event-09",
+      "class": "valid normal case",
+      "kind": "dmesh-event",
+      "expect": "accept",
+      "mutation": "none",
+      "envelope": {
+        "schemaVersion": 1,
+        "eventId": "ID7bBULbIqsjXUmBYH7Ii3AgH/FeeYbN3cuKMjAGLcI=",
+        "parents": [
+          "p0"
+        ],
+        "authorFp": "fpAlice",
+        "scope": "ops",
+        "topic": "checkin",
+        "ts": 1706012345678,
+        "ttl": 600000,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1ldmVudDp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1ldmVudCIsInBheWxvYWQiOnsiYXV0aG9yRnAiOiJmcEFsaWNlIiwiZXZlbnRJZCI6IklEN2JCVUxiSXFzalhVbUJZSDdJaTNBZ0gvRmVlWWJOM2N1S01qQUdMY0k9IiwicGFyZW50cyI6WyJwMCJdLCJwcmlvcml0eSI6ImhpZ2giLCJzY2hlbWFWZXJzaW9uIjoxLCJzY29wZSI6Im9wcyIsInRvcGljIjoiY2hlY2tpbiIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjYwMDAwMH19",
+      "expectedEventId": "S7lq0MjEvcHsSCTCDpv60SsZW9nvT0TxavfsRWCn9Bo="
+    },
+    {
+      "id": "dmesh-id-10",
+      "class": "tampered name",
+      "kind": "dmesh-id",
+      "expect": "reject",
+      "mutation": "tamper-name",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-id",
+        "name": "Mallory-0",
+        "fp": "fpAlice",
+        "signPK": "signA",
+        "boxPK": "boxA"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1pZDp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1pZCIsInBheWxvYWQiOnsiYm94UEsiOiJib3hBIiwiZnAiOiJmcEFsaWNlIiwia2luZCI6ImRtZXNoLWlkIiwibmFtZSI6Ik1hbGxvcnktMCIsInNpZ25QSyI6InNpZ25BIiwidiI6MX19",
+      "expectedMsgId": "k1kIYzKvb0beaEP18SD1IR8KB+MYEi4x4mp9H3zysFM="
+    },
+    {
+      "id": "dmesh-id-11",
+      "class": "tampered name",
+      "kind": "dmesh-id",
+      "expect": "reject",
+      "mutation": "tamper-name",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-id",
+        "name": "Mallory-1",
+        "fp": "fpAlice",
+        "signPK": "signA",
+        "boxPK": "boxA"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1pZDp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1pZCIsInBheWxvYWQiOnsiYm94UEsiOiJib3hBIiwiZnAiOiJmcEFsaWNlIiwia2luZCI6ImRtZXNoLWlkIiwibmFtZSI6Ik1hbGxvcnktMSIsInNpZ25QSyI6InNpZ25BIiwidiI6MX19",
+      "expectedMsgId": "Uy8VRB6r/I0DRd4Cr9hejsyewKEiuHpSOR2GBfD9qV0="
+    },
+    {
+      "id": "dmesh-id-12",
+      "class": "tampered name",
+      "kind": "dmesh-id",
+      "expect": "reject",
+      "mutation": "tamper-name",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-id",
+        "name": "Mallory-2",
+        "fp": "fpAlice",
+        "signPK": "signA",
+        "boxPK": "boxA"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1pZDp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1pZCIsInBheWxvYWQiOnsiYm94UEsiOiJib3hBIiwiZnAiOiJmcEFsaWNlIiwia2luZCI6ImRtZXNoLWlkIiwibmFtZSI6Ik1hbGxvcnktMiIsInNpZ25QSyI6InNpZ25BIiwidiI6MX19",
+      "expectedMsgId": "b+oDRxZ9lqx/TqV4A3655kTMI9WRmZApJzCqZRlpWHs="
+    },
+    {
+      "id": "dmesh-id-13",
+      "class": "tampered name",
+      "kind": "dmesh-id",
+      "expect": "reject",
+      "mutation": "tamper-name",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-id",
+        "name": "Mallory-3",
+        "fp": "fpAlice",
+        "signPK": "signA",
+        "boxPK": "boxA"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1pZDp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1pZCIsInBheWxvYWQiOnsiYm94UEsiOiJib3hBIiwiZnAiOiJmcEFsaWNlIiwia2luZCI6ImRtZXNoLWlkIiwibmFtZSI6Ik1hbGxvcnktMyIsInNpZ25QSyI6InNpZ25BIiwidiI6MX19",
+      "expectedMsgId": "a8lOabecxIn0axRlR+0rysOmOW6baqzxEbsFkPF5QAA="
+    },
+    {
+      "id": "dmesh-msg-14",
+      "class": "recipient substitution",
+      "kind": "dmesh-msg",
+      "expect": "reject",
+      "mutation": "recipient-substitution",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderBoxPK": "boxA",
+        "recipientBoxPK": "boxX-0",
+        "ephPK": "eph1",
+        "nonce": "nonce1",
+        "ciphertext": "ct1",
+        "senderKeyVersion": 1
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiY3QxIiwiZXBoUEsiOiJlcGgxIiwia2luZCI6ImRtZXNoLW1zZyIsIm5vbmNlIjoibm9uY2UxIiwicmVjaXBpZW50Qm94UEsiOiJib3hYLTAiLCJzZW5kZXJCb3hQSyI6ImJveEEiLCJzZW5kZXJLZXlWZXJzaW9uIjoxLCJzZW5kZXJTaWduUEsiOiJzaWduQSIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjM2MDAwMDAsInYiOjF9fQ==",
+      "expectedMsgId": "NE0dn1Ix5RRgThlPaBwyyT0DP4pSz+URnxmUQEVQlew="
+    },
+    {
+      "id": "dmesh-msg-15",
+      "class": "recipient substitution",
+      "kind": "dmesh-msg",
+      "expect": "reject",
+      "mutation": "recipient-substitution",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderBoxPK": "boxA",
+        "recipientBoxPK": "boxX-1",
+        "ephPK": "eph1",
+        "nonce": "nonce1",
+        "ciphertext": "ct1",
+        "senderKeyVersion": 1
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiY3QxIiwiZXBoUEsiOiJlcGgxIiwia2luZCI6ImRtZXNoLW1zZyIsIm5vbmNlIjoibm9uY2UxIiwicmVjaXBpZW50Qm94UEsiOiJib3hYLTEiLCJzZW5kZXJCb3hQSyI6ImJveEEiLCJzZW5kZXJLZXlWZXJzaW9uIjoxLCJzZW5kZXJTaWduUEsiOiJzaWduQSIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjM2MDAwMDAsInYiOjF9fQ==",
+      "expectedMsgId": "9FMVQywVlyaL3jwXWzVHwURggMs1r+tUwU08BrJ4RWc="
+    },
+    {
+      "id": "dmesh-msg-16",
+      "class": "recipient substitution",
+      "kind": "dmesh-msg",
+      "expect": "reject",
+      "mutation": "recipient-substitution",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderBoxPK": "boxA",
+        "recipientBoxPK": "boxX-2",
+        "ephPK": "eph1",
+        "nonce": "nonce1",
+        "ciphertext": "ct1",
+        "senderKeyVersion": 1
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiY3QxIiwiZXBoUEsiOiJlcGgxIiwia2luZCI6ImRtZXNoLW1zZyIsIm5vbmNlIjoibm9uY2UxIiwicmVjaXBpZW50Qm94UEsiOiJib3hYLTIiLCJzZW5kZXJCb3hQSyI6ImJveEEiLCJzZW5kZXJLZXlWZXJzaW9uIjoxLCJzZW5kZXJTaWduUEsiOiJzaWduQSIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjM2MDAwMDAsInYiOjF9fQ==",
+      "expectedMsgId": "PvmssD8Ym+Fpwnrj0qvtARhyRM4/P3pJvl4vOHS4sJ8="
+    },
+    {
+      "id": "dmesh-msg-17",
+      "class": "recipient substitution",
+      "kind": "dmesh-msg",
+      "expect": "reject",
+      "mutation": "recipient-substitution",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-msg",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderBoxPK": "boxA",
+        "recipientBoxPK": "boxX-3",
+        "ephPK": "eph1",
+        "nonce": "nonce1",
+        "ciphertext": "ct1",
+        "senderKeyVersion": 1
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiY3QxIiwiZXBoUEsiOiJlcGgxIiwia2luZCI6ImRtZXNoLW1zZyIsIm5vbmNlIjoibm9uY2UxIiwicmVjaXBpZW50Qm94UEsiOiJib3hYLTMiLCJzZW5kZXJCb3hQSyI6ImJveEEiLCJzZW5kZXJLZXlWZXJzaW9uIjoxLCJzZW5kZXJTaWduUEsiOiJzaWduQSIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjM2MDAwMDAsInYiOjF9fQ==",
+      "expectedMsgId": "DZQ3ZTdG2lGuItcmWkPl544O++P4a+YW77J3kAhFjwU="
+    },
+    {
+      "id": "ack-18",
+      "class": "stale TTL",
+      "kind": "ack",
+      "expect": "reject",
+      "mutation": "stale-ttl",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "m1",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1700000000000,
+        "ttl": 1,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJtMSIsInNjb3BlIjoib3BzIiwidG9waWMiOiJzaGVsdGVyIiwidHMiOjE3MDAwMDAwMDAwMDAsInR0bCI6MSwidiI6MX19",
+      "expectedMsgId": "o1l/A5h6SneUdfSs2SQlFCPsKHU9V6fDLEF4fR304Tc="
+    },
+    {
+      "id": "ack-19",
+      "class": "stale TTL",
+      "kind": "ack",
+      "expect": "reject",
+      "mutation": "stale-ttl",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "m1",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1699999999000,
+        "ttl": 1,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJtMSIsInNjb3BlIjoib3BzIiwidG9waWMiOiJzaGVsdGVyIiwidHMiOjE2OTk5OTk5OTkwMDAsInR0bCI6MSwidiI6MX19",
+      "expectedMsgId": "ploJBO2ytH78ljDtV/T3z9XNVfRodmst25KCNp75VRc="
+    },
+    {
+      "id": "ack-20",
+      "class": "stale TTL",
+      "kind": "ack",
+      "expect": "reject",
+      "mutation": "stale-ttl",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "m1",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1699999998000,
+        "ttl": 1,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJtMSIsInNjb3BlIjoib3BzIiwidG9waWMiOiJzaGVsdGVyIiwidHMiOjE2OTk5OTk5OTgwMDAsInR0bCI6MSwidiI6MX19",
+      "expectedMsgId": "HSq0ujB9LhhDYkALtuLaTZC/RLXiHtz83LuN5G4pc3c="
+    },
+    {
+      "id": "ack-21",
+      "class": "stale TTL",
+      "kind": "ack",
+      "expect": "reject",
+      "mutation": "stale-ttl",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "m1",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1699999997000,
+        "ttl": 1,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJtMSIsInNjb3BlIjoib3BzIiwidG9waWMiOiJzaGVsdGVyIiwidHMiOjE2OTk5OTk5OTcwMDAsInR0bCI6MSwidiI6MX19",
+      "expectedMsgId": "FB7Rej/YhC+FpkbifvM1JFf3A8gTY2WrUuzT8oaaOLs="
+    },
+    {
+      "id": "dmesh-group-msg-22",
+      "class": "senderKeyVersion mismatch",
+      "kind": "dmesh-group-msg",
+      "expect": "reject",
+      "mutation": "sender-key-version-mismatch",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-group-msg",
+        "groupId": "group-1",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderKeyVersion": 100,
+        "nonce": "gnonce",
+        "ciphertext": "gct"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1ncm91cC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiZ2N0IiwiZ3JvdXBJZCI6Imdyb3VwLTEiLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwibm9uY2UiOiJnbm9uY2UiLCJzZW5kZXJLZXlWZXJzaW9uIjoxMDAsInNlbmRlclNpZ25QSyI6InNpZ25BIiwidHMiOjE3MDYwMTIzNDU2NzgsInR0bCI6MzYwMDAwMCwidiI6MX19",
+      "expectedMsgId": "esTpLVRV30f8zbZzy6Xm3QEtGGuBBYD4DDHDaUNf0cI="
+    },
+    {
+      "id": "dmesh-group-msg-23",
+      "class": "senderKeyVersion mismatch",
+      "kind": "dmesh-group-msg",
+      "expect": "reject",
+      "mutation": "sender-key-version-mismatch",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-group-msg",
+        "groupId": "group-1",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderKeyVersion": 101,
+        "nonce": "gnonce",
+        "ciphertext": "gct"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1ncm91cC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiZ2N0IiwiZ3JvdXBJZCI6Imdyb3VwLTEiLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwibm9uY2UiOiJnbm9uY2UiLCJzZW5kZXJLZXlWZXJzaW9uIjoxMDEsInNlbmRlclNpZ25QSyI6InNpZ25BIiwidHMiOjE3MDYwMTIzNDU2NzgsInR0bCI6MzYwMDAwMCwidiI6MX19",
+      "expectedMsgId": "TEi1fjtiYun06BEOzFEte8qXQExD+yM0wAhVcUg52GA="
+    },
+    {
+      "id": "dmesh-group-msg-24",
+      "class": "senderKeyVersion mismatch",
+      "kind": "dmesh-group-msg",
+      "expect": "reject",
+      "mutation": "sender-key-version-mismatch",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-group-msg",
+        "groupId": "group-1",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderKeyVersion": 102,
+        "nonce": "gnonce",
+        "ciphertext": "gct"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1ncm91cC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiZ2N0IiwiZ3JvdXBJZCI6Imdyb3VwLTEiLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwibm9uY2UiOiJnbm9uY2UiLCJzZW5kZXJLZXlWZXJzaW9uIjoxMDIsInNlbmRlclNpZ25QSyI6InNpZ25BIiwidHMiOjE3MDYwMTIzNDU2NzgsInR0bCI6MzYwMDAwMCwidiI6MX19",
+      "expectedMsgId": "6i5cRWa3kLx776AQd2T9n4zMoj1XCZpzAssLSlaH7XA="
+    },
+    {
+      "id": "dmesh-group-msg-25",
+      "class": "senderKeyVersion mismatch",
+      "kind": "dmesh-group-msg",
+      "expect": "reject",
+      "mutation": "sender-key-version-mismatch",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-group-msg",
+        "groupId": "group-1",
+        "ts": 1706012345678,
+        "ttl": 3600000,
+        "senderSignPK": "signA",
+        "senderKeyVersion": 103,
+        "nonce": "gnonce",
+        "ciphertext": "gct"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1ncm91cC1tc2c6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwicGF5bG9hZCI6eyJjaXBoZXJ0ZXh0IjoiZ2N0IiwiZ3JvdXBJZCI6Imdyb3VwLTEiLCJraW5kIjoiZG1lc2gtZ3JvdXAtbXNnIiwibm9uY2UiOiJnbm9uY2UiLCJzZW5kZXJLZXlWZXJzaW9uIjoxMDMsInNlbmRlclNpZ25QSyI6InNpZ25BIiwidHMiOjE3MDYwMTIzNDU2NzgsInR0bCI6MzYwMDAwMCwidiI6MX19",
+      "expectedMsgId": "62tv+GE6C0fSXQeDouQtMv0A70M0oG8AqYRZaGvnR68="
+    },
+    {
+      "id": "dmesh-chunk-26",
+      "class": "malformed chunk",
+      "kind": "dmesh-chunk",
+      "expect": "reject",
+      "mutation": "malformed-chunk",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-chunk",
+        "msgId": "m1",
+        "seq": 3,
+        "total": 2,
+        "data": ""
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1jaHVuazp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1jaHVuayIsInBheWxvYWQiOnsiZGF0YSI6IiIsImtpbmQiOiJkbWVzaC1jaHVuayIsIm1zZ0lkIjoibTEiLCJzZXEiOjMsInRvdGFsIjoyLCJ2IjoxfX0=",
+      "expectedMsgId": "1zh2P4LVQcLkk4J+mnoNa52i5ahJq/AS+C335i8PTNw="
+    },
+    {
+      "id": "dmesh-chunk-27",
+      "class": "malformed chunk",
+      "kind": "dmesh-chunk",
+      "expect": "reject",
+      "mutation": "malformed-chunk",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-chunk",
+        "msgId": "m1",
+        "seq": 4,
+        "total": 2,
+        "data": ""
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1jaHVuazp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1jaHVuayIsInBheWxvYWQiOnsiZGF0YSI6IiIsImtpbmQiOiJkbWVzaC1jaHVuayIsIm1zZ0lkIjoibTEiLCJzZXEiOjQsInRvdGFsIjoyLCJ2IjoxfX0=",
+      "expectedMsgId": "YL0pYAMclGKrWys5TQguJzO9f0khsLzpiISvq739CQM="
+    },
+    {
+      "id": "dmesh-chunk-28",
+      "class": "malformed chunk",
+      "kind": "dmesh-chunk",
+      "expect": "reject",
+      "mutation": "malformed-chunk",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-chunk",
+        "msgId": "m1",
+        "seq": 5,
+        "total": 2,
+        "data": ""
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1jaHVuazp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1jaHVuayIsInBheWxvYWQiOnsiZGF0YSI6IiIsImtpbmQiOiJkbWVzaC1jaHVuayIsIm1zZ0lkIjoibTEiLCJzZXEiOjUsInRvdGFsIjoyLCJ2IjoxfX0=",
+      "expectedMsgId": "Lh73FBQPbseITtbGs7Y+kAxykmAAXshkRPrjRwosH5E="
+    },
+    {
+      "id": "dmesh-chunk-29",
+      "class": "malformed chunk",
+      "kind": "dmesh-chunk",
+      "expect": "reject",
+      "mutation": "malformed-chunk",
+      "envelope": {
+        "v": 1,
+        "kind": "dmesh-chunk",
+        "msgId": "m1",
+        "seq": 6,
+        "total": 2,
+        "data": ""
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDpkbWVzaC1jaHVuazp2MSIsInNjaGVtYVZlcnNpb24iOjEsImtpbmQiOiJkbWVzaC1jaHVuayIsInBheWxvYWQiOnsiZGF0YSI6IiIsImtpbmQiOiJkbWVzaC1jaHVuayIsIm1zZ0lkIjoibTEiLCJzZXEiOjYsInRvdGFsIjoyLCJ2IjoxfX0=",
+      "expectedMsgId": "2pU+Jqut5rvsfgndKHkEc1ZnHnbujCogfSRLXFpkLVw="
+    },
+    {
+      "id": "ack-30",
+      "class": "replay duplicate",
+      "kind": "ack",
+      "expect": "reject",
+      "mutation": "replay-duplicate",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "dup-fixed",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1706012345678,
+        "ttl": 60000,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJkdXAtZml4ZWQiLCJzY29wZSI6Im9wcyIsInRvcGljIjoic2hlbHRlciIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjYwMDAwLCJ2IjoxfX0=",
+      "expectedMsgId": "WLp/hedoD+/03vVP/Q84Z2t4v2SRlsE1RCvf7f6iYDQ="
+    },
+    {
+      "id": "ack-31",
+      "class": "replay duplicate",
+      "kind": "ack",
+      "expect": "reject",
+      "mutation": "replay-duplicate",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "dup-fixed",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1706012345678,
+        "ttl": 60000,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJkdXAtZml4ZWQiLCJzY29wZSI6Im9wcyIsInRvcGljIjoic2hlbHRlciIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjYwMDAwLCJ2IjoxfX0=",
+      "expectedMsgId": "WLp/hedoD+/03vVP/Q84Z2t4v2SRlsE1RCvf7f6iYDQ="
+    },
+    {
+      "id": "ack-32",
+      "class": "replay duplicate",
+      "kind": "ack",
+      "expect": "reject",
+      "mutation": "replay-duplicate",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "dup-fixed",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1706012345678,
+        "ttl": 60000,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJkdXAtZml4ZWQiLCJzY29wZSI6Im9wcyIsInRvcGljIjoic2hlbHRlciIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjYwMDAwLCJ2IjoxfX0=",
+      "expectedMsgId": "WLp/hedoD+/03vVP/Q84Z2t4v2SRlsE1RCvf7f6iYDQ="
+    },
+    {
+      "id": "ack-33",
+      "class": "replay duplicate",
+      "kind": "ack",
+      "expect": "reject",
+      "mutation": "replay-duplicate",
+      "envelope": {
+        "v": 1,
+        "kind": "ack",
+        "refMsgId": "dup-fixed",
+        "scope": "ops",
+        "topic": "shelter",
+        "authorFp": "fpAlice",
+        "ts": 1706012345678,
+        "ttl": 60000,
+        "priority": "high"
+      },
+      "expectedSignBytesB64": "eyJkb21haW4iOiJETUVTSF9TSUdOX1RBUkdFVF9WTkVYVDphY2s6djEiLCJzY2hlbWFWZXJzaW9uIjoxLCJraW5kIjoiYWNrIiwicGF5bG9hZCI6eyJhdXRob3JGcCI6ImZwQWxpY2UiLCJraW5kIjoiYWNrIiwicHJpb3JpdHkiOiJoaWdoIiwicmVmTXNnSWQiOiJkdXAtZml4ZWQiLCJzY29wZSI6Im9wcyIsInRvcGljIjoic2hlbHRlciIsInRzIjoxNzA2MDEyMzQ1Njc4LCJ0dGwiOjYwMDAwLCJ2IjoxfX0=",
+      "expectedMsgId": "WLp/hedoD+/03vVP/Q84Z2t4v2SRlsE1RCvf7f6iYDQ="
+    }
   ]
 }

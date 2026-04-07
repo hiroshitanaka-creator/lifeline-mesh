@@ -2,7 +2,7 @@
 
 ## Detected current phase state
 
-- Phase 1 was **incomplete** at preflight (missing `spec/PROTOCOL_VNEXT.md`, `spec/STATE_MODEL.md`, explicit scope decision doc, and phase-specific deterministic vectors/tests).
+- Phase 1 was **partially implemented** at preflight: docs existed, but deterministic vectors were too shallow and canonical sign-bytes were not explicit enough at per-envelope field level.
 
 ## Active phase implemented in this task
 
@@ -10,11 +10,10 @@
 
 ## What was added
 
-- Canonical signing target helper for all required envelope kinds.
-- Bounded legacy unsigned compatibility policy with explicit cutoff.
-- Protocol/State/Scope docs for vnext freeze.
-- Deterministic conformance vector set (32 cases).
-- Integration validation test for phase1 vectors and canonical sign-byte determinism.
+- Explicit per-envelope canonical signable-field map in code and protocol docs.
+- Canonical event envelope domain (`dmesh-event`) for eventId derivation.
+- Upgraded deterministic conformance vectors to concrete fixtures with expected sign-bytes and derived IDs.
+- Stronger integration validation asserting exact sign-bytes/ID determinism and deterministic reject predicates for required failure classes.
 
 ## Explicitly deferred
 
@@ -36,5 +35,5 @@
 
 ## Unresolved risks
 
-- Runtime still uses mixed historical signing constructions for active traffic; vnext canonical signing freeze is documented and test-backed, but rollout wiring for all live envelopes is still phased.
+- Runtime still uses mixed historical signing constructions for active traffic; vnext canonical signing freeze is now explicit and test-backed, but full runtime migration is still phased.
 - `revoked` verification state is specified but not yet fully enforced in all UI/runtime pathways.
