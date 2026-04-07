@@ -1,3 +1,5 @@
+import { resolveIngestRoute, INGEST_CHANNEL, normalizeIngestText } from "./event-ingest.js";
+
 export function parseSharedEncryptedPayload(text) {
   if (typeof text !== "string") {
     return null;
@@ -87,47 +89,24 @@ export function parseSharedGroupPayload(text) {
 }
 
 export function normalizeShareTargetText({ title, text }) {
-  const cleanedTitle = (title || "").trim();
-  const cleanedText = (text || "").trim();
-  if (cleanedTitle && cleanedText) {
-    return `${cleanedTitle}\n${cleanedText}`;
-  }
-  return cleanedText || cleanedTitle || "";
+  return normalizeIngestText({ title, text });
 }
 
 export function resolveShareTargetIntake({ title = "", text = "" } = {}) {
-  const encryptedFromText = parseSharedEncryptedPayload(text);
-  if (encryptedFromText) {
-    return {
-      route: "decrypt",
-      encryptedPayload: encryptedFromText,
-      source: "text"
-    };
+  const resolved = resolveIngestRoute({ title, text, channel: INGEST_CHANNEL.SHARE_TARGET });
+  if (resolved.route === "encrypt") {
+    return { route: "encrypt", draftText: resolved.payload.draftText, source: "text" };
   }
 
-  const contactFromText = parseSharedContactPayload(text);
-  if (contactFromText) {
-    return {
-      route: "contact-import",
-      contactPayloadText: JSON.stringify(contactFromText, null, 2),
-      source: "text"
-    };
+  if (resolved.route === "decrypt") {
+    return { route: "decrypt", encryptedPayload: resolved.payload, source: "text" };
   }
 
-  const groupFromText = parseSharedGroupPayload(text);
-  if (groupFromText) {
-    return {
-      route: "group-import",
-      groupPayloadText: JSON.stringify(groupFromText, null, 2),
-      source: "text"
-    };
+  if (resolved.route === "contact-import") {
+    return { route: "contact-import", contactPayloadText: JSON.stringify(resolved.payload, null, 2), source: "text" };
   }
 
-  return {
-    route: "encrypt",
-    draftText: normalizeShareTargetText({ title, text }),
-    source: "text"
-  };
+  return { route: "group-import", groupPayloadText: JSON.stringify(resolved.payload, null, 2), source: "text" };
 }
 
 export function resolveShareTargetFileIntake({ files = [] } = {}) {
@@ -174,36 +153,5 @@ export function resolveStartupShareTargetIntake({ title = "", text = "", files =
     return fileIntake;
   }
 
-  const encryptedPayload = parseSharedEncryptedPayload(text);
-  if (encryptedPayload) {
-    return {
-      route: "decrypt",
-      encryptedPayload,
-      source: "text"
-    };
-  }
-
-  const contactPayload = parseSharedContactPayload(text);
-  if (contactPayload) {
-    return {
-      route: "contact-import",
-      contactPayloadText: JSON.stringify(contactPayload, null, 2),
-      source: "text"
-    };
-  }
-
-  const groupPayload = parseSharedGroupPayload(text);
-  if (groupPayload) {
-    return {
-      route: "group-import",
-      groupPayloadText: JSON.stringify(groupPayload, null, 2),
-      source: "text"
-    };
-  }
-
-  return {
-    route: "encrypt",
-    draftText: normalizeShareTargetText({ title, text }),
-    source: "text"
-  };
+  return resolveShareTargetIntake({ title, text });
 }

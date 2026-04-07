@@ -12,6 +12,7 @@ import {
   STORE_INBOX,
   STORE_SEEN,
   STORE_GROUPS,
+  STORE_EVENT_LOG,
   OUTBOX_RETRY_INTERVAL_MS,
   OUTBOX_DEFAULT_TTL_MS,
   SEEN_RETENTION_MS,
@@ -43,7 +44,11 @@ import {
   getVerifiedContacts,
   purgeExpiredOutbox,
   cleanupOldChunks,
-  runMaintenance
+  runMaintenance,
+  appendEventLog,
+  getAllEventLogEntries,
+  getEventLogFromLamport,
+  pruneExpiredEvents
 } from '../../crypto/store.js';
 
 export {
@@ -52,6 +57,7 @@ export {
   STORE_OUTBOX,
   STORE_INBOX,
   STORE_GROUPS,
+  STORE_EVENT_LOG,
   OUTBOX_RETRY_INTERVAL_MS,
   OUTBOX_DEFAULT_TTL_MS,
   SEEN_RETENTION_MS,
@@ -67,6 +73,10 @@ export {
   cleanupOldChunks,
   purgeExpiredOutbox,
   runMaintenance,
+  appendEventLog,
+  getAllEventLogEntries,
+  getEventLogFromLamport,
+  pruneExpiredEvents,
   saveGroup,
   getGroup,
   getAllGroups,

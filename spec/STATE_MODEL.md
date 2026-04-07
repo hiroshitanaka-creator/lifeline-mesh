@@ -1,4 +1,4 @@
-# STATE_MODEL (Phase 1 Freeze)
+# STATE_MODEL (Phase 1 Freeze + Phase 3 Runtime)
 
 ## Verification state machine
 
@@ -27,6 +27,17 @@ Transitions:
 - `eventId = base64(sha512(canonicalSignBytes(event)).slice(0,32))`
 - `msgId = base64(sha512(canonicalSignBytes(message)).slice(0,32))`
 - causal edges are expressed by `parents[]`
+- causal clock uses Lamport metadata (`lamport`) on each event
+
+## Event-log and sync runtime truth (Phase 3)
+
+- Source of truth is append-only `eventLog`; inbox/outbox remain materialized operational views.
+- Anti-entropy exchange contract:
+  1. peer inventory summary (`count`, deterministic digest, sorted `eventIds[]`)
+  2. have/want diff
+  3. missing-event pull + idempotent ingest
+  4. TTL-aware pruning
+- Convergence requirement: partitioned 3-node replica set must converge to the same state hash after heal.
 
 ## Legacy unsigned acceptance policy (bounded)
 
