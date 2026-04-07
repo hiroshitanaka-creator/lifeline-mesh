@@ -1,662 +1,434 @@
 # Protocol Specification
 
 ## Version
-Protocol Version: **1** (field `v: 1`)
+Protocol Version: **2** (field `v: 2`)
+
+Backwards-compatible with v1/v1.1 readers — v2 adds mandatory post-quantum hybrid
+key exchange while retaining all v1.1 message fields.
 
 ## Overview
-Lifeline Mesh uses a hybrid cryptographic scheme:
-- **Signing**: Ed25519 (authentication, non-repudiation)
-- **Encryption**: X25519-XSalsa20-Poly1305 (confidentiality, integrity)
+Lifeline Mesh v2 uses a **post-quantum hybrid** cryptographic scheme:
 
-Each user maintains **separate** signing and box (encryption) key pairs.
+- **Signing**: Ed25519 with context binding (Ed25519-ctx, RFC 8032 §5.1)
+- **Encryption**: Kyber-1024 KEM + X25519 ECDH → XSalsa20-Poly1305
+  - Both ciphertext components are required; either alone is insufficient.
+- **Hash**: SHA-512 (fingerprint derivation), SHA-256 (message ID)
+
+Each user maintains **three** key pairs:
+| Key Pair | Algorithm | Purpose |
+|----------|-----------|---------|
+| `signKP` | Ed25519 | Identity, authentication, non-repudiation |
+| `boxKP` | X25519 | Classical half of hybrid key exchange |
+| `kyberKP` | Kyber-1024 | Post-quantum half of hybrid key exchange |
+
+---
 
 ## Message Format
 
-### Public Identity Format
-Users exchange public identities for contact registration:
-
+### Public Identity Format (v2)
 ```json
 {
-  "v": 1,
+  "v": 2,
   "kind": "dmesh-id",
   "name": "Alice",
   "fp": "<base64-fingerprint-16-bytes>",
   "signPK": "<base64-ed25519-public-32-bytes>",
-  "boxPK": "<base64-x25519-public-32-bytes>"
+  "boxPK": "<base64-x25519-public-32-bytes>",
+  "kyberPK": "<base64-kyber1024-public-1568-bytes>"
 }
 ```
 
-**Fields**:
-- `v`: Protocol version (currently `1`)
-- `kind`: Message type identifier (`"dmesh-id"`)
-- `name`: Display name (user-provided, not authenticated)
-- `fp`: Fingerprint derived from `signPK` (first 16 bytes of SHA-512)
-- `signPK`: Ed25519 public signing key (32 bytes, base64)
-- `boxPK`: X25519 public encryption key (32 bytes, base64)
+**Additional field (v2)**:
+- `kyberPK`: Kyber-1024 public key (1568 bytes, base64). Required for v2 senders.
+  Receivers that do not yet support Kyber MUST treat `kyberPK` as opaque and
+  fall back to classical-only decryption (see §Backwards Compatibility).
 
-### Encrypted Message Format
+### Encrypted Message Format (v2)
 
 ```json
 {
-  "v": 1,
+  "v": 2,
   "kind": "dmesh-msg",
   "ts": 1706012345678,
+  "exp": 1706616000000,
+  "msgId": "<base64-sha256-32-bytes>",
   "senderSignPK": "<base64-32-bytes>",
   "senderBoxPK": "<base64-32-bytes>",
+  "senderKyberPK": "<base64-1568-bytes>",
   "recipientBoxPK": "<base64-32-bytes>",
+  "recipientKyberPK": "<base64-1568-bytes>",
   "ephPK": "<base64-32-bytes>",
+  "hybrid_ciphertext": {
+    "kyber_ct": "<base64-kyber1024-ciphertext-1568-bytes>",
+    "x25519_ephem_pk": "<base64-32-bytes>"
+  },
   "nonce": "<base64-24-bytes>",
   "ciphertext": "<base64-variable>",
   "signature": "<base64-64-bytes>"
 }
 ```
 
-**Fields**:
-- `v`: Protocol version (currently `1`)
-- `kind`: Message type (`"dmesh-msg"`)
-- `ts`: Timestamp (Unix milliseconds, JavaScript `Date.now()`)
-- `senderSignPK`: Sender's Ed25519 public signing key
-- `senderBoxPK`: Sender's X25519 public encryption key
-- `recipientBoxPK`: Recipient's X25519 public encryption key
-- `ephPK`: Ephemeral X25519 public key (generated per-message)
-- `nonce`: Random 24-byte nonce for NaCl box
-- `ciphertext`: Encrypted payload
-- `signature`: Ed25519 detached signature (64 bytes)
+**New fields in v2**:
+- `senderKyberPK`: Sender's Kyber-1024 public key (1568 bytes, base64)
+- `recipientKyberPK`: Recipient's Kyber-1024 public key (bound in signature)
+- `hybrid_ciphertext`: Object containing:
+  - `kyber_ct`: Kyber-1024 encapsulation ciphertext (1568 bytes, base64)
+  - `x25519_ephem_pk`: Ephemeral X25519 public key (32 bytes, base64)
+- `ephPK`: retained for backwards compatibility (equals `hybrid_ciphertext.x25519_ephem_pk`)
 
-## Cryptographic Operations
+---
+
+## Cryptographic Operations (v2)
 
 ### Key Generation
 
-#### Signing Key Pair
+#### Signing Key Pair (unchanged)
 ```javascript
 const signKeyPair = nacl.sign.keyPair();
 // signKeyPair.publicKey: 32 bytes (Ed25519)
 // signKeyPair.secretKey: 64 bytes (seed + public)
 ```
 
-#### Box Key Pair
+#### Box Key Pair (unchanged)
 ```javascript
 const boxKeyPair = nacl.box.keyPair();
 // boxKeyPair.publicKey: 32 bytes (X25519)
 // boxKeyPair.secretKey: 32 bytes
 ```
 
-### Fingerprint Derivation
+#### Kyber-1024 Key Pair (v2)
 ```javascript
-const signPKu8 = /* 32-byte Uint8Array */;
+// Using @noble/post-quantum kyber1024
+import { kyber1024 } from "@noble/post-quantum/ml-kem";
+const kyberKeyPair = kyber1024.keygen();
+// kyberKeyPair.publicKey:  1568 bytes (Kyber-1024 pk)
+// kyberKeyPair.secretKey:  3168 bytes (Kyber-1024 sk)
+```
+
+### Fingerprint Derivation (unchanged)
+```javascript
 const hash = nacl.hash(signPKu8); // SHA-512 → 64 bytes
 const fingerprint = base64(hash.slice(0, 16)); // First 16 bytes
 ```
 
-**Rationale**: Fingerprint derived from signing key ensures identity consistency. 16 bytes (128 bits) provides collision resistance for human-scale networks.
+### Hybrid Encryption Process (v2)
 
-### Encryption Process
-
-#### 1. Ephemeral Key Generation
+#### Step 1: Kyber-1024 Key Encapsulation
 ```javascript
-const ephKeyPair = nacl.box.keyPair();
+// Encapsulate a 32-byte shared secret from recipient's Kyber public key
+const { cipherText: kyber_ct, sharedSecret: kyberSS } =
+  kyber1024.encapsulate(recipientKyberPK);
+// kyber_ct: 1568 bytes (sent in hybrid_ciphertext.kyber_ct)
+// kyberSS:  32 bytes  (combined below)
+```
+
+#### Step 2: X25519 Key Agreement
+```javascript
+const ephKeyPair = nacl.box.keyPair(); // ephemeral X25519 pair
+const x25519SS = nacl.scalarMult(ephKeyPair.secretKey, recipientBoxPK); // 32 bytes
+// ephKeyPair.publicKey sent in hybrid_ciphertext.x25519_ephem_pk
+```
+
+#### Step 3: Hybrid Key Combination (HKDF-SHA-256)
+```javascript
+// Combine both secrets via HKDF-SHA-256
+// IKM = kyberSS || x25519SS (64 bytes)
+// Info = "DMESH_HYBRID_V2" (UTF-8, 15 bytes)
+// Salt = random 32 bytes (included in hybrid_ciphertext if non-default)
+const hybridKey = hkdf_sha256(
+  concat(kyberSS, x25519SS),     // IKM: 64 bytes
+  "DMESH_HYBRID_V2",             // context label
+  32                             // output key length
+);
+// hybridKey: 32 bytes — used as NaCl secretbox key
+```
+
+#### Step 4: Authenticated Encryption
+```javascript
 const nonce = nacl.randomBytes(24);
+const ciphertext = nacl.secretbox(payloadBytes, nonce, hybridKey);
 ```
 
-#### 2. Payload Construction
-```javascript
-const payload = {
-  v: 1,
-  ts: Date.now(),
-  content: "User message content"
-};
-const payloadBytes = utf8Encode(JSON.stringify(payload));
-```
+#### Step 5: Signature Generation (Ed25519-ctx)
 
-#### 3. Authenticated Encryption
-```javascript
-const sharedSecret = nacl.box.before(recipientBoxPK, ephKeyPair.secretKey);
-const ciphertext = nacl.box.after(payloadBytes, nonce, sharedSecret);
-```
-
-**Algorithm**: X25519 (ECDH) + XSalsa20 (encryption) + Poly1305 (MAC)
-
-#### 4. Signature Generation
-
-Construct `SignBytes` by concatenating:
+SignBytes construction:
 
 | Field | Length | Description |
 |-------|--------|-------------|
-| `DOMAIN` | 12 bytes | `"DMESH_MSG_V1"` (UTF-8) |
+| `DOMAIN` | 15 bytes | `"DMESH_MSG_V2_PQ"` (UTF-8) |
 | `senderSignPK` | 32 bytes | Sender's Ed25519 public key |
 | `senderBoxPK` | 32 bytes | Sender's X25519 public key |
+| `senderKyberPK` | 1568 bytes | Sender's Kyber-1024 public key |
 | `recipientBoxPK` | 32 bytes | Recipient's X25519 public key |
-| `ephPK` | 32 bytes | Ephemeral X25519 public key |
-| `nonce` | 24 bytes | NaCl box nonce |
+| `recipientKyberPK` | 1568 bytes | Recipient's Kyber-1024 public key |
+| `x25519_ephem_pk` | 32 bytes | Ephemeral X25519 public key |
+| `kyber_ct` | 1568 bytes | Kyber encapsulation ciphertext |
+| `nonce` | 24 bytes | NaCl secretbox nonce |
 | `ts` | 8 bytes | Timestamp (big-endian uint64) |
 | `ct_len` | 4 bytes | Ciphertext length (big-endian uint32) |
 | `ciphertext` | variable | Encrypted payload |
 
 ```javascript
 const signBytes = concat([
-  DOMAIN,              // "DMESH_MSG_V1"
-  senderSignPK,        // 32 bytes
-  senderBoxPK,         // 32 bytes
-  recipientBoxPK,      // 32 bytes
-  ephPK,               // 32 bytes
-  nonce,               // 24 bytes
-  u64be(ts),           // 8 bytes
-  u32be(ciphertext.length), // 4 bytes
-  ciphertext           // variable
+  utf8("DMESH_MSG_V2_PQ"),  // domain separator
+  senderSignPK,              // 32 bytes
+  senderBoxPK,               // 32 bytes
+  senderKyberPK,             // 1568 bytes
+  recipientBoxPK,            // 32 bytes
+  recipientKyberPK,          // 1568 bytes
+  x25519_ephem_pk,           // 32 bytes
+  kyber_ct,                  // 1568 bytes
+  nonce,                     // 24 bytes
+  u64be(ts),                 // 8 bytes
+  u32be(ciphertext.length),  // 4 bytes
+  ciphertext                 // variable
 ]);
 
-const signature = nacl.sign.detached(signBytes, senderSignSK);
+// Ed25519-ctx with context binding (RFC 8032 §5.1)
+const ctx = utf8("lifeline-mesh-v2"); // 16-byte context string
+const signature = ed25519ctx.sign(signBytes, senderSignSK, ctx);
 ```
 
-**Domain Separation**: `DMESH_MSG_V1` prevents signature reuse in other protocols.
+**Ed25519-ctx context binding**: prevents cross-context signature reuse.
+Context is `"lifeline-mesh-v2"` (16 bytes, ASCII). All v2 messages MUST use
+this context. Verifiers MUST reject signatures with incorrect context.
 
-### Decryption Process
+### Hybrid Decryption Process (v2)
 
 #### 1. Input Validation
-- Verify all base64 fields decode correctly
-- Verify field lengths:
-  - `senderSignPK`: 32 bytes
-  - `senderBoxPK`: 32 bytes
-  - `recipientBoxPK`: 32 bytes
-  - `ephPK`: 32 bytes
-  - `nonce`: 24 bytes
-  - `signature`: 64 bytes
-- Verify `ts` is finite number
+Verify all required fields are present and have correct byte lengths.
+New v2 checks:
+- `senderKyberPK`: 1568 bytes
+- `recipientKyberPK`: 1568 bytes
+- `hybrid_ciphertext.kyber_ct`: 1568 bytes
+- `hybrid_ciphertext.x25519_ephem_pk`: 32 bytes
 
-#### 2. Timestamp Validation
+#### 2. Recipient Binding Checks
 ```javascript
-const MAX_SKEW_MS = 10 * 60 * 1000; // 10 minutes
-if (Math.abs(Date.now() - msg.ts) > MAX_SKEW_MS) {
-  reject("Timestamp skew too large");
-}
+// Classical check (unchanged)
+if (msg.recipientBoxPK !== base64(myBoxPK)) reject("Recipient box key mismatch");
+
+// Post-quantum check (new v2)
+if (msg.recipientKyberPK !== base64(myKyberPK)) reject("Recipient Kyber key mismatch");
 ```
 
-#### 3. Recipient Binding Check
+#### 3. Signature Verification (Ed25519-ctx)
 ```javascript
-if (msg.recipientBoxPK !== base64(myBoxPK)) {
-  reject("Not intended for this recipient");
-}
+const ctx = utf8("lifeline-mesh-v2");
+const valid = ed25519ctx.verify(signBytes, signature, senderSignPK, ctx);
+if (!valid) reject("Invalid Ed25519-ctx signature");
 ```
 
-#### 4. Sender Lookup / TOFU
+#### 4. Kyber-1024 Decapsulation
 ```javascript
-const senderFp = fingerprint(msg.senderSignPK);
-let contact = lookupContact(senderFp);
-
-if (!contact && tofuEnabled) {
-  // First contact: Trust On First Use
-  contact = {
-    fp: senderFp,
-    name: `TOFU-${senderFp}`,
-    signPK: msg.senderSignPK,
-    boxPK: msg.senderBoxPK
-  };
-  saveContact(contact);
-} else if (contact) {
-  // Known contact: Verify key consistency
-  if (contact.signPK !== msg.senderSignPK || contact.boxPK !== msg.senderBoxPK) {
-    reject("Key mismatch for known sender");
-  }
-}
+const kyberSS = kyber1024.decapsulate(kyber_ct, myKyberSK); // 32 bytes
 ```
 
-#### 5. Signature Verification
-Reconstruct identical `SignBytes` (same construction as encryption):
+#### 5. X25519 Key Agreement
 ```javascript
-const signBytes = buildSignBytes({
-  senderSignPK,
-  senderBoxPK,
-  recipientBoxPK,
-  ephPK,
-  nonce,
-  ts,
-  ciphertext
-});
-
-const verified = nacl.sign.detached.verify(signBytes, signature, senderSignPK);
-if (!verified) {
-  reject("Invalid signature");
-}
+const x25519SS = nacl.scalarMult(myBoxSK, x25519_ephem_pk); // 32 bytes
 ```
 
-#### 6. Replay Check
+#### 6. Hybrid Key Reconstruction
 ```javascript
-const replayKey = `${senderFp}:${base64(nonce)}`;
-if (replayDBContains(replayKey)) {
-  reject("Replay detected");
-}
-replayDBInsert(replayKey, Date.now());
+const hybridKey = hkdf_sha256(concat(kyberSS, x25519SS), "DMESH_HYBRID_V2", 32);
 ```
-
-Replay database cleanup:
-- Retention: 30 days
-- Periodic cleanup removes entries older than `REPLAY_RETENTION_MS`
 
 #### 7. Decryption
 ```javascript
-const sharedSecret = nacl.box.before(ephPK, myBoxSK);
-const plaintext = nacl.box.open.after(ciphertext, nonce, sharedSecret);
-if (!plaintext) {
-  reject("Decryption failed");
-}
-
-const payload = JSON.parse(utf8Decode(plaintext));
+const plaintext = nacl.secretbox.open(ciphertext, nonce, hybridKey);
+if (!plaintext) reject("Decryption failed");
 ```
+
+---
 
 ## Security Considerations
 
+### Post-Quantum Threat Model
+Kyber-1024 (NIST ML-KEM-1024) provides approximately 256-bit post-quantum security.
+An adversary with a cryptographically relevant quantum computer can break X25519
+but not Kyber-1024. The hybrid scheme ensures that:
+- Classical security ≥ min(X25519, Kyber-1024)
+- Post-quantum security ≥ Kyber-1024 strength
+
 ### Key Separation
-- **Why separate signing and box keys?**
-  - Different mathematical operations (Ed25519 vs X25519)
-  - Signing keys exposed in every message; box keys only for encryption
-  - Future: Could rotate box keys without changing identity (signing key)
+Three distinct key types prevent cross-algorithm confusion:
+- `signKP`: Ed25519 — signing only, never used for encryption
+- `boxKP`: X25519 — classical half of hybrid encryption
+- `kyberKP`: Kyber-1024 — post-quantum half of hybrid encryption
 
-### Ephemeral Keys (Forward Secrecy Approximation)
-- Each message uses fresh `ephPK` / `ephSK`
-- If long-term `boxSK` compromised, past messages remain secure (if ephemeral keys destroyed)
-- **Not perfect forward secrecy**: Signing key compromise allows impersonation but not decryption of past messages
+### Signature Domain Separation
+The v2 domain `"DMESH_MSG_V2_PQ"` is distinct from `"DMESH_MSG_V1"`.
+A v2 signature cannot be replayed as v1 or vice versa.
 
-### Recipient Binding
-- `recipientBoxPK` in signature prevents message redirection
-- Even if attacker has valid signed message, cannot decrypt with different recipient's key
+### Hybrid Ciphertext Binding
+Both `kyber_ct` and `x25519_ephem_pk` are included in the signed data.
+An adversary cannot substitute either component without invalidating the signature.
 
-### Replay Protection
-- Nonce uniqueness per sender prevents exact replay
-- Timestamp prevents delayed replay (>10 minutes)
-- Replay DB prevents nonce reuse within 30-day window
+### Backwards Compatibility
+- v1/v1.1 receivers MUST ignore unknown fields (`senderKyberPK`, `recipientKyberPK`,
+  `hybrid_ciphertext`) to avoid breakage.
+- v1/v1.1 receivers that encounter `v: 2` SHOULD display a warning and attempt
+  classical-path decryption (stripping hybrid fields), or prompt the user to upgrade.
+- v2 senders SHOULD include a v1.1-compatible fallback message for mixed networks
+  during the transition period (optional `_v1_fallback` envelope).
 
-### TOFU Trade-offs
-- **Pro**: No centralized PKI needed; works offline
-- **Con**: First message vulnerable to MITM
-- **Mitigation**: Out-of-band fingerprint verification for critical contacts
+---
 
 ## Message Size Limits
 - **Maximum payload**: 150 KB (raw content before encryption)
-- **Rationale**: Balance between usability and relay-friendliness in degraded networks
+- **Kyber overhead**: +1568 bytes (kyber_ct) + 1568 bytes (recipientKyberPK) per message
+- **Signature overhead**: increases from ~220 bytes to ~3480 bytes (due to Kyber PK fields)
 
-## Constants
+---
+
+## Constants (v2)
 
 ```javascript
-const DB_NAME = "disasterMeshComplete";
-const DB_VERSION = 1;
-const STORE_KEYS = "keys";
-const STORE_CONTACTS = "contacts";
-const STORE_REPLAY = "replay";
+const DOMAIN_V2    = "DMESH_MSG_V2_PQ";    // 15 bytes
+const CTX_V2       = "lifeline-mesh-v2";   // Ed25519-ctx context, 16 bytes
 
-const MAX_BYTES = 150 * 1024;           // 150 KB
-const MAX_SKEW_MS = 10 * 60 * 1000;     // 10 minutes
-const REPLAY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const KYBER_PK_LEN = 1568;  // Kyber-1024 public key length (bytes)
+const KYBER_CT_LEN = 1568;  // Kyber-1024 encapsulation ciphertext length (bytes)
+const KYBER_SS_LEN = 32;    // Kyber-1024 shared secret length (bytes)
 
-const DOMAIN = "DMESH_MSG_V1";          // Signature domain separator
+const HKDF_LABEL   = "DMESH_HYBRID_V2";  // HKDF info string
+
+const MAX_BYTES       = 150 * 1024;
+const DEFAULT_TTL_MS  = 7 * 24 * 60 * 60 * 1000;
+const SEEN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 ```
+
+---
 
 ## Wire Format Notes
 
-### Encoding
-- All binary data (keys, nonces, ciphertext, signatures) encoded as **base64** in JSON
-- Timestamps as **decimal integers** (JavaScript `number`)
-- Text content as **UTF-8** inside payload
+### Encoding (unchanged)
+All binary data encoded as **base64** in JSON. Timestamps as **decimal integers**.
 
-### Timestamp Format
-- Unix milliseconds (JavaScript `Date.now()`)
-- 64-bit big-endian in signature construction
-- Must fit JavaScript `number` (53-bit precision safe for dates until year ~285,000)
+### Version Negotiation
+Receivers check `v` field first:
+- `v === 1` → v1/v1.1 classical path
+- `v === 2` → v2 hybrid path (this spec)
+- `v > 2` → unknown, receivers SHOULD reject with `"unsupported version"` error
 
-### Length Encoding in Signature
-- Ciphertext length as **32-bit big-endian unsigned integer**
-- Prevents length extension attacks
+### Field Size Summary
 
-## Test Vectors
-
-(To be added in `/tools`)
-
-Example test vector structure:
-```json
-{
-  "description": "Basic message encryption/decryption",
-  "senderSignSK": "<base64>",
-  "senderSignPK": "<base64>",
-  "senderBoxSK": "<base64>",
-  "senderBoxPK": "<base64>",
-  "recipientBoxSK": "<base64>",
-  "recipientBoxPK": "<base64>",
-  "ephSK": "<base64>",
-  "ephPK": "<base64>",
-  "nonce": "<base64>",
-  "ts": 1706012345678,
-  "payload": {"v": 1, "ts": 1706012345678, "content": "Hello"},
-  "ciphertext": "<base64>",
-  "signature": "<base64>",
-  "message": { /* full JSON message */ }
-}
-```
-
-## Version History
-
-### v1.1 (Current)
-**Backwards-compatible extension of v1**
-
-New optional fields and features:
-- **Message ID**: SHA-256 hash of ciphertext for deduplication and store-carry-forward
-- **TTL/Expiration**: Delay-tolerant networking support (replaces strict timestamp validation)
-- **Chunking**: Split large messages for constrained transports (QR, SMS, LoRa)
-- **Disaster payload types**: Structured emergency message formats
-
-### v1.0 (Base)
-- Initial protocol
-- Ed25519 + X25519-XSalsa20-Poly1305
-- Ephemeral encryption keys
-- Recipient binding
-- Replay protection (nonce + timestamp)
-- TOFU contact model
+| Field | v1 size | v2 size | Delta |
+|-------|---------|---------|-------|
+| `senderSignPK` | 32 B | 32 B | — |
+| `senderBoxPK` | 32 B | 32 B | — |
+| `senderKyberPK` | — | 1568 B | +1568 B |
+| `recipientBoxPK` | 32 B | 32 B | — |
+| `recipientKyberPK` | — | 1568 B | +1568 B |
+| `ephPK` | 32 B | 32 B | — |
+| `hybrid_ciphertext.kyber_ct` | — | 1568 B | +1568 B |
+| `hybrid_ciphertext.x25519_ephem_pk` | — | 32 B | +32 B |
+| `nonce` | 24 B | 24 B | — |
+| `signature` | 64 B | 64 B | — |
+| **Header total** | ~260 B | ~3420 B | +3160 B |
 
 ---
 
-## Protocol v1.1 Extensions
+## Protocol v1.1 Extensions (Retained)
 
-### Message ID
+All v1.1 extensions remain valid in v2:
+- **Message ID** (`msgId`): SHA-256 of ciphertext
+- **TTL/Expiration** (`exp`): delay-tolerant networking
+- **Chunking** (`dmesh-chunk`): constrained transport support
+- **Disaster payload types**: structured emergency formats
+- **Group messages** (`dmesh-group-msg`): SenderKey ratchet
 
-Every message has a unique identifier derived from its ciphertext:
-
-```javascript
-const messageId = sha256(ciphertext);  // 32 bytes, base64 encoded
-```
-
-**Purpose**:
-- Deduplication across store-and-forward relays
-- Reference for acknowledgments
-- Chunk reassembly identification
-
-**Wire format** (added to dmesh-msg):
-```json
-{
-  "msgId": "<base64-sha256-32-bytes>"
-}
-```
-
-### TTL and Expiration (Delay-Tolerant Networking)
-
-**Rationale**: Disaster networks experience extreme delays (hours to days). The original 10-minute timestamp skew check (`MAX_SKEW_MS`) is too restrictive for store-carry-forward scenarios.
-
-**New approach**:
-- `ts` (timestamp) remains for signature integrity and ordering
-- `exp` (expiration) defines when the message becomes invalid
-- Replay protection uses `msgId + senderFp` instead of strict time bounds
-
-**Wire format** (added to dmesh-msg):
-```json
-{
-  "ts": 1706012345678,
-  "exp": 1706616000000
-}
-```
-
-**Validation change**:
-```javascript
-// OLD (v1.0): Strict timestamp skew
-const MAX_SKEW_MS = 10 * 60 * 1000;
-if (Math.abs(Date.now() - ts) > MAX_SKEW_MS) reject();
-
-// NEW (v1.1): Expiration-based with fallback
-const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days default
-
-function isMessageValid(msg) {
-  const now = Date.now();
-
-  // Use explicit expiration if present
-  if (msg.exp !== undefined) {
-    return now <= msg.exp;
-  }
-
-  // Fallback: ts + DEFAULT_TTL
-  return now <= (msg.ts + DEFAULT_TTL_MS);
-}
-```
-
-**Replay protection** (updated):
-```javascript
-// Key: msgId (ciphertext hash) + senderFp
-const seenKey = `${msgId}:${senderFp}`;
-if (seenDB.has(seenKey)) reject("Already received");
-seenDB.set(seenKey, { receivedAt: Date.now() });
-```
-
-**Constants update**:
-```javascript
-const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
-const SEEN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days (cleanup)
-```
-
-### Chunking (Constrained Transport Support)
-
-For transports with size limits (QR: ~2KB, SMS: 160 bytes, LoRa: ~250 bytes):
-
-**Chunk envelope format**:
-```json
-{
-  "v": 1,
-  "kind": "dmesh-chunk",
-  "msgId": "<base64-sha256-32-bytes>",
-  "seq": 0,
-  "total": 3,
-  "data": "<base64-chunk-data>"
-}
-```
-
-**Fields**:
-- `msgId`: Message ID (hash of complete ciphertext)
-- `seq`: Sequence number (0-indexed)
-- `total`: Total number of chunks
-- `data`: Base64-encoded chunk payload
-
-**Chunking algorithm**:
-```javascript
-const CHUNK_OVERHEAD = 150;  // JSON envelope overhead (bytes)
-
-function chunkMessage(msgJson, maxChunkSize) {
-  const msgBytes = utf8Encode(JSON.stringify(msgJson));
-  const msgId = sha256(msgJson.ciphertext);  // From decrypted ciphertext field
-  const dataSize = maxChunkSize - CHUNK_OVERHEAD;
-
-  const chunks = [];
-  const total = Math.ceil(msgBytes.length / dataSize);
-
-  for (let i = 0; i < total; i++) {
-    const start = i * dataSize;
-    const end = Math.min(start + dataSize, msgBytes.length);
-    chunks.push({
-      v: 1,
-      kind: "dmesh-chunk",
-      msgId: base64(msgId),
-      seq: i,
-      total,
-      data: base64(msgBytes.slice(start, end))
-    });
-  }
-  return chunks;
-}
-
-function reassembleChunks(chunks) {
-  // Sort by sequence
-  chunks.sort((a, b) => a.seq - b.seq);
-
-  // Verify completeness
-  if (chunks.length !== chunks[0].total) {
-    throw new Error("Incomplete chunks");
-  }
-
-  // Verify all msgId match
-  const msgId = chunks[0].msgId;
-  if (!chunks.every(c => c.msgId === msgId)) {
-    throw new Error("Message ID mismatch");
-  }
-
-  // Reassemble
-  const data = chunks.map(c => decodeBase64(c.data));
-  const msgBytes = concat(data);
-  return JSON.parse(utf8Decode(msgBytes));
-}
-```
-
-**Recommended chunk sizes**:
-| Transport | Max Chunk Size | Notes |
-|-----------|---------------|-------|
-| QR Code (M) | 2048 bytes | Medium error correction |
-| SMS (concatenated) | 1200 bytes | 8 SMS segments |
-| LoRa | 200 bytes | Region-dependent |
-| Bluetooth GATT | 512 bytes | MTU negotiated |
-| Clipboard | Unlimited | No chunking needed |
-
-### Disaster Payload Types
-
-Structured payloads for emergency scenarios:
-
-> **`kind` vs `type` disambiguation:**
-> - **`kind`** — outer envelope field, present in every Lifeline Mesh JSON object **before** decryption.
->   Used for routing and dispatch (`"dmesh-msg"`, `"dmesh-group-msg"`, `"dmesh-id"`, `"dmesh-chunk"`).
-> - **`type`** — inner content field, present **inside** the decrypted plaintext for disaster payloads.
->   Only visible after successful decryption; not used for envelope routing.
->
-> Never compare `message.type` to `"dmesh-msg"` — the correct check is `message.kind === "dmesh-msg"`.
-
-**Payload type field** (inside encrypted content, after decryption):
-```json
-{
-  "v": 1,
-  "ts": 1706012345678,
-  "type": "im_safe",
-  "content": "..."
-}
-```
-
-**Standard types**:
-
-| Type | Purpose | Additional Fields |
-|------|---------|------------------|
-| `text` | Free-form message | `content` (string) |
-| `im_safe` | Safety confirmation | `location?`, `people?` |
-| `need_help` | Request assistance | `urgency`, `people?`, `needs[]` |
-| `shelter_info` | Shelter information | `location`, `capacity?`, `resources[]` |
-| `medical` | Medical emergency | `urgency`, `conditions[]`, `people` |
-| `supplies` | Resource status | `resources[]`, `location?` |
-| `ack` | Message acknowledgment | `refMsgId` |
-
-**Example payloads**:
-
-```json
-// Safety confirmation
-{
-  "v": 1,
-  "ts": 1706012345678,
-  "type": "im_safe",
-  "content": "Evacuated to community center",
-  "location": {"lat": 35.6812, "lng": 139.7671, "accuracy": 50},
-  "people": 3
-}
-
-// Help request
-{
-  "v": 1,
-  "ts": 1706012345678,
-  "type": "need_help",
-  "urgency": "high",
-  "content": "Trapped on 2nd floor, water rising",
-  "location": {"lat": 35.6812, "lng": 139.7671},
-  "people": 2,
-  "needs": ["rescue", "medical"]
-}
-
-// Acknowledgment
-{
-  "v": 1,
-  "ts": 1706012345678,
-  "type": "ack",
-  "refMsgId": "<base64-original-message-id>",
-  "content": "Help is on the way, ETA 30 min"
-}
-```
-
-**Urgency levels**: `low`, `medium`, `high`, `critical`
-
-**Resource types**: `water`, `food`, `power`, `medical`, `shelter`, `communication`, `transport`
+Chunked message transport for Kyber-aware nodes MUST account for the larger
+v2 header size. Recommended chunk sizes are reduced accordingly:
+| Transport | v1.1 chunk | v2 chunk | Notes |
+|-----------|------------|----------|-------|
+| LoRa | 200 B | 200 B | Header split across multiple chunks |
+| BLE GATT | 512 B | 512 B | More chunks per message |
+| SMS | 1200 B | 1200 B | More segments required |
+| QR (M) | 2048 B | 2048 B | Header may need 2 QR codes |
 
 ---
 
-## Future Protocol Changes
+## Group Message Wire Format (v2 extension)
 
-Potential v2 considerations:
-- Group messaging (Sender Keys or MLS)
-- Key rotation mechanism
-- Post-quantum hybrid signatures (ML-DSA + Ed25519)
-- Compressed message format (zstd before encryption)
-- Multi-recipient encryption
-- Mesh routing metadata
+Group messages use a SenderKey ratchet (see spec/group-crdt.md for CRDT integration).
 
-### Group Message Wire Format (`dmesh-group-msg`)
-
-Group messaging uses a SenderKey ratchet per `(groupId, senderSignPK)`.
-
-**Wire format**:
 ```json
 {
-  "v": 1,
+  "v": 2,
   "kind": "dmesh-group-msg",
   "groupId": "<base64-16-bytes>",
   "ts": 1706012345678,
   "senderSignPK": "<base64-32-bytes>",
+  "senderKyberPK": "<base64-1568-bytes>",
   "senderKeyVersion": 5,
   "nonce": "<base64-24-bytes>",
   "ciphertext": "<base64-variable>",
-  "signature": "<base64-64-bytes>"
+  "signature": "<base64-64-bytes>",
+  "crdt_delta": "<base64-encoded-Yjs-delta>"
 }
 ```
 
-**Signing input** (`DMESH_GROUP_V1` domain-separated):
-- `"DMESH_GROUP_V1"`
-- `groupId` (UTF-8)
-- `senderKeyVersion` (1 byte)
-- `nonce` (24 bytes)
-- `ciphertext` (variable)
+**`crdt_delta`** (v2 extension): Optional Yjs-encoded delta encoding the state
+change this message represents. Receivers that understand CRDT MUST apply the
+delta to the group's Y.Doc. Receivers that don't understand CRDT MUST ignore
+this field.
 
-**State model**:
-- Group metadata: `{ id, name, createdAt, createdBy }`
-- Membership: list of member fingerprints (`members[]`)
-- SenderKey state: `{ version, chainKey }` per sender, advanced on every message
-
-### Group Compatibility Policy
-
-- Existing direct message envelope (`dmesh-msg`) remains unchanged and fully supported.
-- Receivers route by `kind`:
-  - `dmesh-msg` → direct decrypt path
-  - `dmesh-group-msg` → group SenderKey decrypt path
-- Unknown `kind` MUST be ignored safely.
-- Membership changes (member add/remove) MUST force SenderKey rotation for the group.
-- `senderKeyVersion` mismatch is a hard failure and requires out-of-band state resync (e.g., re-join/reshare group state).
+**Signing domain** for v2 group messages: `"DMESH_GROUP_V2_PQ"`
 
 ---
 
 ## Relay and Mesh Routing
 
-### MeshRouter Phase 1 (1-hop relay) — Implementation Status
+### Phase 3 Router (v2 — ETX-based)
 
-`bluetooth/mesh-router.js` implements Phase 1 relay logic:
+`bluetooth/mesh-router.js` Phase 3 implementation:
 
-- **Deduplication**: each message is identified by `msgId` (or a fallback derived from sender + nonce).
-  A seen-map with TTL prevents the same message from being forwarded twice.
-- **Hop budget**: the `hops` counter is incremented on each relay; forwarding stops when `hops >= maxHops`.
-  Default `maxHops = 1` (Phase 1: at most 1 intermediate hop).
-- **Relay metadata**: `via` and `hops` fields are stamped into the message before forwarding.
+- **ETX (Expected Transmission Count)**: Each link tracks delivery success/fail ratio.
+  ETX = 1 / delivery_ratio. Lower ETX = better link quality.
+- **Egress selection**: Minimum cumulative ETX to destination (Dijkstra over ETX graph).
+- **Loop prevention**: Bloom filter (16-bit, 3 hash functions) + persistent seen-set
+  (IndexedDB) for N-hop networks. Bloom filter provides O(1) probabilistic check;
+  IndexedDB provides authoritative deduplication on collision.
+- **Route advertisement**: ETX values included in `dmesh-route-adv` messages.
 
-**What is implemented:**
-- `MeshRouter` class: deduplication, hop budget, relay metadata stamping.  14 standalone tests.
-- `BLEManager` accepts a `router` option. When set, every fully-reassembled non-duplicate message
-  is passed to `router.shouldForward(message, ingressPeerId)`.  If true, `ble.onForward(message,
-  ingressPeerId)` is called.  5 BLE+Router integration tests pass.
-- The integration is opt-in: if no `router` is set, `BLEManager` behaviour is unchanged.
+```json
+{
+  "kind": "dmesh-route-adv",
+  "src": "<fingerprint>",
+  "seq": 42,
+  "ts": 1706012345678,
+  "routes": [
+    { "dst": "<fp>", "hops": 2, "etx": 1.25 }
+  ]
+}
+```
 
-**Current constraints / remaining gaps:**
-- **Egress peer management boundary**: `BLEManager` remains single-peer; caller-managed egress fanout is still required.
-  The app (`app/src/main.js`) wires `router` + `onForward` into `runtime-mesh.js` to provide this coordination.
-- **Browser-side BLE peripheral mode** is still unavailable (Web Bluetooth central/client limitations).
-  Peripheral relay mode is currently provided by Node runtime (`bluetooth/gatt-server.js` +
-  `bluetooth/backends/node-bleno.js` + `node-server/server.js`).
+---
+
+## Version History
+
+### v2 (Current)
+- Post-quantum hybrid key exchange: Kyber-1024 (ML-KEM-1024) + X25519
+- `hybrid_ciphertext` field: carries `kyber_ct` + `x25519_ephem_pk`
+- `senderKyberPK` and `recipientKyberPK` bound in signature
+- Ed25519-ctx signature with `"lifeline-mesh-v2"` context binding
+- Domain separator updated to `"DMESH_MSG_V2_PQ"`
+- HKDF-SHA-256 hybrid key derivation (`"DMESH_HYBRID_V2"`)
+- CRDT delta field for group messages
+- ETX-based routing in Phase 3 mesh router
+
+### v1.1
+- Message ID (SHA-256 of ciphertext)
+- TTL/Expiration for delay-tolerant networking
+- Chunking for constrained transports
+- Disaster payload types
+- Group messaging (SenderKey ratchet)
+
+### v1.0 (Base)
+- Ed25519 signing + X25519-XSalsa20-Poly1305 encryption
+- Ephemeral encryption keys
+- Recipient binding
+- Replay protection (nonce + timestamp)
+- TOFU contact model
