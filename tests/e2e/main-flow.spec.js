@@ -91,6 +91,69 @@ test("PWA intake: share_target query and shortcut deep-link route to encrypt/dec
   await expect(page.evaluate(() => document.activeElement?.id)).resolves.toBe("content");
 });
 
+test("PWA intake: Web Share Target POST accepts encrypted/group files and routes correctly", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    if (!("serviceWorker" in navigator)) {
+      throw new Error("Service Worker API unavailable in this browser context");
+    }
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+
+  const encryptedPayload = {
+    kind: "dmesh-msg",
+    msgId: "share-target-file-encrypted-msg",
+    senderSignPK: "invalid-for-runtime-check",
+    senderBoxPK: "invalid-for-runtime-check",
+    nonce: "invalid",
+    ephPK: "invalid",
+    ciphertext: "invalid",
+    sig: "invalid",
+    ts: Date.now(),
+    ttlMs: 60000
+  };
+  const encryptedFileText = JSON.stringify(encryptedPayload);
+
+  await page.evaluate(async ({ fileText }) => {
+    const formData = new globalThis.FormData();
+    formData.append("title", "Emergency");
+    formData.append("text", "share target file");
+    const blob = new globalThis.Blob([fileText], { type: "application/json" });
+    formData.append("files", new globalThis.File([blob], "encrypted-message.dmesh", { type: "application/json" }));
+    await globalThis.fetch("/share-target", { method: "POST", body: formData });
+  }, { fileText: encryptedFileText });
+
+  await page.goto("/?share-target=1");
+  await expect(page.locator("#input")).toContainText("dmesh-msg");
+  await expect(page.locator("#status")).toContainText("encrypted payload");
+  await expect(page.locator("#status")).toContainText("encrypted-message.dmesh");
+
+  const groupPayload = {
+    type: "lifeline-group-onboarding-v1",
+    group: {
+      id: "e2e-group-onboarding",
+      name: "Group Intake Test",
+      members: [],
+      senderKey: { version: 1, chainKey: "AAAAAAAAAAAAAAAAAAAAAA==" }
+    },
+    senderStates: []
+  };
+
+  await page.evaluate(async ({ fileText }) => {
+    const formData = new globalThis.FormData();
+    formData.append("title", "Group Invite");
+    formData.append("text", "shared group payload");
+    const blob = new globalThis.Blob([fileText], { type: "application/json" });
+    formData.append("files", new globalThis.File([blob], "group-onboarding.json", { type: "application/json" }));
+    await globalThis.fetch("/share-target", { method: "POST", body: formData });
+  }, { fileText: JSON.stringify(groupPayload) });
+
+  await page.goto("/?share-target=1");
+  await expect(page.locator("#group-json")).toContainText("lifeline-group-onboarding-v1");
+  await expect(page.locator("#status")).toContainText("Join Group");
+});
+
 
 test("PWA offline fallback: cached app shell keeps share/deeplink intake reachable", async ({ page, context }) => {
   await page.goto("/");

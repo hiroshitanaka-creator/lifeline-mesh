@@ -2,7 +2,7 @@
 // Lifeline Mesh Service Worker
 // Hardened offline-first app shell strategy for single-file build.
 
-const CACHE_VERSION = "v1.1.0";
+const CACHE_VERSION = "v1.2.0";
 const CACHE_NAME = `lifeline-mesh-${CACHE_VERSION}`;
 
 function ensureTrailingSlash(pathname) {
@@ -27,6 +27,8 @@ function buildAppShellUrls() {
 const APP_SHELL_URLS = buildAppShellUrls();
 const APP_SHELL_SET = new Set(APP_SHELL_URLS);
 const NAVIGATION_FALLBACK_URL = `${getScopePath()}index.html`;
+const SHARE_TARGET_ACTION_PATH = `${getScopePath()}share-target`;
+const SHARE_TARGET_PENDING_PATH = `${getScopePath()}share-target-pending`;
 
 function isInScope(url) {
   const scopePath = getScopePath();
@@ -157,8 +159,75 @@ async function handleScopedAssetRequest(event) {
   }
 }
 
+async function consumeSharedFiles(files) {
+  const collected = [];
+  for (const file of files) {
+    const safeName = typeof file?.name === "string" ? file.name : "shared-file";
+    const safeType = typeof file?.type === "string" ? file.type : "";
+    const lowerName = safeName.toLowerCase();
+    const isJsonLike = safeType.includes("json") || lowerName.endsWith(".json") || lowerName.endsWith(".dmesh");
+    if (!isJsonLike) {
+      continue;
+    }
+
+    try {
+      const text = await file.text();
+      if (!text.trim()) {
+        continue;
+      }
+      collected.push({
+        name: safeName,
+        type: safeType || "application/json",
+        text
+      });
+    } catch (err) {
+      console.warn("[ServiceWorker] Failed to read shared file:", safeName, err);
+    }
+  }
+  return collected;
+}
+
+async function handleShareTargetPost(event) {
+  const cache = await caches.open(CACHE_NAME);
+  const formData = await event.request.formData();
+  const title = String(formData.get("title") || "");
+  const text = String(formData.get("text") || "");
+  const files = await consumeSharedFiles(formData.getAll("files"));
+
+  const pendingPayload = {
+    createdAt: Date.now(),
+    title,
+    text,
+    files
+  };
+  await cache.put(
+    SHARE_TARGET_PENDING_PATH,
+    new Response(JSON.stringify(pendingPayload), {
+      headers: { "Content-Type": "application/json; charset=utf-8" }
+    })
+  );
+
+  return Response.redirect(`${NAVIGATION_FALLBACK_URL}?share-target=1`, 303);
+}
+
+async function handleShareTargetPendingRequest() {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(SHARE_TARGET_PENDING_PATH);
+  if (!cached) {
+    return new Response("", { status: 204 });
+  }
+
+  await cache.delete(SHARE_TARGET_PENDING_PATH);
+  return cached;
+}
+
 self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
+
+  if (event.request.method === "POST" && requestUrl.pathname === SHARE_TARGET_ACTION_PATH) {
+    event.respondWith(handleShareTargetPost(event));
+    return;
+  }
 
   if (event.request.method !== "GET") {
     return;
@@ -169,6 +238,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (!isInScope(requestUrl)) {
+    return;
+  }
+
+  if (requestUrl.pathname === SHARE_TARGET_PENDING_PATH) {
+    event.respondWith(handleShareTargetPendingRequest());
     return;
   }
 

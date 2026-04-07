@@ -62,11 +62,22 @@
   "related_applications": [],
   "prefer_related_applications": false,
   "share_target": {
-    "action": "/lifeline-mesh/index.html",
-    "method": "GET",
+    "action": "/lifeline-mesh/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
     "params": {
       "title": "title",
-      "text": "text"
+      "text": "text",
+      "files": [
+        {
+          "name": "files",
+          "accept": [
+            ".dmesh",
+            ".json",
+            "application/json"
+          ]
+        }
+      ]
     }
   }
 }
