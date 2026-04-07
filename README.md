@@ -77,7 +77,7 @@ Then: Generate keys → Add contacts → Encrypt/Decrypt
 - 📡 **Multi-link runtime**: multiple concurrent BLE connections with real store-and-forward relay
 - 🔀 **N-hop routing**: MeshRouter Phase 2 proactive route advertisements (auto-enabled at ≥2 links)
 - 🧩 **Transport boundary (`transport/`)** with `TransportLink` adapters for browser-central BLE, Node peripheral reference path, and native peripheral contract stubs
-- 🔁 **Phase 3 sync engine**: append-only event log + Lamport anti-entropy primitives for partition/heal convergence
+- 🔁 **Phase 3 sync engine**: append-only event log with outbox/inbox transition events, deterministic replay projectors, and Lamport anti-entropy primitives for partition/heal convergence
 - 🌉 **Phase 4 gateway bridge (`gateway/`)**: dedicated island bridge service for local mesh ingest + duplicate-safe backhaul sync (no endpoint Starlink/browser mesh claims)
 - 🧪 **Phase 5 verification support**: deterministic simulator (`sim/`), parser-fuzz/property integration tests, and simulation-based energy profiling
 - 📤 Outbox queuing (priority / TTL / per-link targeting) with automatic flush on reconnect
@@ -329,7 +329,7 @@ npm run generate-sri
 ### Technology Stack
 - **Languages**: JavaScript (ES6 modules), TypeScript (declaration files in `types/`)
 - **Crypto**: TweetNaCl 1.0.3 + tweetnacl-util + argon2 (key backup)
-- **Storage**: IndexedDB schema v5 via `crypto/store.js` (includes outbox priority/TTL/link targeting fields and append-only `eventLog`)
+- **Storage**: IndexedDB schema v5 via `crypto/store.js` (includes outbox priority/TTL/link targeting fields and append-only `eventLog` with rebuildable outbox/inbox views)
 - **Build**: Vite (app/), no build needed for crypto/tools
 
 ---
@@ -376,7 +376,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - **MeshRouter Phase 1 + Phase 2**: 1-hop relay with dedup; N-hop proactive routing with route advertisements (auto-enabled at ≥2 links)
 - **GATT server layer**: `bluetooth/gatt-server.js` with pluggable `IGATTBackend` + `MockGATTBackend` for unit testing
 - **Operator Panel**: live mesh monitoring UI (`app/src/operator-panel.js`), mounted in app with 2 s polling
-- **Store schema v5**: outbox `priority`/`ttl`/`linkId` support plus append-only `eventLog` for sync/maintenance paths
+- **Store schema v5**: outbox `priority`/`ttl`/`linkId` support plus append-only `eventLog` with replayable outbox/inbox materialized views
 - **TypeScript declarations**: `types/runtime-mesh.d.ts`, `types/operator-panel.d.ts`, `types/gatt-server.d.ts`, `types/app-globals.d.ts`
 - **Contact verification workflow**: safety-number display, verify / mark-compromised per contact, encryption blocked for compromised recipients
 - **Node.js relay server** (`node-server/`): persistent single-client relay with durable store; 5/5 integration tests

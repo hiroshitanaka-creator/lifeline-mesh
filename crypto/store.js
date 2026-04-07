@@ -28,6 +28,14 @@ export const STORE_GROUPS = "groups";
 export const STORE_GROUP_MEMBERS = "groupMembers";
 export const STORE_SENDER_KEYS = "senderKeys";
 export const STORE_EVENT_LOG = "eventLog";
+export const EVENT_TYPES = {
+  OUTBOX_CREATED: "outbox-created",
+  OUTBOX_STATUS_UPDATED: "outbox-status-updated",
+  OUTBOX_REMOVED: "outbox-removed",
+  INBOX_RECEIVED: "inbox-received",
+  INBOX_READ: "inbox-read",
+  INBOX_DELETED: "inbox-deleted"
+};
 
 // Cleanup intervals
 export const SEEN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -61,6 +69,10 @@ export const OUTBOX_SCHEMA_VERSION = 4;
 
 /** Default TTL for outbox entries: 7 days in ms. */
 export const OUTBOX_DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function makeEventId(prefix, subjectId, now = Date.now()) {
+  return `${prefix}:${subjectId}:${now}`;
+}
 
 // ============================================================================
 // Database Initialization
@@ -370,13 +382,15 @@ export async function addToOutbox(message, recipientFp, options = {}) {
     lamport,
     priority: outboxEntry.priority,
     schemaVersion: 1,
-    type: "outbox-message",
+    type: EVENT_TYPES.OUTBOX_CREATED,
     payload: {
-      msgId: message.msgId,
-      recipientFp
+      entry: outboxEntry
     }
   });
-  await idbPut(STORE_OUTBOX, outboxEntry);
+  await projectOutboxEventToStore({
+    type: EVENT_TYPES.OUTBOX_CREATED,
+    payload: { entry: outboxEntry }
+  });
 }
 
 /**
@@ -458,14 +472,33 @@ export async function purgeExpiredOutbox(now = Date.now()) {
 export async function updateOutboxStatus(msgId, status, extra = {}) {
   const entry = await idbGet(STORE_OUTBOX, msgId);
   if (entry) {
+    const now = Date.now();
     const { countAttempt = false, ...fields } = extra;
-    entry.status = status;
+    const patch = {
+      status,
+      ...fields
+    };
     if (countAttempt) {
-      entry.lastAttempt = Date.now();
-      entry.attempts = (entry.attempts || 0) + 1;
+      patch.lastAttempt = now;
+      patch.attempts = (entry.attempts || 0) + 1;
     }
-    Object.assign(entry, fields);
-    await idbPut(STORE_OUTBOX, entry);
+    const event = {
+      eventId: makeEventId(EVENT_TYPES.OUTBOX_STATUS_UPDATED, msgId, now),
+      parents: [entry.sourceEventId || msgId],
+      authorFp: "local",
+      scope: "direct",
+      topic: "outbox",
+      ts: now,
+      lamport: now,
+      schemaVersion: 1,
+      type: EVENT_TYPES.OUTBOX_STATUS_UPDATED,
+      payload: {
+        msgId,
+        patch
+      }
+    };
+    await appendEventLog(event);
+    await projectOutboxEventToStore(event);
   }
 }
 
@@ -474,7 +507,24 @@ export async function updateOutboxStatus(msgId, status, extra = {}) {
  * @param {string} msgId - Message ID
  */
 export async function removeFromOutbox(msgId) {
-  await idbDel(STORE_OUTBOX, msgId);
+  const entry = await idbGet(STORE_OUTBOX, msgId);
+  if (!entry) return;
+
+  const now = Date.now();
+  const event = {
+    eventId: makeEventId(EVENT_TYPES.OUTBOX_REMOVED, msgId, now),
+    parents: [entry.sourceEventId || msgId],
+    authorFp: "local",
+    scope: "direct",
+    topic: "outbox",
+    ts: now,
+    lamport: now,
+    schemaVersion: 1,
+    type: EVENT_TYPES.OUTBOX_REMOVED,
+    payload: { msgId }
+  };
+  await appendEventLog(event);
+  await projectOutboxEventToStore(event);
 }
 
 // ============================================================================
@@ -488,6 +538,7 @@ export async function removeFromOutbox(msgId) {
  * @returns {Promise<void>}
  */
 export async function addToInbox(decryptedResult, originalMessage) {
+  const now = Date.now();
   const inboxEntry = {
     msgId: decryptedResult.msgId,
     senderFp: decryptedResult.senderFp,
@@ -498,7 +549,7 @@ export async function addToInbox(decryptedResult, originalMessage) {
     type: decryptedResult.type,
     payload: decryptedResult.payload,
     ts: decryptedResult.ts,
-    receivedAt: Date.now(),
+    receivedAt: now,
     read: false,
     originalMessage
   };
@@ -522,14 +573,16 @@ export async function addToInbox(decryptedResult, originalMessage) {
     lamport: Number.isFinite(decryptedResult.lamport) ? decryptedResult.lamport : Date.now(),
     priority: Number.isFinite(decryptedResult.priority) ? decryptedResult.priority : OUTBOX_PRIORITY.NORMAL,
     schemaVersion: 1,
-    type: "inbox-message",
+    type: EVENT_TYPES.INBOX_RECEIVED,
     payload: {
-      msgId: decryptedResult.msgId,
-      senderFp: inboxEntry.senderFpB64 || inboxEntry.senderFp
+      entry: inboxEntry
     }
   });
 
-  await idbPut(STORE_INBOX, inboxEntry);
+  await projectInboxEventToStore({
+    type: EVENT_TYPES.INBOX_RECEIVED,
+    payload: { entry: inboxEntry }
+  });
 }
 
 /**
@@ -583,8 +636,21 @@ export function getInboxByType(type) {
 export async function markAsRead(msgId) {
   const entry = await idbGet(STORE_INBOX, msgId);
   if (entry) {
-    entry.read = true;
-    await idbPut(STORE_INBOX, entry);
+    const now = Date.now();
+    const event = {
+      eventId: makeEventId(EVENT_TYPES.INBOX_READ, msgId, now),
+      parents: [entry.eventId || msgId],
+      authorFp: "local",
+      scope: "direct",
+      topic: "inbox",
+      ts: now,
+      lamport: now,
+      schemaVersion: 1,
+      type: EVENT_TYPES.INBOX_READ,
+      payload: { msgId }
+    };
+    await appendEventLog(event);
+    await projectInboxEventToStore(event);
   }
 }
 
@@ -593,7 +659,24 @@ export async function markAsRead(msgId) {
  * @param {string} msgId - Message ID
  */
 export async function deleteFromInbox(msgId) {
-  await idbDel(STORE_INBOX, msgId);
+  const entry = await idbGet(STORE_INBOX, msgId);
+  if (!entry) return;
+
+  const now = Date.now();
+  const event = {
+    eventId: makeEventId(EVENT_TYPES.INBOX_DELETED, msgId, now),
+    parents: [entry.eventId || msgId],
+    authorFp: "local",
+    scope: "direct",
+    topic: "inbox",
+    ts: now,
+    lamport: now,
+    schemaVersion: 1,
+    type: EVENT_TYPES.INBOX_DELETED,
+    payload: { msgId }
+  };
+  await appendEventLog(event);
+  await projectInboxEventToStore(event);
 }
 
 // ============================================================================
@@ -1032,6 +1115,153 @@ export async function getAllEventLogEntries() {
 export async function getEventLogFromLamport(lamportInclusive = 0) {
   const entries = await getAllEventLogEntries();
   return entries.filter((event) => (event.lamport || 0) >= lamportInclusive);
+}
+
+function applyOutboxEventToMap(outboxMap, event) {
+  if (!event || !event.type) return;
+  const payload = event.payload || {};
+  if (event.type === EVENT_TYPES.OUTBOX_CREATED) {
+    const entry = payload.entry;
+    if (entry?.msgId) {
+      outboxMap.set(entry.msgId, globalThis.structuredClone(entry));
+    }
+    return;
+  }
+  if (event.type === EVENT_TYPES.OUTBOX_STATUS_UPDATED) {
+    const msgId = payload.msgId;
+    if (!msgId || !outboxMap.has(msgId)) return;
+    const current = outboxMap.get(msgId);
+    outboxMap.set(msgId, {
+      ...current,
+      ...(payload.patch || {})
+    });
+    return;
+  }
+  if (event.type === EVENT_TYPES.OUTBOX_REMOVED) {
+    if (payload.msgId) {
+      outboxMap.delete(payload.msgId);
+    }
+  }
+}
+
+function applyInboxEventToMap(inboxMap, event) {
+  if (!event || !event.type) return;
+  const payload = event.payload || {};
+  if (event.type === EVENT_TYPES.INBOX_RECEIVED) {
+    const entry = payload.entry;
+    if (entry?.msgId) {
+      inboxMap.set(entry.msgId, globalThis.structuredClone(entry));
+    }
+    return;
+  }
+  if (event.type === EVENT_TYPES.INBOX_READ) {
+    const msgId = payload.msgId;
+    if (!msgId || !inboxMap.has(msgId)) return;
+    const current = inboxMap.get(msgId);
+    inboxMap.set(msgId, {
+      ...current,
+      read: true
+    });
+    return;
+  }
+  if (event.type === EVENT_TYPES.INBOX_DELETED) {
+    if (payload.msgId) {
+      inboxMap.delete(payload.msgId);
+    }
+  }
+}
+
+function buildOutboxViewFromEvents(events) {
+  const outboxMap = new Map();
+  for (const event of events) {
+    applyOutboxEventToMap(outboxMap, event);
+  }
+  return [...outboxMap.values()];
+}
+
+function buildInboxViewFromEvents(events) {
+  const inboxMap = new Map();
+  for (const event of events) {
+    applyInboxEventToMap(inboxMap, event);
+  }
+  return [...inboxMap.values()];
+}
+
+async function replaceStoreContents(storeName, entries, keyField) {
+  const existing = await idbGetAll(storeName);
+  for (const row of existing) {
+    if (row?.[keyField] !== undefined) {
+      await idbDel(storeName, row[keyField]);
+    }
+  }
+  for (const entry of entries) {
+    await idbPut(storeName, entry, entry[keyField]);
+  }
+}
+
+async function projectOutboxEventToStore(event) {
+  if (event.type === EVENT_TYPES.OUTBOX_CREATED && event.payload?.entry?.msgId) {
+    await idbPut(STORE_OUTBOX, event.payload.entry);
+    return;
+  }
+  if (event.type === EVENT_TYPES.OUTBOX_STATUS_UPDATED && event.payload?.msgId) {
+    const existing = await idbGet(STORE_OUTBOX, event.payload.msgId);
+    if (!existing) return;
+    await idbPut(STORE_OUTBOX, {
+      ...existing,
+      ...(event.payload.patch || {})
+    });
+    return;
+  }
+  if (event.type === EVENT_TYPES.OUTBOX_REMOVED && event.payload?.msgId) {
+    await idbDel(STORE_OUTBOX, event.payload.msgId);
+  }
+}
+
+async function projectInboxEventToStore(event) {
+  if (event.type === EVENT_TYPES.INBOX_RECEIVED && event.payload?.entry?.msgId) {
+    await idbPut(STORE_INBOX, event.payload.entry);
+    return;
+  }
+  if (event.type === EVENT_TYPES.INBOX_READ && event.payload?.msgId) {
+    const existing = await idbGet(STORE_INBOX, event.payload.msgId);
+    if (!existing) return;
+    await idbPut(STORE_INBOX, {
+      ...existing,
+      read: true
+    });
+    return;
+  }
+  if (event.type === EVENT_TYPES.INBOX_DELETED && event.payload?.msgId) {
+    await idbDel(STORE_INBOX, event.payload.msgId);
+  }
+}
+
+export async function rebuildOutboxViewFromEventLog() {
+  const events = await getAllEventLogEntries();
+  const outboxEntries = buildOutboxViewFromEvents(events);
+  await replaceStoreContents(STORE_OUTBOX, outboxEntries, "msgId");
+  return outboxEntries;
+}
+
+export async function rebuildInboxViewFromEventLog() {
+  const events = await getAllEventLogEntries();
+  const inboxEntries = buildInboxViewFromEvents(events);
+  await replaceStoreContents(STORE_INBOX, inboxEntries, "msgId");
+  return inboxEntries;
+}
+
+export async function rebuildMaterializedViewsFromEventLog() {
+  const events = await getAllEventLogEntries();
+  const [outboxEntries, inboxEntries] = [
+    buildOutboxViewFromEvents(events),
+    buildInboxViewFromEvents(events)
+  ];
+  await Promise.all([
+    replaceStoreContents(STORE_OUTBOX, outboxEntries, "msgId"),
+    replaceStoreContents(STORE_INBOX, inboxEntries, "msgId")
+  ]);
+  return { outbox: outboxEntries, inbox: inboxEntries };
 }
 
 /**
