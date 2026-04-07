@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hiroshitanaka-creator.github.io/lifeline-mesh/schemas/hardware-smoke-result.schema.json",
+  "title": "Phase 5 Hardware Smoke Result",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "recordType",
+    "runId",
+    "capturedAt",
+    "scenario",
+    "results",
+    "truthFlags"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "recordType": { "const": "phase5-hardware-smoke" },
+    "runId": { "type": "string", "minLength": 8 },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "operator": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "site": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "scenario": {
+      "type": "object",
+      "required": ["stepsVersion", "messageBurstCount", "forcedReplayAttempted"],
+      "properties": {
+        "stepsVersion": { "type": "string" },
+        "messageBurstCount": { "type": "integer", "minimum": 1 },
+        "forcedReplayAttempted": { "type": "boolean" },
+        "topology": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "results": {
+      "type": "object",
+      "required": ["messagesSent", "messagesDelivered", "deliveryRatio", "duplicateSurfacedCount", "replaySuppressionPassed", "status"],
+      "properties": {
+        "messagesSent": { "type": "integer", "minimum": 0 },
+        "messagesDelivered": { "type": "integer", "minimum": 0 },
+        "deliveryRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "duplicateSurfacedCount": { "type": "integer", "minimum": 0 },
+        "replaySuppressionPassed": { "type": "boolean" },
+        "status": { "enum": ["pass", "fail"] },
+        "notes": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "logs": { "type": "array", "items": { "type": "string" } },
+        "artifacts": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "truthFlags": {
+      "type": "object",
+      "required": ["manualRun", "ciBacked", "batteryTelemetry"],
+      "properties": {
+        "manualRun": { "const": true },
+        "ciBacked": { "const": false },
+        "batteryTelemetry": { "enum": ["not_measured", "simulated_only"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

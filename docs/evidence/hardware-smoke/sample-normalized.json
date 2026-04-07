@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0.0",
+  "recordType": "phase5-hardware-smoke",
+  "runId": "hw-f60399afcf18",
+  "capturedAt": "2026-04-07T15:10:00.000Z",
+  "operator": {
+    "id": "ops-01",
+    "site": "staging-lab"
+  },
+  "scenario": {
+    "stepsVersion": "hardware-smoke-v1",
+    "messageBurstCount": 20,
+    "forcedReplayAttempted": true,
+    "topology": "A->B->C"
+  },
+  "results": {
+    "messagesSent": 20,
+    "messagesDelivered": 19,
+    "deliveryRatio": 0.95,
+    "duplicateSurfacedCount": 0,
+    "replaySuppressionPassed": true,
+    "status": "pass",
+    "notes": "Single packet loss during RF interference simulation"
+  },
+  "evidence": {
+    "logs": [
+      "artifacts/manual-smoke/device-b.log",
+      "artifacts/manual-smoke/device-c.log"
+    ],
+    "artifacts": [
+      "artifacts/manual-smoke/relay-drill-sheet.pdf"
+    ]
+  },
+  "truthFlags": {
+    "manualRun": true,
+    "ciBacked": false,
+    "batteryTelemetry": "not_measured"
+  }
+}

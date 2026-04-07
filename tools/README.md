@@ -89,6 +89,25 @@ node tools/security-audit-check.js
 - `npm run check:compat`
 - Static unsafe sink scan (`innerHTML`/`outerHTML`/`insertAdjacentHTML`/`eval` patterns)
 
+
+### Hardware Smoke Evidence Normalization
+
+#### `hardware-smoke-record.js`
+Normalizes manual hardware smoke run evidence into a comparable JSON artifact.
+
+**Usage:**
+```bash
+node tools/hardware-smoke-record.js --input docs/evidence/hardware-smoke/sample-raw.json --output docs/evidence/hardware-smoke/sample-normalized.json
+```
+
+**Output:**
+- canonical record format for manual smoke runs
+- deterministic `runId` + normalized `deliveryRatio`
+- explicit truth flags: `manualRun=true`, `ciBacked=false`, `batteryTelemetry=not_measured`
+
+**Schema:**
+- `docs/schemas/hardware-smoke-result.schema.json`
+
 ## Installation
 
 All tools require the crypto module dependencies:

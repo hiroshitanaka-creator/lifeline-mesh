@@ -1,0 +1,29 @@
+{
+  "capturedAt": "2026-04-07T15:10:00.000Z",
+  "operator": {
+    "id": "ops-01",
+    "site": "staging-lab"
+  },
+  "scenario": {
+    "stepsVersion": "hardware-smoke-v1",
+    "messageBurstCount": 20,
+    "forcedReplayAttempted": true,
+    "topology": "A->B->C"
+  },
+  "results": {
+    "messagesSent": 20,
+    "messagesDelivered": 19,
+    "duplicateSurfacedCount": 0,
+    "replaySuppressionPassed": true,
+    "notes": "Single packet loss during RF interference simulation"
+  },
+  "evidence": {
+    "logs": [
+      "artifacts/manual-smoke/device-b.log",
+      "artifacts/manual-smoke/device-c.log"
+    ],
+    "artifacts": [
+      "artifacts/manual-smoke/relay-drill-sheet.pdf"
+    ]
+  }
+}

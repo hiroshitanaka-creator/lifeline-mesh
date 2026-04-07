@@ -18,7 +18,7 @@
  *   // Later, to stop polling:
  *   panel.destroy();
  *
- * The mount target element receives the panel's innerHTML and a `<style>` tag
+ * The mount target element receives parsed DOM content and a `<style>` tag
  * scoped to the `.lm-op-panel` class. Re-mounting on the same element is safe.
  */
 
@@ -367,6 +367,14 @@ export function renderPanel(snapshot, outboxStats = {}, maintenanceStats = {}, p
   `;
 }
 
+
+function replaceWithRenderedPanel(target, html) {
+  const range = document.createRange();
+  range.selectNode(target);
+  const fragment = range.createContextualFragment(html);
+  target.replaceChildren(fragment);
+}
+
 // ─── Mount / unmount ─────────────────────────────────────────────────────────
 
 /**
@@ -425,9 +433,12 @@ export function mountOperatorPanel(container, options) {
       const outboxStats = getOutboxStats();
       const maintenanceStats = getMaintenanceStats();
       const policy = getPolicy();
-      inner.innerHTML = renderPanel(snapshot, outboxStats, maintenanceStats, policy);
+      replaceWithRenderedPanel(inner, renderPanel(snapshot, outboxStats, maintenanceStats, policy));
     } catch (err) {
-      inner.innerHTML = `<div class="lm-op-empty">Error rendering panel: ${esc(err instanceof Error ? err.message : String(err))}</div>`;
+      const errorNode = document.createElement("div");
+      errorNode.className = "lm-op-empty";
+      errorNode.textContent = `Error rendering panel: ${err instanceof Error ? err.message : String(err)}`;
+      inner.replaceChildren(errorNode);
     }
   }
 

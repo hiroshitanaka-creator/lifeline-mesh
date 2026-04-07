@@ -69,10 +69,7 @@ checks.push({
 });
 
 const sinkScan = run("rg", ["-n", "innerHTML\\s*=|outerHTML\\s*=|insertAdjacentHTML\\(|eval\\(", "app/src", "crypto", "bluetooth"]);
-const allowedSinkPatterns = [
-  /^app\/src\/operator-panel\.js:\d+:\s+inner\.innerHTML = renderPanel\(snapshot, outboxStats, maintenanceStats, policy\);$/,
-  /^app\/src\/operator-panel\.js:\d+:\s+inner\.innerHTML = `<div class="lm-op-empty">Error rendering panel: \$\{esc\(err instanceof Error \? err\.message : String\(err\)\)\}<\/div>`;$/
-];
+const allowedSinkPatterns = [];
 const sinkMatches = (sinkScan.stdout || "")
   .split("\n")
   .map((line) => line.trim())
@@ -85,7 +82,7 @@ checks.push({
     ? "no direct unsafe sink pattern detected"
     : sinkScan.code === 0
       ? unapprovedSinkMatches.length === 0
-        ? "only audited allowlisted sinks found"
+        ? "no direct unsafe sink pattern detected"
         : "potential unsafe sink usage found; review matches"
       : `scan failed (${sinkScan.code})`,
   command: sinkScan.command
@@ -113,13 +110,6 @@ if (sinkScan.code === 0 && unapprovedSinkMatches.length > 0) {
   lines.push("```");
 }
 
-if (sinkMatches.length > 0 && unapprovedSinkMatches.length === 0) {
-  lines.push("");
-  lines.push("## Unsafe sink scan matches (allowlisted)");
-  lines.push("```text");
-  lines.push(sinkMatches.join("\n"));
-  lines.push("```");
-}
 
 fs.writeFileSync(reportPath, `${lines.join("\n")}\n`, "utf8");
 

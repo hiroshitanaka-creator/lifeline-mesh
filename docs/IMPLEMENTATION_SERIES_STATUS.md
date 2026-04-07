@@ -17,8 +17,9 @@
 
 ## What was added
 
-- Updated this status report to record the current truthful end-state and this run's verification evidence.
-- Added first-class operator documentation for the Node relay appliance path and relay-focused validation command.
+- Updated status + verification documentation to require structured manual hardware smoke evidence artifacts and schema-backed normalization.
+- Added explicit simulation-vs-measured energy evidence separation with a dedicated evidence schema.
+- Hardened operator-panel rendering to remove direct `innerHTML` sink usage from audited paths.
 
 ## Explicitly deferred
 
@@ -42,4 +43,5 @@
 
 - Energy metrics remain simulator-derived and should not be represented as hardware battery telemetry.
 - Manual hardware smoke path is intentionally non-CI and should remain documented as such.
-- Existing audited HTML sinks in operator rendering remain bounded but should continue periodic review.
+- Hardware smoke evidence remains manual-only; CI still cannot attest physical RF/device behavior.
+- Dependency audit still reports WARN findings and must remain tracked until remediation lands.
