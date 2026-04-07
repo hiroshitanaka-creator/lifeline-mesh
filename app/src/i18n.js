@@ -350,12 +350,41 @@ export function t(key, vars = {}) {
  * data-i18n-placeholder / data-i18n-title / data-i18n-aria attributes are set.
  */
 export function applyTranslations() {
+  /**
+   * Allow only very small inline markup subset for trusted in-repo translation
+   * strings. Fallback to plain text if anything else is present.
+   * @param {HTMLElement} el
+   * @param {string} html
+   */
+  function setTrustedInlineTranslationHtml(el, html) {
+    const parser = new window.DOMParser();
+    const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+    const root = doc.body.firstElementChild;
+    if (!root) {
+      el.textContent = html;
+      return;
+    }
+    const allowedTags = new Set(['STRONG', 'BR']);
+    const walker = document.createTreeWalker(root, 1);
+    for (let current = walker.nextNode(); current; current = walker.nextNode()) {
+      if (!allowedTags.has(current.tagName) || current.attributes.length > 0) {
+        el.textContent = html;
+        return;
+      }
+    }
+    const fragment = document.createDocumentFragment();
+    Array.from(root.childNodes).forEach((node) => {
+      fragment.appendChild(document.importNode(node, true));
+    });
+    el.replaceChildren(fragment);
+  }
+
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     if (key) {
       const html = el.getAttribute('data-i18n-html');
       if (html === 'true') {
-        el.innerHTML = t(key);
+        setTrustedInlineTranslationHtml(el, t(key));
       } else {
         el.textContent = t(key);
       }
