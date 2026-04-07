@@ -4,6 +4,7 @@ import {
   parseSharedContactPayload,
   parseSharedEncryptedPayload,
   parseSharedGroupPayload,
+  resolveShareTargetFileIntake,
   resolveShareTargetIntake,
   resolveStartupShareTargetIntake
 } from "../../app/src/share-target-intake.js";
@@ -50,15 +51,69 @@ function testParseSharedEncryptedPayload() {
 }
 
 function testParseSharedContactPayload() {
-  const identity = {
+  const signedIdentity = {
     kind: "dmesh-id",
     name: "Alice",
     fp: "fp",
     signPK: "sign",
+    boxPK: "box",
+    sig: "signed"
+  };
+  const legacyIdentity = {
+    kind: "dmesh-id",
+    name: "Alice",
+    signPK: "sign",
     boxPK: "box"
   };
-  assert.deepEqual(parseSharedContactPayload(JSON.stringify(identity)), identity);
+  const senderOnlyIdentity = {
+    name: "Alice sender-only",
+    signPK: "sign-only",
+    boxPK: "box-only"
+  };
+
+  assert.deepEqual(parseSharedContactPayload(JSON.stringify(signedIdentity)), signedIdentity);
+  assert.deepEqual(parseSharedContactPayload(JSON.stringify(legacyIdentity)), legacyIdentity);
+  assert.deepEqual(parseSharedContactPayload(JSON.stringify(senderOnlyIdentity)), senderOnlyIdentity);
   assert.equal(parseSharedContactPayload("{\"kind\":\"unknown\"}"), null);
+  assert.equal(parseSharedContactPayload("{\"name\":\"missing keys\"}"), null);
+}
+
+function testSharedTextSenderOnlyContactRoutesToContactImport() {
+  const senderOnlyIdentity = {
+    name: "Sender Only",
+    signPK: "sender-sign",
+    boxPK: "sender-box"
+  };
+
+  const resolved = resolveShareTargetIntake({
+    text: JSON.stringify(senderOnlyIdentity)
+  });
+
+  assert.equal(resolved.route, "contact-import");
+  assert.equal(resolved.source, "text");
+  assert.deepEqual(JSON.parse(resolved.contactPayloadText), senderOnlyIdentity);
+}
+
+function testSharedFileSenderOnlyContactRoutesToContactImport() {
+  const senderOnlyIdentity = {
+    name: "Sender Only File",
+    signPK: "sender-sign-file",
+    boxPK: "sender-box-file"
+  };
+
+  const resolved = resolveShareTargetFileIntake({
+    files: [
+      {
+        name: "sender-only-contact.json",
+        type: "application/json",
+        text: JSON.stringify(senderOnlyIdentity)
+      }
+    ]
+  });
+
+  assert.equal(resolved.route, "contact-import");
+  assert.equal(resolved.source, "file (sender-only-contact.json)");
+  assert.deepEqual(JSON.parse(resolved.contactPayloadText), senderOnlyIdentity);
 }
 
 function testParseSharedGroupPayload() {
@@ -122,6 +177,8 @@ testTitleWithEncryptedTextRoutesToDecrypt();
 testPlainTextRoutesToEncryptWithTitleAndNewline();
 testParseSharedEncryptedPayload();
 testParseSharedContactPayload();
+testSharedTextSenderOnlyContactRoutesToContactImport();
+testSharedFileSenderOnlyContactRoutesToContactImport();
 testParseSharedGroupPayload();
 testSharedFileEncryptedRoutesToDecrypt();
 testSharedFileGroupPayloadRoutesToGroupImport();

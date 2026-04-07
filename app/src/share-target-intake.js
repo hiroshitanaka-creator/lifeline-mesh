@@ -36,7 +36,12 @@ export function parseSharedContactPayload(text) {
     if (!parsed || typeof parsed !== "object") {
       return null;
     }
-    if (parsed.kind === "dmesh-id") {
+    const hasSenderOnlyKeys =
+      typeof parsed.signPK === "string" &&
+      parsed.signPK.trim().length > 0 &&
+      typeof parsed.boxPK === "string" &&
+      parsed.boxPK.trim().length > 0;
+    if (parsed.kind === "dmesh-id" || hasSenderOnlyKeys) {
       return parsed;
     }
     return null;

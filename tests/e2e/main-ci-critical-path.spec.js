@@ -149,6 +149,44 @@ test("main CI critical path: PWA share-target POST file intake routes encrypted 
   await expect(page.locator("#status")).toContainText("Join Group");
 });
 
+test("main CI critical path: PWA share-target routes raw sender-only contact JSON into contact import", async ({ page }) => {
+  const senderOnlyContactFromText = {
+    name: "CI Sender Only Text",
+    signPK: "ci-sender-only-text-sign-pk",
+    boxPK: "ci-sender-only-text-box-pk"
+  };
+
+  const senderOnlyQuery = encodeURIComponent(JSON.stringify(senderOnlyContactFromText));
+  await page.goto(`/?title=ignored&text=${senderOnlyQuery}`);
+  await expect(page.locator("#contact-input")).toContainText("ci-sender-only-text-sign-pk");
+  await expect(page.locator("#status")).toContainText("Received contact payload from share target text");
+
+  await page.goto("/");
+  await page.evaluate(async () => {
+    if (!("serviceWorker" in navigator)) {
+      throw new Error("Service Worker API unavailable in this browser context");
+    }
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+
+  const senderOnlyContactFromFile = {
+    name: "CI Sender Only File",
+    signPK: "ci-sender-only-file-sign-pk",
+    boxPK: "ci-sender-only-file-box-pk"
+  };
+
+  await page.evaluate(async ({ fileText }) => {
+    const formData = new globalThis.FormData();
+    formData.append("files", new globalThis.File([fileText], "ci-sender-only-contact.json", { type: "application/json" }));
+    await globalThis.fetch("/share-target", { method: "POST", body: formData });
+  }, { fileText: JSON.stringify(senderOnlyContactFromFile) });
+
+  await page.goto("/?share-target=1");
+  await expect(page.locator("#contact-input")).toContainText("ci-sender-only-file-sign-pk");
+  await expect(page.locator("#status")).toContainText("Received contact payload from share target file (ci-sender-only-contact.json)");
+});
+
 
 test("main CI critical path: offline fallback keeps app-shell share/deeplink intake reachable", async ({ page, context }) => {
   await page.goto("/");
