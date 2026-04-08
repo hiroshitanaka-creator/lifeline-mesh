@@ -1,9 +1,11 @@
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
 import { GatewayBridge } from "../../gateway/bridge.js";
 import { GatewayEventStore } from "../../gateway/event-store.js";
+import { createGatewayService } from "../../gateway/service.js";
 
 const tests = [];
 
@@ -44,6 +46,41 @@ function durableStore(filePath) {
 
 function tmpStorePath(suffix) {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "gateway-phase4-")), `${suffix}.jsonl`);
+}
+
+function requestJson({ port, method, route, body }) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? null : JSON.stringify(body);
+    const req = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        path: route,
+        method,
+        headers: payload
+          ? {
+            "content-type": "application/json",
+            "content-length": Buffer.byteLength(payload)
+          }
+          : undefined
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          resolve({
+            statusCode: res.statusCode,
+            body: raw ? JSON.parse(raw) : null
+          });
+        });
+      }
+    );
+
+    req.on("error", reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
 }
 
 test("gateway phase4: two islands sync over backhaul without duplicate storm", () => {
@@ -102,12 +139,74 @@ test("gateway phase4: policy minimizes metadata and uplinks high/critical only",
   bridge.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-policy-3", topic: "medical", scope: "zone-1", priority: "critical" }), {
     ingressTransport: "mesh"
   });
+  bridge.ingestLocalMesh({
+    ...makeEvent({ eventId: "evt-phase4-policy-4", topic: "shelter", scope: "zone-1", priority: "high" }),
+    content: "cleartext should not persist"
+  });
 
   const exported = bridge.exportBackhaulBatch({ cursor: 0 }).events;
-  assert(exported.length === 1, "only high/critical events matching policy should uplink");
+  assert(exported.length === 2, "only high/critical events matching policy should uplink");
   assert(exported[0].eventId === "evt-phase4-policy-1", "topic/scope policy applied");
   assert(exported[0].metadataMinimized === true, "gateway marks metadata-minimized policy on exported events");
   assert(!("content" in exported[0]), "gateway exports no additional plaintext fields");
+  const stored = bridge.snapshot().store.totalEvents;
+  assert(stored === 4, "all ingested records should be persisted");
+  const persistedEvent = bridge.store.listSince(0).find((event) => event.eventId === "evt-phase4-policy-4");
+  assert(!("content" in persistedEvent), "gateway store strips non-allowlisted plaintext fields");
+});
+
+test("gateway phase4: invalid event missing required fields is rejected", () => {
+  const bridge = new GatewayBridge({ islandId: "island-validate" });
+  let threw = false;
+  try {
+    bridge.ingestLocalMesh({ eventId: "evt-invalid", sig: "deadbeef", ts: Date.now() });
+  } catch (error) {
+    threw = true;
+    assert(error.message.includes("authorFp"), "rejects when authorFp is missing");
+  }
+  assert(threw, "ingest should reject malformed event");
+});
+
+test("gateway phase4: fake signature is rejected by verifyEvent hook", () => {
+  const bridge = new GatewayBridge({
+    islandId: "island-verify",
+    verifyEvent: (event) => event.sig === "valid-sig"
+  });
+
+  let threw = false;
+  try {
+    bridge.ingestLocalMesh(makeEvent({ eventId: "evt-fake-sig" }));
+  } catch (error) {
+    threw = true;
+    assert(error.message.includes("signature verification failed"), "fake sig should fail injected verifier");
+  }
+  assert(threw, "verifyEvent hook should reject fake signatures");
+});
+
+test("gateway phase4: oversized payloads return 413 on ingest routes", async () => {
+  const service = createGatewayService({ bridge: new GatewayBridge({ islandId: "island-service" }) });
+  const address = await service.listen(0);
+
+  try {
+    const oversized = "x".repeat(300 * 1024);
+    const local = await requestJson({
+      port: address.port,
+      method: "POST",
+      route: "/gateway/local-ingest",
+      body: { event: makeEvent({ eventId: "evt-oversize-local" }), padding: oversized }
+    });
+    assert(local.statusCode === 413, "local ingest should reject oversized payload");
+
+    const backhaul = await requestJson({
+      port: address.port,
+      method: "POST",
+      route: "/gateway/backhaul-ingest",
+      body: { event: makeEvent({ eventId: "evt-oversize-backhaul" }), padding: oversized }
+    });
+    assert(backhaul.statusCode === 413, "backhaul ingest should reject oversized payload");
+  } finally {
+    await service.close();
+  }
 });
 
 test("gateway phase4: event store survives restart and dedupe still works", () => {
