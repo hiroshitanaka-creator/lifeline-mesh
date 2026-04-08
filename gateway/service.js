@@ -2,15 +2,29 @@ import http from "node:http";
 
 import { GatewayBridge } from "./bridge.js";
 
+const DEFAULT_MAX_BODY_BYTES = 256 * 1024;
+
+class PayloadTooLargeError extends Error {
+  constructor(message = "payload-too-large") {
+    super(message);
+    this.name = "PayloadTooLargeError";
+  }
+}
+
 function jsonResponse(res, statusCode, body) {
   res.statusCode = statusCode;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.end(JSON.stringify(body));
 }
 
-async function readJsonBody(req) {
+async function readJsonBody(req, { maxBytes = DEFAULT_MAX_BODY_BYTES } = {}) {
   const chunks = [];
+  let totalBytes = 0;
   for await (const chunk of req) {
+    totalBytes += chunk.length;
+    if (totalBytes > maxBytes) {
+      throw new PayloadTooLargeError();
+    }
     chunks.push(chunk);
   }
   if (chunks.length === 0) return {};
@@ -51,6 +65,9 @@ export function createGatewayService({ bridge } = {}) {
 
       return jsonResponse(res, 404, { error: "not-found" });
     } catch (error) {
+      if (error instanceof PayloadTooLargeError) {
+        return jsonResponse(res, 413, { error: error.message });
+      }
       return jsonResponse(res, 400, {
         error: error instanceof Error ? error.message : String(error)
       });

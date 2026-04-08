@@ -15,8 +15,30 @@ function computeDeliveryClass(priority) {
   return PRIORITY_DELIVERY_CLASS[priority] ?? "local-default";
 }
 
+const EVENT_FIELD_ALLOWLIST = new Set([
+  "eventId",
+  "parents",
+  "authorFp",
+  "scope",
+  "topic",
+  "ts",
+  "ttl",
+  "priority",
+  "schemaVersion",
+  "sig",
+  "originIsland",
+  "gatewayPath",
+  "ingressTransport",
+  "deliveryClass",
+  "metadataMinimized"
+]);
+
+function pickAllowedEventFields(event) {
+  return Object.fromEntries(Object.entries(event).filter(([key]) => EVENT_FIELD_ALLOWLIST.has(key)));
+}
+
 export class GatewayBridge {
-  constructor({ islandId, store, logger = console, policy = {}, uplinkEnabled = true } = {}) {
+  constructor({ islandId, store, logger = console, policy = {}, uplinkEnabled = true, verifyEvent } = {}) {
     if (!islandId) {
       throw new Error("GatewayBridge requires islandId");
     }
@@ -29,18 +51,19 @@ export class GatewayBridge {
       uplinkMinPriority: policy.uplinkMinPriority ?? "high"
     };
     this.uplinkEnabled = uplinkEnabled;
+    this.verifyEvent = typeof verifyEvent === "function" ? verifyEvent : () => true;
   }
 
   ingestLocalMesh(event, { ingressTransport = "mesh" } = {}) {
     this.#assertEvent(event);
-    const normalized = {
+    const normalized = pickAllowedEventFields({
       ...event,
       originIsland: event.originIsland ?? this.islandId,
       gatewayPath: Array.isArray(event.gatewayPath) && event.gatewayPath.length > 0 ? [...event.gatewayPath] : [this.islandId],
       ingressTransport,
       deliveryClass: event.deliveryClass ?? computeDeliveryClass(event.priority),
       metadataMinimized: true
-    };
+    });
     return this.store.append(normalized);
   }
 
@@ -50,18 +73,18 @@ export class GatewayBridge {
     if (gatewayPath.includes(this.islandId)) {
       return { inserted: false, reason: "loop-suppressed" };
     }
-    const normalized = {
+    const normalized = pickAllowedEventFields({
       ...event,
       gatewayPath: [...gatewayPath, this.islandId],
       ingressTransport,
       metadataMinimized: true
-    };
+    });
     return this.store.append(normalized);
   }
 
   exportBackhaulBatch({ cursor = 0 } = {}) {
     const records = this.store.listSince(cursor);
-    const exported = records.filter((event) => this.#allowedForUplink(event));
+    const exported = records.filter((event) => this.#allowedForUplink(event)).map((event) => pickAllowedEventFields(event));
     return {
       cursor: cursor + records.length,
       events: exported
@@ -86,6 +109,15 @@ export class GatewayBridge {
     }
     if (!event?.sig) {
       throw new Error("gateway event requires sig (no plaintext trust path)");
+    }
+    if (!event?.authorFp) {
+      throw new Error("gateway event requires authorFp");
+    }
+    if (!Number.isFinite(event?.ts)) {
+      throw new Error("gateway event requires numeric ts");
+    }
+    if (!this.verifyEvent(event)) {
+      throw new Error("gateway event signature verification failed");
     }
   }
 
