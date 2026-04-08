@@ -172,6 +172,7 @@ const {
 
 async function seedStaleData(now) {
   await addToOutbox({ msgId: "expired" }, "fp", { ttl: now - 1 });
+  await addToOutbox({ msgId: "valid-queued" }, "fp", { ttl: now + (90 * 24 * 60 * 60 * 1000) });
   await checkAndMarkSeen("seen-stale", "peer-1");
   await storeChunk({ msgId: "chunk-stale", seq: 0, total: 2, data: "aa" });
 }
@@ -199,7 +200,8 @@ function assert(condition, message) {
       idbGetAll(STORE_SEEN),
       idbGetAll(STORE_CHUNKS)
     ]);
-    assert(outbox.length === 0, "outbox should be empty after maintenance");
+    assert(outbox.length === 1, "maintenance should retain non-expired queued outbox entries");
+    assert(outbox[0].msgId === "valid-queued", "maintenance should preserve valid queued message");
     assert(seen.length === 0, "seen should be empty after maintenance");
     assert(chunks.length === 0, "chunks should be empty after maintenance");
     console.log("✓ integration: runMaintenance purges stale outbox/seen/chunks deterministically");

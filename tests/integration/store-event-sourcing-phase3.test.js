@@ -196,6 +196,9 @@ function assert(condition, message) {
     await deleteFromInbox("i-1");
 
     const allEvents = await idbGetAll(STORE_EVENT_LOG);
+    const queuedCreateEvent = allEvents.find((event) => event.eventId === "evt-outbox-created-1");
+    assert(Boolean(queuedCreateEvent), "offline queue create must emit canonical outbox-created event");
+    assert(queuedCreateEvent.type === "outbox-created", "offline queue create event type should be outbox-created");
     assert(allEvents.some((event) => event.type === "outbox-status-updated"), "outbox status transition must be logged");
     assert(allEvents.some((event) => event.type === "outbox-removed"), "outbox removal must be logged");
     assert(allEvents.some((event) => event.type === "inbox-read"), "inbox read must be logged");
@@ -253,6 +256,19 @@ function assert(condition, message) {
     const finalOutbox = await idbGetAll(STORE_OUTBOX);
     const dupRows = finalOutbox.filter((entry) => entry.msgId === "dup-1");
     assert(dupRows.length === 1, "duplicate outbox event ingest should project exactly one row");
+
+    await addToOutbox({ msgId: "queued-persist-1", body: "ciphertext" }, "peer-d", {
+      sourceEventId: "evt-queued-persist-1"
+    });
+    const preRebuildQueued = await idbGetAll(STORE_OUTBOX);
+    assert(preRebuildQueued.some((entry) => entry.msgId === "queued-persist-1"), "queued message should exist before rebuild");
+
+    await rebuildMaterializedViewsFromEventLog();
+    const postRebuildQueued = await idbGetAll(STORE_OUTBOX);
+    assert(
+      postRebuildQueued.some((entry) => entry.msgId === "queued-persist-1" && entry.status === DELIVERY_STATUS.PENDING),
+      "queued message should survive rebuild with pending status"
+    );
 
     console.log("✓ integration: event-log replay is authoritative for outbox/inbox materialized views");
   } catch (error) {
