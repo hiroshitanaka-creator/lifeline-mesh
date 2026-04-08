@@ -411,6 +411,80 @@ test("node relay: successful replay drains pending queue only after ACK", async 
   assert(pending.length === 0, "entry drains after ACK");
 });
 
+test("node relay store: concurrent add + markDelivered + cleanup keeps state readable", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-store-concurrency-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+  const store = new FileRelayStore({
+    filePath: storePath,
+    deliveredRetentionMs: 60 * 60 * 1000,
+    pendingRetentionMs: 60 * 60 * 1000
+  });
+
+  await store.init();
+  const seed = await Promise.all(
+    Array.from({ length: 8 }, (_, index) => (
+      store.addInboundMessage({ kind: "dmesh-msg", msgId: `relay-concurrent-seed-${index}`, payload: String(index) }, "seed")
+    ))
+  );
+
+  await Promise.all([
+    store.markDelivered(seed[0].id, "client-concurrent"),
+    store.addInboundMessage({ kind: "dmesh-msg", msgId: "relay-concurrent-new", payload: "new" }, "client-concurrent"),
+    store.cleanup(),
+    store.markSendFailed(seed[1].id, new Error("simulated failure"))
+  ]);
+
+  const persisted = JSON.parse(await fs.readFile(storePath, "utf8"));
+  assert(Array.isArray(persisted.entries), "persisted json remains readable after concurrent mutations");
+  const delivered = persisted.entries.find((entry) => entry.id === seed[0].id);
+  assert(delivered?.status === "delivered", "markDelivered survives concurrent cleanup and writes");
+  const newlyAdded = persisted.entries.find((entry) => entry.msgId === "relay-concurrent-new");
+  assert(Boolean(newlyAdded), "concurrent addInboundMessage entry is retained");
+});
+
+test("node relay store: repeated cleanup during replay does not corrupt persisted state", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-store-cleanup-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+  const { backend, store, relayNode } = await setupHarness(storePath, {
+    deliveredRetentionMs: 60 * 60 * 1000,
+    pendingRetentionMs: 60 * 60 * 1000
+  });
+
+  backend.simulateClientConnect("client-replay-cleanup");
+  await store.addInboundMessage({ kind: "dmesh-msg", msgId: "relay-replay-cleanup-1", payload: "keep safe" }, "client-replay-cleanup");
+
+  const flushPromise = relayNode.flushPending("client-replay-cleanup");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const replayDirect = backend.notifications.find((notification) => notification.data[0] === MSG_TYPE.DIRECT);
+  assert(Boolean(replayDirect), "replay notification emitted for cleanup stress test");
+
+  await Promise.all(Array.from({ length: 10 }, () => store.cleanup()));
+
+  backend.simulateWrite(
+    "client-replay-cleanup",
+    CHARACTERISTICS.MESSAGE_TX,
+    makeAckPacket(decodeTransferIdFromDirectPacket(replayDirect.data))
+  );
+  await flushPromise;
+
+  const persisted = JSON.parse(await fs.readFile(storePath, "utf8"));
+  assert(Array.isArray(persisted.entries), "persisted state is valid json after repeated cleanup during replay");
+  const pending = await store.listPending();
+  assert(pending.length === 0, "replay still drains pending after repeated cleanup calls");
+});
+
+test("node relay store: persist temp path generation is unique per write", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "lifeline-relay-store-temp-"));
+  const storePath = path.join(tmpDir, "relay-store.json");
+  const store = new FileRelayStore({ filePath: storePath });
+
+  const paths = new Set(Array.from({ length: 64 }, () => store._nextTempPath()));
+  assert(paths.size === 64, "temp path generation should not collide");
+  for (const tempPath of paths) {
+    assert(tempPath.startsWith(`${storePath}.`) && tempPath.endsWith(".tmp"), "temp path keeps expected naming envelope");
+  }
+});
+
 (async () => {
   let passed = 0;
   let failed = 0;

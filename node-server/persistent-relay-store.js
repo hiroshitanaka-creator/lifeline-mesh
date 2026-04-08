@@ -33,6 +33,9 @@ export class FileRelayStore {
       ? Number(options.pendingRetentionMs)
       : 30 * 24 * 60 * 60 * 1000;
     this._loaded = false;
+    this._initPromise = null;
+    this._mutationQueue = Promise.resolve();
+    this._persistCounter = 0;
     this._state = { version: 1, entries: [] };
     this._cleanupStats = {
       lastRunAt: null,
@@ -43,71 +46,86 @@ export class FileRelayStore {
 
   async init() {
     if (this._loaded) return;
-
-    const dir = path.dirname(this.filePath);
-    await fs.mkdir(dir, { recursive: true });
-
-    try {
-      const raw = await fs.readFile(this.filePath, "utf8");
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.entries)) {
-        this._state = {
-          version: Number(parsed.version) || 1,
-          entries: parsed.entries.map((entry) => this._normalizeEntry(entry))
-        };
-      }
-    } catch (error) {
-      if (error && error.code !== "ENOENT") {
-        throw error;
-      }
-      await this._persist();
+    if (this._initPromise) {
+      await this._initPromise;
+      return;
     }
 
-    this._loaded = true;
-    await this._cleanupLoadedState();
+    this._initPromise = (async () => {
+      const dir = path.dirname(this.filePath);
+      await fs.mkdir(dir, { recursive: true });
+
+      try {
+        const raw = await fs.readFile(this.filePath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.entries)) {
+          this._state = {
+            version: Number(parsed.version) || 1,
+            entries: parsed.entries.map((entry) => this._normalizeEntry(entry))
+          };
+        }
+      } catch (error) {
+        if (error && error.code !== "ENOENT") {
+          throw error;
+        }
+        await this._persist();
+      }
+
+      this._loaded = true;
+      await this._enqueueMutation(() => this._cleanupLoadedState());
+    })();
+
+    try {
+      await this._initPromise;
+    } finally {
+      this._initPromise = null;
+    }
   }
 
   async addInboundMessage(message, ingressClientId) {
     await this.init();
-    await this.cleanup();
+    return this._enqueueMutation(async () => {
+      await this._cleanupLoadedState();
 
-    const msgId = message?.msgId || `relay:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-    const existing = this._state.entries.find((entry) => entry.msgId === msgId && entry.status === "pending");
-    if (existing) {
-      return existing;
-    }
-    const now = Date.now();
-    const recentDelivered = this._state.entries.find((entry) => (
-      entry.msgId === msgId
-      && entry.status === "delivered"
-      && typeof entry.deliveredAt === "number"
-      && (now - entry.deliveredAt) <= this.dedupeWindowMs
-    ));
-    if (recentDelivered) {
-      return recentDelivered;
-    }
+      const msgId = message?.msgId || `relay:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+      const existing = this._state.entries.find((entry) => entry.msgId === msgId && entry.status === "pending");
+      if (existing) {
+        return existing;
+      }
+      const now = Date.now();
+      const recentDelivered = this._state.entries.find((entry) => (
+        entry.msgId === msgId
+        && entry.status === "delivered"
+        && typeof entry.deliveredAt === "number"
+        && (now - entry.deliveredAt) <= this.dedupeWindowMs
+      ));
+      if (recentDelivered) {
+        return recentDelivered;
+      }
 
-    const entry = {
-      id: `${msgId}:${now}`,
-      msgId,
-      message,
-      ingressClientId: ingressClientId || "unknown",
-      status: "pending",
-      attempts: 0,
-      createdAt: now,
-      updatedAt: now,
-      deliveredAt: null,
-      deliveredTo: null,
-      lastError: null
-    };
+      const entry = {
+        id: `${msgId}:${now}`,
+        msgId,
+        message,
+        ingressClientId: ingressClientId || "unknown",
+        status: "pending",
+        attempts: 0,
+        createdAt: now,
+        updatedAt: now,
+        deliveredAt: null,
+        deliveredTo: null,
+        lastError: null
+      };
 
-    this._state.entries.push(entry);
-    await this._persist();
-    return entry;
+      this._state.entries.push(entry);
+      await this._persist();
+      return entry;
+    });
   }
 
   async listPending() {
     await this.init();
+    await this._awaitIdleMutations();
     return this._state.entries
       .filter((entry) => entry.status === "pending")
       .sort((a, b) => a.createdAt - b.createdAt);
@@ -115,31 +133,36 @@ export class FileRelayStore {
 
   async markDelivered(id, clientId) {
     await this.init();
-    const entry = this._state.entries.find((row) => row.id === id);
-    if (!entry) return;
+    await this._enqueueMutation(async () => {
+      const entry = this._state.entries.find((row) => row.id === id);
+      if (!entry) return;
 
-    const now = Date.now();
-    entry.status = "delivered";
-    entry.deliveredTo = clientId;
-    entry.deliveredAt = now;
-    entry.updatedAt = now;
-    entry.lastError = null;
-    await this._persist();
+      const now = Date.now();
+      entry.status = "delivered";
+      entry.deliveredTo = clientId;
+      entry.deliveredAt = now;
+      entry.updatedAt = now;
+      entry.lastError = null;
+      await this._persist();
+    });
   }
 
   async markSendFailed(id, error) {
     await this.init();
-    const entry = this._state.entries.find((row) => row.id === id);
-    if (!entry) return;
+    await this._enqueueMutation(async () => {
+      const entry = this._state.entries.find((row) => row.id === id);
+      if (!entry) return;
 
-    entry.attempts = (entry.attempts || 0) + 1;
-    entry.lastError = error instanceof Error ? error.message : String(error);
-    entry.updatedAt = Date.now();
-    await this._persist();
+      entry.attempts = (entry.attempts || 0) + 1;
+      entry.lastError = error instanceof Error ? error.message : String(error);
+      entry.updatedAt = Date.now();
+      await this._persist();
+    });
   }
 
   async getSnapshot(now = Date.now()) {
     await this.init();
+    await this._awaitIdleMutations();
 
     const pendingEntries = this._state.entries.filter((entry) => entry.status === "pending");
     const deliveredEntries = this._state.entries.filter((entry) => entry.status === "delivered");
@@ -178,7 +201,7 @@ export class FileRelayStore {
 
   async cleanup(now = Date.now()) {
     await this.init();
-    return this._cleanupLoadedState(now);
+    return this._enqueueMutation(() => this._cleanupLoadedState(now));
   }
 
   async _cleanupLoadedState(now = Date.now()) {
@@ -233,9 +256,25 @@ export class FileRelayStore {
   }
 
   async _persist() {
-    const tmpPath = `${this.filePath}.tmp`;
+    const tmpPath = this._nextTempPath();
     await fs.writeFile(tmpPath, JSON.stringify(this._state, null, 2), "utf8");
     await fs.rename(tmpPath, this.filePath);
+  }
+
+  _nextTempPath() {
+    const token = `${process.pid}.${Date.now()}.${this._persistCounter}.${Math.random().toString(16).slice(2)}`;
+    this._persistCounter += 1;
+    return `${this.filePath}.${token}.tmp`;
+  }
+
+  _enqueueMutation(operation) {
+    const run = this._mutationQueue.then(() => operation());
+    this._mutationQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  async _awaitIdleMutations() {
+    await this._mutationQueue;
   }
 }
 
