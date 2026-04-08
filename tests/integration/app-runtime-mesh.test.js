@@ -189,6 +189,29 @@ test("runtime mesh multi-link: unknown route falls back to egress flood", async 
   runtime.destroy();
 });
 
+test("runtime mesh multi-link: injected route-adv verifier blocks rebroadcast and route install", async () => {
+  const runtime = createMeshRuntime("relay-node", {
+    verifyRouteAdv: () => false
+  });
+  const sentByB = [];
+  const mgrA = { sendMessage: () => Promise.resolve() };
+  const mgrB = { sendMessage: (m) => { sentByB.push(m); return Promise.resolve(); } };
+
+  runtime.addLink("peer-a", mgrA);
+  runtime.addLink("peer-b", mgrB);
+
+  const result = await runtime.onForward({
+    message: { kind: "dmesh-route-adv", src: "peer-z", seq: 1, ts: Date.now(), routes: [{ dst: "peer-y", hops: 0 }] },
+    ingressPeerId: "peer-a"
+  });
+
+  assert(result.action === "dropped-route-adv", "invalid advertisement is dropped");
+  assert(sentByB.length === 0, "no rebroadcast when verifier rejects");
+  assert(runtime.router.getNextHop("peer-y") === null, "rejected adv not installed");
+
+  runtime.destroy();
+});
+
 test("runtime mesh multi-link: removeLink reduces linkCount", () => {
   const runtime = createMeshRuntime("relay-node");
   const mgr = { sendMessage: () => Promise.resolve() };
