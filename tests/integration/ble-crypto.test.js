@@ -23,9 +23,16 @@ function createInMemoryStore() {
   const inbox = [];
   const seen = new Set();
   const chunks = new Map();
+  const outboxAdds = [];
   return {
     inbox,
+    outboxAdds,
     async addToOutbox(message, recipientFp, meta = {}) {
+      outboxAdds.push({
+        msgId: message.msgId,
+        recipientFp,
+        status: meta.status || "pending"
+      });
       outbox.set(message.msgId, {
         msgId: message.msgId,
         message,
@@ -1192,6 +1199,10 @@ test("integration: offline send queues in outbox, then connected flush delivers 
   const queuedEntry = senderStore.snapshot().find((entry) => entry.msgId === queuedMessage.msgId);
   if (!queuedEntry) {
     throw new Error("Expected message to be queued in outbox while offline");
+  }
+  const queuedViaStoreApi = senderStore.outboxAdds.find((entry) => entry.msgId === queuedMessage.msgId);
+  if (!queuedViaStoreApi) {
+    throw new Error("Expected offline send to queue via store.addToOutbox canonical API");
   }
   if (queuedEntry.status !== "pending") {
     throw new Error(`Expected queued status=pending, got ${queuedEntry.status}`);

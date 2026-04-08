@@ -17,7 +17,6 @@ import { Html5Qrcode } from 'html5-qrcode';
 import {
   STORE_KEYS,
   STORE_CONTACTS,
-  STORE_OUTBOX,
   STORE_INBOX,
   OUTBOX_RETRY_INTERVAL_MS,
   OUTBOX_DEFAULT_TTL_MS,
@@ -54,6 +53,7 @@ import { encryptInWorker, decryptInWorker } from './worker-client.js';
 import { appendBleMessage, formatErrorMessage, formatLocalTime, setStatus } from './ui-utils.js';
 import { resolveStartupShareTargetIntake } from './share-target-intake.js';
 import { createTransportManager } from '../../crypto/transport.js';
+import { addToOutbox } from '../../crypto/store.js';
 import { createMeshRuntime } from './runtime-mesh.js';
 import { mountOperatorPanel } from './operator-panel.js';
 import { t as tr, setLang, getLang } from './i18n.js';
@@ -943,24 +943,8 @@ window.bleSendEncrypted = async function() {
     if (bleManager.isConnected) {
       setStatus(true, 'Message sent via Bluetooth!');
     } else {
-      // Persist to IndexedDB so the entry survives a page reload.
-      // The real BLEManager also writes to its internal store; this idbPut
-      // (same msgId keyPath) is a harmless overwrite in that case, and ensures
-      // the outbox is populated even when a mock BLEManager is injected.
-      const now = Date.now();
-      await idbPut(STORE_OUTBOX, {
-        msgId: message.msgId ?? `offline-${now}`,
-        recipientFp: null,
-        message,
-        createdAt: now,
-        status: 'pending',
-        attempts: 0,
-        lastAttempt: null,
-        schemaVersion: 4,
-        priority: 1,
-        ttl: now + 7 * 24 * 60 * 60 * 1000,
-        linkId: null
-      });
+      // Route through canonical append-only outbox API to keep event-log replay authoritative.
+      await addToOutbox(message, null, { priority: 1 });
       setStatus(true, 'Bluetooth is offline. Message queued in Outbox for later delivery.');
     }
     await refreshOutboxSnapshot();
