@@ -274,6 +274,57 @@ test("processRouteAdv: rejects malformed advertisement", () => {
   assert(router.processRouteAdv({ kind: ROUTE_ADV_KIND }, "B") === false, "missing src");
 });
 
+test("processRouteAdv: rejects advertisement when verifier returns false and keeps table unchanged", () => {
+  const router = makeRouter("A", {
+    verifyRouteAdv: () => false
+  });
+  const before = router.getRouteTable();
+  const adv = makeAdv("B", 1, [{ dst: "C", hops: 0 }]);
+
+  const result = router.processRouteAdv(adv, "B");
+
+  assert(result === false, "rejected when verifier denies");
+  assertEqual(router.getRouteTable().length, before.length, "route table remains unchanged");
+  assertNull(router.getNextHop("B"), "originator route not installed");
+  assertNull(router.getNextHop("C"), "advertised route not installed");
+});
+
+test("processRouteAdv: accepts advertisement when verifier returns true", () => {
+  const router = makeRouter("A", {
+    verifyRouteAdv: (adv, ingressPeerId) => adv.src === "B" && ingressPeerId === "B"
+  });
+  const adv = makeAdv("B", 1, [{ dst: "C", hops: 0 }]);
+
+  const result = router.processRouteAdv(adv, "B");
+
+  assert(result === true, "accepted when verifier allows");
+  assertEqual(router.getNextHop("C"), "B", "route still propagates on accepted adv");
+});
+
+test("processRouteAdv: duplicate/stale handling remains after verifier introduction", () => {
+  const router = makeRouter("A", {
+    verifyRouteAdv: () => true
+  });
+
+  assert(router.processRouteAdv(makeAdv("B", 10, [{ dst: "C", hops: 0 }]), "B") === true, "new seq accepted");
+  assert(router.processRouteAdv(makeAdv("B", 10, [{ dst: "D", hops: 0 }]), "B") === false, "duplicate seq rejected");
+  assert(router.processRouteAdv(makeAdv("B", 9, [{ dst: "E", hops: 0 }]), "B") === false, "stale seq rejected");
+});
+
+test("processRouteAdv: optional per-source rate guard drops rapid advertisements", () => {
+  const router = makeRouter("A", {
+    routeAdvMinIntervalMs: 50,
+    verifyRouteAdv: () => true
+  });
+
+  const first = router.processRouteAdv(makeAdv("B", 1, [{ dst: "C", hops: 0 }]), "B");
+  const second = router.processRouteAdv(makeAdv("B", 2, [{ dst: "D", hops: 0 }]), "B");
+
+  assert(first === true, "first advertisement accepted");
+  assert(second === false, "second rapid advertisement rejected");
+  assertNull(router.getNextHop("D"), "rate-limited advertisement does not mutate table");
+});
+
 test("getNextHop: direct neighbor takes priority over route entry", () => {
   const router = makeRouter("A");
   router.addNeighbor("B");

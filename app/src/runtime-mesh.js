@@ -47,13 +47,18 @@ const ROUTE_ADV_INTERVAL_MS = 30_000;
  * Create a new mesh runtime instance.
  *
  * @param {string} [localPeerId] - Local node fingerprint / peer ID.
+ * @param {object} [options]
+ * @param {(adv: Object, ingressPeerId: string) => boolean} [options.verifyRouteAdv]
+ * @param {number} [options.routeAdvMinIntervalMs]
  * @returns {object} Runtime API object.
  */
-export function createMeshRuntime(localPeerId = "unknown") {
+export function createMeshRuntime(localPeerId = "unknown", options = {}) {
   const router = new MeshRouter({
     localPeerId,
     defaultMaxHops: 1,
-    enableRouting: false  // Enabled automatically when ≥2 links are active
+    enableRouting: false,  // Enabled automatically when ≥2 links are active
+    verifyRouteAdv: options.verifyRouteAdv,
+    routeAdvMinIntervalMs: options.routeAdvMinIntervalMs
   });
 
   const state = {

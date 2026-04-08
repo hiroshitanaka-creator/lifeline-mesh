@@ -67,7 +67,10 @@ export const ROUTING_DEFAULTS = {
   MAX_ROUTE_TABLE_ENTRIES: 1024,
 
   /** Minimum interval between opportunistic cleanup runs during normal operation. */
-  CLEANUP_INTERVAL_MS: 5 * 1000
+  CLEANUP_INTERVAL_MS: 5 * 1000,
+
+  /** Minimum ms between accepted advertisements from the same source (0 disables). */
+  ROUTE_ADV_MIN_INTERVAL_MS: 0
 };
 
 // ---------------------------------------------------------------------------
@@ -151,6 +154,10 @@ export class MeshRouter {
    * @param {number}  [options.maxRouteHops]      - Max hops in route advertisements (Phase 2).
    * @param {number}  [options.seqWindow]         - Sequence-number window for loop prevention (Phase 2).
    * @param {number}  [options.advSeenTtlMs]      - How long to remember seen adv transferIds (Phase 2).
+   * @param {(adv: Object, ingressPeerId: string) => boolean} [options.verifyRouteAdv]
+   *        Optional authenticity / policy hook. Return true to accept, false to reject.
+   * @param {number} [options.routeAdvMinIntervalMs]
+   *        Optional per-source accepted advertisement rate guard (0 disables).
    */
   constructor(options = {}) {
     this.localPeerId = options.localPeerId || "unknown";
@@ -167,6 +174,10 @@ export class MeshRouter {
     this.maxAdvertisedRoutes = options.maxAdvertisedRoutes ?? ROUTING_DEFAULTS.MAX_ADVERTISED_ROUTES;
     this.maxRouteTableEntries = options.maxRouteTableEntries ?? ROUTING_DEFAULTS.MAX_ROUTE_TABLE_ENTRIES;
     this.cleanupIntervalMs = options.cleanupIntervalMs ?? ROUTING_DEFAULTS.CLEANUP_INTERVAL_MS;
+    this.routeAdvMinIntervalMs = options.routeAdvMinIntervalMs ?? ROUTING_DEFAULTS.ROUTE_ADV_MIN_INTERVAL_MS;
+    this.verifyRouteAdv = typeof options.verifyRouteAdv === "function"
+      ? options.verifyRouteAdv
+      : () => true;
 
     // Phase 1: seen-message map for data deduplication.
     /** @type {Map<string, number>} transferId → timestamp */
@@ -199,6 +210,8 @@ export class MeshRouter {
      * @type {Map<string, number>}
      */
     this._advSeen = new Map();
+    /** Last accepted advertisement timestamp per source for optional rate-guarding. */
+    this._srcAdvAcceptedAt = new Map();
 
     /**
      * Monotonically increasing sequence number for outbound advertisements.
@@ -268,6 +281,7 @@ export class MeshRouter {
     if (this.enableRouting) {
       this._cleanupRoutes(now);
       this._cleanupAdvSeen(now);
+      this._cleanupSourceRateGuard(now);
     }
   }
 
@@ -288,6 +302,7 @@ export class MeshRouter {
     this._neighbors.clear();
     this._srcSeq.clear();
     this._advSeen.clear();
+    this._srcAdvAcceptedAt.clear();
     this._localSeq = 0;
   }
 
@@ -341,6 +356,24 @@ export class MeshRouter {
 
     if (!adv || adv.kind !== ROUTE_ADV_KIND) return false;
     if (!adv.src || typeof adv.seq !== "number") return false;
+    const now = Date.now();
+
+    let verified = false;
+    try {
+      verified = this.verifyRouteAdv(adv, ingressPeerId) === true;
+    } catch {
+      verified = false;
+    }
+    if (!verified) {
+      return false;
+    }
+
+    if (this.routeAdvMinIntervalMs > 0) {
+      const lastAcceptedAt = this._srcAdvAcceptedAt.get(adv.src);
+      if (lastAcceptedAt !== undefined && (now - lastAcceptedAt) < this.routeAdvMinIntervalMs) {
+        return false;
+      }
+    }
 
     const advKey = `${adv.src}:${adv.seq}`;
 
@@ -366,7 +399,7 @@ export class MeshRouter {
     // Record advertisement as seen (for dedup on re-broadcast paths).
     this._advSeen.set(advKey, Date.now());
 
-    const now = Date.now();
+    this._srcAdvAcceptedAt.set(adv.src, now);
 
     // Install a route to the advertisement originator via the ingress peer.
     // The originator is 1 hop via ingressPeerId (unless ingressPeerId IS the originator).
@@ -550,6 +583,15 @@ export class MeshRouter {
     for (const [key, ts] of this._advSeen.entries()) {
       if (now - ts > this.advSeenTtlMs) {
         this._advSeen.delete(key);
+      }
+    }
+  }
+
+  _cleanupSourceRateGuard(now = Date.now()) {
+    const ttl = Math.max(this.advSeenTtlMs, this.routeTtlMs);
+    for (const [src, ts] of this._srcAdvAcceptedAt.entries()) {
+      if (now - ts > ttl) {
+        this._srcAdvAcceptedAt.delete(src);
       }
     }
   }
