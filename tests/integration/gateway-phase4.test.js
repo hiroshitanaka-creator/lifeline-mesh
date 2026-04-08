@@ -209,7 +209,7 @@ test("gateway phase4: oversized payloads return 413 on ingest routes", async () 
   }
 });
 
-test("gateway phase4: event store survives restart and dedupe still works", () => {
+test("gateway phase4: event store survives restart and dedupe still works", async () => {
   const filePath = tmpStorePath("durable-events");
   const islandId = "island-restart-a";
   const event = makeEvent({ eventId: "evt-phase4-restart-1", priority: "critical" });
@@ -217,6 +217,7 @@ test("gateway phase4: event store survives restart and dedupe still works", () =
   const firstBridge = new GatewayBridge({ islandId, store: durableStore(filePath) });
   const firstInsert = firstBridge.ingestLocalMesh(event);
   assert(firstInsert.inserted, "first ingest should insert");
+  await firstBridge.store.flush();
 
   const secondBridge = new GatewayBridge({ islandId, store: durableStore(filePath) });
   assert(secondBridge.snapshot().store.totalEvents === 1, "stored events should recover after restart");
@@ -225,13 +226,14 @@ test("gateway phase4: event store survives restart and dedupe still works", () =
   assert(!duplicate.inserted, "duplicate suppression should still work after restart");
 });
 
-test("gateway phase4: export cursor is restart-safe", () => {
+test("gateway phase4: export cursor is restart-safe", async () => {
   const filePath = tmpStorePath("export-cursor");
   const islandId = "island-restart-cursor";
 
   const firstBridge = new GatewayBridge({ islandId, store: durableStore(filePath) });
   firstBridge.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-cursor-1", priority: "critical" }));
   firstBridge.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-cursor-2", priority: "high" }));
+  await firstBridge.store.flush();
 
   const firstBatch = firstBridge.exportBackhaulBatch({ cursor: 0 });
   assert(firstBatch.events.length === 2, "initial export should include first two events");
@@ -239,13 +241,49 @@ test("gateway phase4: export cursor is restart-safe", () => {
 
   const secondBridge = new GatewayBridge({ islandId, store: durableStore(filePath) });
   secondBridge.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-cursor-3", priority: "critical" }));
+  await secondBridge.store.flush();
 
   const resumed = secondBridge.exportBackhaulBatch({ cursor: firstBatch.cursor });
   assert(resumed.events.length === 1, "restart should preserve cursor progression");
   assert(resumed.events[0].eventId === "evt-phase4-cursor-3", "resumed export should return only unseen event");
 });
 
-test("gateway phase4: loop suppression still works after restart/import", () => {
+test("gateway phase4: append path does not rely on appendFileSync", async () => {
+  const filePath = tmpStorePath("async-append");
+  const originalAppendFileSync = fs.appendFileSync;
+
+  fs.appendFileSync = () => {
+    throw new Error("appendFileSync should not be used in GatewayEventStore.append");
+  };
+
+  try {
+    const bridge = new GatewayBridge({ islandId: "island-async-append", store: durableStore(filePath) });
+    const result = bridge.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-async-path-1", priority: "critical" }));
+    assert(result.inserted, "ingest should still insert while appendFileSync is unavailable");
+    await bridge.store.flush();
+
+    const recovered = new GatewayBridge({ islandId: "island-async-append", store: durableStore(filePath) });
+    assert(recovered.snapshot().store.totalEvents === 1, "async append should durably persist records");
+  } finally {
+    fs.appendFileSync = originalAppendFileSync;
+  }
+});
+
+test("gateway phase4: persistent store avoids full duplicated event array at scale", async () => {
+  const filePath = tmpStorePath("memory-footprint");
+  const bridge = new GatewayBridge({ islandId: "island-memory", store: durableStore(filePath) });
+
+  for (let index = 0; index < 300; index += 1) {
+    bridge.ingestLocalMesh(makeEvent({ eventId: `evt-phase4-memory-${index}`, priority: "high" }));
+  }
+  await bridge.store.flush();
+
+  assert(bridge.snapshot().store.totalEvents === 300, "store should retain all persisted records");
+  assert(bridge.store.events.length === 0, "persistent mode should not duplicate full event payloads in events[]");
+  assert(bridge.store.pendingRecords.size === 0, "flush should clear transient pending in-memory records");
+});
+
+test("gateway phase4: loop suppression still works after restart/import", async () => {
   const storeAPath = tmpStorePath("loop-a");
   const storeBPath = tmpStorePath("loop-b");
 
@@ -253,9 +291,11 @@ test("gateway phase4: loop suppression still works after restart/import", () => 
   const islandB1 = new GatewayBridge({ islandId: "island-loop-b", store: durableStore(storeBPath) });
 
   islandA1.ingestLocalMesh(makeEvent({ eventId: "evt-phase4-loop-1", priority: "critical" }));
+  await islandA1.store.flush();
   const initialBatch = islandA1.exportBackhaulBatch({ cursor: 0 });
   const imported = islandB1.ingestBackhaul(initialBatch.events[0]);
   assert(imported.inserted, "remote import should insert before restart");
+  await islandB1.store.flush();
 
   const islandA2 = new GatewayBridge({ islandId: "island-loop-a", store: durableStore(storeAPath) });
   const islandB2 = new GatewayBridge({ islandId: "island-loop-b", store: durableStore(storeBPath) });
