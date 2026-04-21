@@ -79,6 +79,7 @@ jobs:
           npm ci
           npm ci --prefix crypto
           npm ci --prefix tools
+          npm ci --prefix app
 
       - name: Run integration tests and capture logs
         run: |

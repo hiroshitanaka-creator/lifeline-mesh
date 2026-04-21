@@ -154,6 +154,9 @@ export class MeshRouter {
    * @param {number}  [options.maxRouteHops]      - Max hops in route advertisements (Phase 2).
    * @param {number}  [options.seqWindow]         - Sequence-number window for loop prevention (Phase 2).
    * @param {number}  [options.advSeenTtlMs]      - How long to remember seen adv transferIds (Phase 2).
+   * @param {number}  [options.maxAdvertisedRoutes]     - Max routes to include in one advertisement (Phase 2).
+   * @param {number}  [options.maxRouteTableEntries]    - Max total entries in the route table (Phase 2).
+   * @param {number}  [options.cleanupIntervalMs]       - Interval in ms for periodic stale-entry cleanup (Phase 2).
    * @param {(adv: Object, ingressPeerId: string) => boolean} [options.verifyRouteAdv]
    *        Optional authenticity / policy hook. Return true to accept, false to reject.
    * @param {number} [options.routeAdvMinIntervalMs]
