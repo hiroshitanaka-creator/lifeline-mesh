@@ -15,8 +15,14 @@ Use one of these supported access paths:
    npm run dev --prefix app
    ```
    Then open `http://localhost:5173`.
+3. **Self-contained offline file** (works from `file://`):
+   ```bash
+   npm ci --prefix app
+   npm run build --prefix app
+   ```
+   Open `app/dist/index.html` directly in Chrome or Edge. All scripts, styles, and WASM are inlined — no server or network required.
 
-**Do not open `app/index.html` via `file://`**. The app relies on module loading and secure-context APIs.
+**Note**: Do not open the *source* `app/index.html` via `file://`. Only the built `app/dist/index.html` is safe to open as a local file.
 
 ### 2. Generate Your Keys
 
@@ -328,7 +334,7 @@ If the startup migration fails or `lifelineMeshV2` appears incomplete, use this 
 5. **Decrypt offline** (no network required)
 
 Notes:
-- `file://` execution is unsupported.
+- Opening the *source* `app/index.html` as `file://` is unsupported (CORS). Use the built `app/dist/index.html` instead.
 - BLE additionally requires a secure context and browser support; when unavailable, use Clipboard/File/QR fallback transports.
 
 ## Integration with Relay Networks
