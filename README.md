@@ -2,6 +2,8 @@
 
 **End-to-end encrypted emergency messaging • Offline-first • No server required**
 
+> *[Versión en español](README_ES.md)*
+
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](https://github.com/hiroshitanaka-creator/lifeline-mesh/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Security](https://img.shields.io/badge/security-SRI%20enabled-green)](spec/THREAT_MODEL.md)
@@ -37,7 +39,7 @@ Every contribution matters. Let's build this together.
 ### Try the Live Demo
 **https://hiroshitanaka-creator.github.io/lifeline-mesh/**
 
-### Use Locally
+### Use Locally (development server)
 ```bash
 git clone https://github.com/hiroshitanaka-creator/lifeline-mesh.git
 cd lifeline-mesh
@@ -46,7 +48,21 @@ npm run dev --prefix app   # opens http://localhost:5173
 ```
 Then: Generate keys → Add contacts → Encrypt/Decrypt
 
-> The app uses ES modules and secure-browser APIs. Use `http://localhost` (Vite) for local development; do not open `app/index.html` as `file://`.
+### Build a self-contained offline file
+
+If you want a single HTML file that works offline without a server or `npm run dev`:
+
+```bash
+git clone https://github.com/hiroshitanaka-creator/lifeline-mesh.git
+cd lifeline-mesh
+npm ci --prefix app
+npm run build --prefix app
+# Then open app/dist/index.html directly in Chrome or Edge
+```
+
+All JavaScript, CSS, and WASM is inlined into one file (`app/dist/index.html`) by `vite-plugin-singlefile`, so it works from `file://` without any CORS issues and with no external network requests.
+
+> **Note:** Opening the source file `app/index.html` directly as `file://` will fail with CORS errors. Always use `npm run dev` or the built `app/dist/index.html`.
 
 ---
 
@@ -249,7 +265,7 @@ Gateway backhaul is a separate service (`gateway/`) and is **not** endpoint mesh
 ❌ **Perfect forward secrecy**: Long-term signing keys used
 ❌ **BLE availability**: Web Bluetooth is effectively Chromium-only and requires a secure context (`https://` or `http://localhost`)
 ⚠️ **Browser/mobile peripheral mode gap**: v0.1.x officially supports only Node relay appliance peripheral mode (`bluetooth/backends/node-bleno.js`); mobile/browser peripheral remains unresolved (operational bypass, not closure)
-❌ **Offline bootstrap**: First load must happen in a served origin; `file://` is unsupported. After first load, cached app assets can be used offline
+⚠️ **Offline bootstrap**: Opening the source `app/index.html` as `file://` fails (ES module CORS). Use `npm run dev`, or build once (`npm run build --prefix app`) to get `app/dist/index.html`, which is fully self-contained and works from `file://`
 ⚠️ **Fallback path**: Clipboard/File/QR relay is the compatibility baseline when BLE is unavailable
 
 See [THREAT_MODEL.md](spec/THREAT_MODEL.md) for comprehensive analysis.
