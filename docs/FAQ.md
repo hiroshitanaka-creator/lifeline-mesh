@@ -260,12 +260,21 @@ Operational note: keep devices within short range and avoid moving during large 
 
 ### Can I use this without Internet?
 
-Lifeline Mesh supports offline operation **after an initial load from a served origin**:
+Lifeline Mesh supports offline operation in two ways:
+
+**Option A — Build a self-contained file (recommended for fully offline use):**
+```bash
+npm ci --prefix app
+npm run build --prefix app
+```
+This produces `app/dist/index.html` — a single file with all scripts, styles, and WASM inlined. Open it directly in Chrome or Edge (`file://`) with no CORS issues and no external network requests needed.
+
+**Option B — Use the dev server, then go offline:**
 1. Open the app from `https://` deployment or `http://localhost` dev server at least once.
-2. Continue with cached app assets while offline.
+2. The service worker caches app assets, so you can continue offline.
 3. Generate keys, encrypt, and decrypt locally.
 
-**Important**: `file://` opening of `app/index.html` and a never-loaded standalone local HTML copy are not supported runtime paths. You still need a way to transfer encrypted messages (USB, Bluetooth, QR code, etc.).
+**Note**: Opening the *source* `app/index.html` directly as `file://` fails with CORS errors (ES modules). Use either option above instead. You still need a way to transfer encrypted messages (USB, Bluetooth, QR code, etc.).
 
 ### How do I send messages without Internet?
 
