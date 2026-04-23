@@ -141,6 +141,7 @@ Validation gate status: **passing (see commands below) ✓**
 | Integration | `npm run test:integration` |
 | Node relay appliance validation | `npm run test:relay-appliance` |
 | Local aggregate | `npm run validate` |
+| Local aggregate (real-browser included) | `npm run validate:full-local` |
 
 ```bash
 # Run everything
@@ -169,6 +170,7 @@ CI note:
 - Fast PR gate (`e2e_browser_smoke` job in CI) runs the Playwright **critical-path spec** (`main-ci-critical-path.spec.js`) — full key-gen → encrypt → decrypt → verify → compromised flow.
 - Full Playwright suite runs in `.github/workflows/e2e-real-browser.yml` (nightly, manual dispatch, and pushes to main/master).
 - `npm run validate` maps to `validate:local` (smoke E2E for faster local iteration), while CI uses `validate:ci` (adds `typecheck:runtime` + Playwright critical path gate).
+- `npm run validate:full-local` is the strict local equivalent for release rehearsal (`validate:local` + Playwright install + full Playwright run).
 
 ---
 
