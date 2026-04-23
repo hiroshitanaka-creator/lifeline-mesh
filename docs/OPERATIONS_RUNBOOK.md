@@ -8,8 +8,10 @@
 1. Local gate: `npm run validate` (`validate:local` = lint + typecheck + unit + integration + compat + smoke E2E).
 2. CI gate: `npm run ci` (`validate:ci` = local gates + `typecheck:runtime` + Playwright critical path).
 3. For full browser coverage, run `npm run test:e2e:real-browser` in a Playwright-capable environment.
-4. Confirm [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) items are all complete.
-5. Execute Go/No-Go meeting agenda.
+4. For strict local release rehearsal, run `npm run validate:full-local` (`validate:local` + `test:e2e:real-browser`).
+   - Requires Playwright-capable environment and browser install permissions (`npm run test:e2e:install` path).
+5. Confirm [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) items are all complete.
+6. Execute Go/No-Go meeting agenda.
 
 ### Release exit criteria (must-pass)
 - Local and CI gate semantics both green (`validate:local`, `validate:ci`).

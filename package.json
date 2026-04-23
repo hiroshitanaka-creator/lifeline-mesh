@@ -18,6 +18,7 @@
     "validate": "npm run validate:local",
     "validate:local": "npm run gate:lint-typecheck:local && npm run gate:test:unit && npm run gate:test:integration && npm run gate:compat && npm run gate:e2e:smoke",
     "validate:ci": "npm run gate:lint-typecheck:ci && npm run gate:test:unit && npm run gate:test:integration && npm run gate:compat && npm run gate:e2e:ci-critical && npm run gate:e2e:ci-extra-browser",
+    "validate:full-local": "npm run validate:local && npm run test:e2e:real-browser",
     "ci": "npm run validate:ci",
     "gate:lint-typecheck:local": "npm run lint && npm run typecheck",
     "gate:lint-typecheck:ci": "npm run lint && npm run typecheck && npm run typecheck:runtime",
