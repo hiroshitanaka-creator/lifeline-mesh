@@ -178,6 +178,9 @@ npm run test:e2e:playwright
 # Full real-browser path (install + Playwright run)
 npm run test:e2e:real-browser
 
+# Local strict aggregate (validate:local + real-browser path)
+npm run validate:full-local
+
 # Node relay appliance path validation (first supported BLE peripheral endpoint)
 npm run test:relay-appliance
 ```
