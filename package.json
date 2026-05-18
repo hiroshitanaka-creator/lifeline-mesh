@@ -63,7 +63,7 @@
     "url": "https://github.com/hiroshitanaka-creator/lifeline-mesh"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^25.5.0",
     "eslint": "^10.0.0",
     "html5-qrcode": "^2.3.8",
