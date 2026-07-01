@@ -1,0 +1,30 @@
+name: AI Governance
+
+on:
+  pull_request:
+    paths:
+      - AGENTS.md
+      - .github/copilot-instructions.md
+      - .github/instructions/**
+      - .github/ISSUE_TEMPLATE/ai_task.yml
+      - .github/pull_request_template.md
+      - docs/AI_*.md
+      - docs/MISSION_INTEGRITY_POLICY.md
+      - docs/templates/**
+      - prompts/**
+      - tools/validate_ai_governance.py
+      - tests/test_ai_governance_docs.py
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Validate AI governance documents
+        run: python tools/validate_ai_governance.py
