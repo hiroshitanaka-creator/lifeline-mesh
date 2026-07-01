@@ -1,0 +1,59 @@
+name: AI task
+description: Delegate a scoped task to an AI agent with the right guardrails
+title: "[AI task] "
+labels: ["ai-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this to hand a task to an AI agent. Read `AGENTS.md` first.
+        High-risk areas (crypto/protocol/BLE/gateway/security) still require human approval.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal / acceptance criteria
+      description: What "done" looks like, and how to verify it.
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk area
+      multiple: true
+      options:
+        - docs-only
+        - tests-only
+        - app/UI (non-crypto)
+        - tooling
+        - BLE/transport (high risk)
+        - gateway/relay/simulator (high risk)
+        - crypto (human-only — AI drafts only)
+        - protocol/spec (human-only — AI drafts only)
+        - security/CI (human-only — AI drafts only)
+    validations:
+      required: true
+  - type: textarea
+    id: specs
+    attributes:
+      label: Specs/docs to read first
+      description: e.g. spec/PROTOCOL.md, spec/THREAT_MODEL.md, docs/BLE_SUPPORT_MATRIX.md
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Required verification before PR
+      options:
+        - label: "npm run test:unit"
+        - label: "npm run test:integration"
+        - label: "npm run validate:local"
+        - label: "npm run check:security-audit (if security-relevant)"
+  - type: checkboxes
+    id: guardrails
+    attributes:
+      label: Guardrails acknowledged
+      options:
+        - label: AI will not change crypto/protocol/security/CI without human approval
+          required: true
+        - label: Unrun verification commands will be listed with reasons in the PR
+          required: true
+        - label: Spec/docs will be updated in the same PR if behavior changes
+          required: true
