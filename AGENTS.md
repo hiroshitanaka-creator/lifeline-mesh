@@ -51,6 +51,11 @@ risk explicitly in the PR.
 Also read `docs/ai/OPERATIONS.md` (what you may/may not own) and `docs/ai/AUDIT_RULES.md`
 (the checklist you will be reviewed against).
 
+Reusable skills encode this workflow: Claude Code auto-loads `.claude/skills/`
+(`lm-spec`, `lm-guard`, `lm-validate`, `lm-pr`); Codex mirrors them in `.codex/prompts/`
+(see `.codex/README.md`). Prefer `lm-spec` → `lm-guard` before coding, `lm-validate` → `lm-pr`
+before a PR.
+
 ## 4. Run BEFORE you open a PR (verification)
 Run the fullest gate the change touches; copy results into the PR body.
 - Crypto or spec touched → `npm run test:unit` (crypto + vectors) AND `npm run test:integration`.
