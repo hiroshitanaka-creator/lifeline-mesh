@@ -1,0 +1,77 @@
+name: AI task
+about: Request AI-assisted work with audit and mission-integrity boundaries
+title: "[AI Task]: "
+labels: ["ai-task", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not resolve this task by weakening Project Echo's mission, criticism, commercial-bias resistance, or responsibility-boundary model.
+        If safety concerns exist, preserve the mission and add evidence, tests, auditability, or human review gates.
+  - type: dropdown
+    id: task_type
+    attributes:
+      label: Task type
+      options: [feature, bugfix, audit, docs, refactor, release]
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+    validations:
+      required: true
+  - type: textarea
+    id: target_files
+    attributes:
+      label: Target files
+    validations:
+      required: true
+  - type: textarea
+    id: context_files
+    attributes:
+      label: Context files to inspect first
+      value: |
+        - AGENTS.md
+        - README.md
+        - docs/OPERATIONS_RUNBOOK.md
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+    validations:
+      required: true
+  - type: textarea
+    id: required_evidence
+    attributes:
+      label: Required evidence
+    validations:
+      required: true
+  - type: textarea
+    id: required_tests
+    attributes:
+      label: Required tests
+    validations:
+      required: true
+  - type: dropdown
+    id: risk_level
+    attributes:
+      label: Risk level
+      options: [low, medium, high, critical]
+    validations:
+      required: true
+  - type: dropdown
+    id: mission_integrity_risk
+    attributes:
+      label: Mission Integrity risk
+      options: [none, low, medium, high]
+    validations:
+      required: true
+  - type: textarea
+    id: human_decision_point
+    attributes:
+      label: Human decision point
+    validations:
+      required: true
