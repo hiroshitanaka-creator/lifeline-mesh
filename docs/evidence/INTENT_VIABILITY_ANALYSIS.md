@@ -502,6 +502,60 @@ transport/native-peripheral-contract.js:49:      shipped: false,
 transport/native-peripheral-contract.js:50:      contractOnly: true
 ```
 
+### 0.7 追加観測 — CI 実行結果（ツリー外・GitHub Actions API 由来）
+
+> **注意**: 本節はファイル receipt ではなく、GitHub Actions の実行記録である。
+> §11 の「読んだファイル」一覧には含めない。ランタイム観測として区別する。
+
+`main` ブランチの `ci.yml` 実行履歴（`list_workflow_runs`, branch=main, 直近 30 件）:
+
+```
+conclusion=failure  … 直近 29 件すべて
+conclusion=cancelled … 1 件 (run 319, 902ca83)
+conclusion=success  … 0 件
+```
+
+最古の確認範囲 2026-04-06（run 281, `10c16095`）から
+最新 2026-04-23（run 352, `096cdcc`）まで、**成功した実行は 1 件も無い**。
+
+対象リビジョン `096cdccaf3f24303f41b561efc1b0892f3f44cde`（= 本レポートの解析対象、
+`main` HEAD）における run 24821754990 のジョブ別結果:
+
+| job | conclusion |
+|---|---|
+| Lint + Typecheck | **failure** |
+| Unit tests | success |
+| Integration tests | **failure** |
+| Compatibility policy gate | success |
+| E2E browser critical path (fast gate) | **failure** |
+| E2E browser transport receive (fast gate) | success |
+| security | success |
+| Validate gate summary | skipped |
+
+`Lint + Typecheck` の失敗内容（同 run のジョブログ）:
+
+```
+bluetooth/mesh-router.js(174,40): error TS2339: Property 'maxAdvertisedRoutes' does not exist on type '{ localPeerId?: string; ... }'.
+bluetooth/mesh-router.js(175,41): error TS2339: Property 'maxRouteTableEntries' does not exist on type '{ ... }'.
+bluetooth/mesh-router.js(176,38): error TS2339: Property 'cleanupIntervalMs' does not exist on type '{ ... }'.
+```
+
+`eslint` は成功し、`tsc --noEmit` で 3 件の TS2339 が出て exit 2 となっている。
+`bluetooth/mesh-router.js` の options typedef に、実装が参照する 3 プロパティが宣言されていない。
+
+`E2E browser critical path (fast gate)` の失敗内容:
+
+```
+tests/e2e/main-ci-critical-path.spec.js:48:56
+  > 48 |   await expect(page.locator("#contact-safety-number")).toContainText("-");
+  1 failed
+    tests/e2e/main-ci-critical-path.spec.js:33:1 › main CI critical path: verification workflow keeps selection and blocks compromised recipient
+  5 passed (16.7s)
+```
+
+6 テスト中 1 失敗・5 成功。失敗しているのは §0.3 で receipt を取った
+`tests/e2e/main-ci-critical-path.spec.js`（hash `3675b465…`）の 2 番目のテストである。
+
 **Phase 0 完了**。必須項目（HEAD sha / `git ls-files` count / ディレクトリヒストグラム /
 rg 6 クエリ+カウント / `crypto/core.js`・`crypto/transport.js`・`app/src/main.js`・
 `bluetooth/ble-manager.js`・`tests/e2e/main-ci-critical-path.spec.js` の hash-object）はすべて記録済み。
@@ -744,6 +798,9 @@ Charter の Scope は 3 行（`PROJECT_CHARTER.md:5-7`）のみで、避難所�
   存在しなければ実行され得ない。ツリー内にその実行結果 artifact は無い（§0.6 `git ls-files artifacts` = 0）。
 - したがって **CI の緑は、暗号ロジック・アプリ配線・単一ブラウザ内 UI 経路までを保証し、
   無線区間・複数実機・カメラ・iPhone については何も保証しない。**
+- **重要な補正（§0.7）**: そもそも解析対象 `096cdcc` の CI は緑ではない。
+  `Lint + Typecheck` / `Integration tests` / `E2E browser critical path` の 3 ジョブが failure であり、
+  `main` 直近 30 実行に success は 0 件。詳細と含意は §8 X9。
 
 ---
 ## 6. Intent map
@@ -916,6 +973,37 @@ claim の "concurrent links" が論理的な同時性か物理的な同時性か
 
 ---
 
+### X9 — 「Validation gate status: passing ✓」/ tests-passing バッジ 対 CI の実際 → **claim が receipt と矛盾**
+
+- claim: `README.md:150` "Validation gate status: **passing (see commands below) ✓**"
+- claim: `README.md:7` `[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](.../actions)`
+  — バッジは静的な shields.io 画像であり、実際の Actions 結果を反映しない。リンク先は Actions ページ。
+- receipt（§0.7）: 解析対象 `096cdcc` の CI は **Lint + Typecheck / Integration tests /
+  E2E browser critical path の 3 ジョブが failure**。`main` 直近 30 実行に success は **0 件**。
+
+README が「passing ✓」と書く `validate` は `validate:local`（`package.json:19`）であり、
+これは `gate:e2e:smoke`（= ファイル存在確認）までしか含まない。一方 CI が回す `validate:ci`
+（`package.json:20`）は typecheck:runtime と実 Playwright を含み、**そこで落ちている**。
+
+つまり **README の "passing" は嘘ではなく、緩い方のゲートについて正しい**。
+しかし読者は「テストが通っている」と受け取る。§5.1 で述べた `test:e2e` 命名問題（X6）と同じ構造が、
+リリース状態の表示にも現れている。
+
+さらに重い含意として: **§0.7 の失敗はいずれも本レポートが分析対象とした「実装済み」領域である。**
+`bluetooth/mesh-router.js` は §4 #12 で `present` と判定した mesh forward の実体であり、
+その options 型が実装と食い違ったまま `main` にある。
+`tests/e2e/main-ci-critical-path.spec.js:48` は §5.2 で「CI 必須ゲート」と記録したテストであり、
+その contact verification 経路が現在 red である。
+
+`GAP`（修正提案ではない）: `main` が恒常的に red であるため、
+**CI の緑/赤は現在このリポジトリで品質信号として機能していない**。
+§1.2 で「green CI ≠ 物理 RF」と述べたが、このツリーではさらに手前で
+「CI は green ですらない」。§5.3 の結論は次のように補正される —
+CI は暗号ロジックと単一ブラウザ内 UI 経路を**保証していたはずだが、
+現に 3 ジョブが落ちている以上、その保証も現時点では成立していない**。
+
+---
+
 ## 9. Residue / unknowns（ツリーが答えられない問い）
 
 1. **掲示 QR が差し替えられたとき、避難者は気づけるか。** TOFU（`spec/THREAT_MODEL.md:185`）以外の
@@ -947,7 +1035,7 @@ claim の "concurrent links" が論理的な同時性か物理的な同時性か
 5. **壁 QR = 公開 ID のみ**は意図と実装が一致する唯一の強い一致点（`app/src/main.js:2266-2282`）。
 6. **公開告知は原理的に出せない。** `encryptMessage` が `recipientBoxPK` 必須で、署名のみの平文種別が存在しない。
 7. iPhone 主デバイスでは BLE は動かない（Safari 非対応）。残るのは Clipboard / File / QR / share-target で、これらは CI 検証済み。
-8. **CI の緑は無線・カメラ・iPhone を一切保証しない。** 必須ゲートの Playwright 2 spec は単一 page ループバック。
+8. **`main` の CI は緑ですらない**（3 ジョブ failure、直近 30 実行 success 0 件、§0.7 / §8 X9）。必須 Playwright 2 spec は単一 page ループバックで、緑でも無線・カメラ・iPhone は保証しない。
 9. `sample-normalized.json` は `staging-lab` / `ciBacked: false` の fixture。参照 artifact は git 管理外。
 10. 次に効くのは機能追加ではなく、§7.B.3 の 7 つの `GAP` のうち「実機無線」「iPhone 実機」「掲示 QR の差し替え耐性」の 3 点に対する事実確認である。
 
